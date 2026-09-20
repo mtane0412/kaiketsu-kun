@@ -120,4 +120,5 @@ export const sampleFictionalCase: Case = {
       basisClaimIds: ['claim-user-guess'],
     },
   ],
+  timelineOrder: ['event:event-last-seen', 'claim:claim-user-guess'],
 };

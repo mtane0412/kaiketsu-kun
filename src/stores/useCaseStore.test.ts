@@ -146,3 +146,62 @@ describe('ブラウザへの保存', () => {
     expect(JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) ?? 'null')).toEqual({ name: '古い形式の案件' });
   });
 });
+
+describe('時系列ボードの並び順', () => {
+  /** 警察の捜索（8月15日）についての、出来事に束ねていない主張です。 */
+  const 捜索の推測: Claim = {
+    id: 'claim-police-search',
+    speaker: { kind: 'user' },
+    content: '警察が別荘を捜索したはずだ。',
+    mentionedPersonIds: [],
+    when: { text: '8月15日', earliest: '1998-08-15' },
+  };
+
+  it('項目を動かすと、並び順を保存する', () => {
+    // 前提: サンプルの並びは、出来事「持ち主が最後に目撃された」→ ユーザーの推測（日時なし）
+    useCaseStore.getState().moveTimelineItem('claim:claim-user-guess', 0);
+
+    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual(['claim:claim-user-guess', 'event:event-last-seen']);
+  });
+
+  it('日時と矛盾する位置へは動かせず、案件を変更しない', () => {
+    // 前提: 出来事の束は8月12日、捜索の推測は8月15日について述べている
+    useCaseStore.getState().upsert('claims', 捜索の推測);
+    const 変更前 = useCaseStore.getState().currentCase;
+
+    expect(() => useCaseStore.getState().moveTimelineItem('claim:claim-police-search', 0)).toThrow('日時と矛盾するため');
+    expect(useCaseStore.getState().currentCase).toBe(変更前);
+  });
+
+  it('主張に日時を入力して現在の位置と矛盾した場合は、最も近い矛盾しない位置へ動かす', () => {
+    // 前提: 並びは 出来事の束（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
+    useCaseStore.getState().upsert('claims', 捜索の推測);
+    useCaseStore.getState().moveTimelineItem('claim:claim-police-search', 2);
+
+    // 末尾の捜索の推測の日時を、出来事の束より前の「8月10日」に直す
+    useCaseStore.getState().upsert('claims', { ...捜索の推測, when: { text: '8月10日', earliest: '1998-08-10' } });
+
+    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+      'claim:claim-police-search',
+      'event:event-last-seen',
+      'claim:claim-user-guess',
+    ]);
+  });
+
+  it('出来事に束ねた主張の日時を直して、束の位置が矛盾した場合は、束を動かす', () => {
+    // 前提: 並びは 出来事の束（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
+    useCaseStore.getState().upsert('claims', 捜索の推測);
+    const 束ねた主張 = sampleFictionalCase.claims.filter((claim) => claim.eventId === 'event-last-seen');
+
+    // 束ねた主張が述べる日時を、すべて捜索より後の「8月20日」に直す
+    for (const claim of 束ねた主張) {
+      if (claim.when) useCaseStore.getState().upsert('claims', { ...claim, when: { text: '8月20日', earliest: '1998-08-20' } });
+    }
+
+    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+      'claim:claim-user-guess',
+      'claim:claim-police-search',
+      'event:event-last-seen',
+    ]);
+  });
+});

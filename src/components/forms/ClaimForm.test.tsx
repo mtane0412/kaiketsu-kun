@@ -285,16 +285,21 @@ describe('ClaimForm のキーボード操作', () => {
       expect(lastSavedClaim()).toMatchObject({ eventId: 'event-search' });
     });
 
-    it('位置から求めた日時を「証言が述べる日時」の初期値にし、書き換えずに保存できる', async () => {
+    it('ボードの項目と項目の間で書いた場合は、書いた位置に主張を並べる', async () => {
+      // 前提: サンプルの並びは 出来事「持ち主が最後に目撃された」→ ユーザーの推測。その間（1番目）で書く
       const user = userEvent.setup();
-      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
-      render(<ClaimForm defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
+      render(<ClaimForm defaults={{ insertIndex: 1 }} onDone={vi.fn()} />);
 
-      expect(screen.getByLabelText('証言が述べる日時：表記')).toHaveValue('「8月12日 夜7時」から「8月15日」の間');
       await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
       await user.click(screen.getByRole('button', { name: '主張を保存' }));
 
-      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時 });
+      // 日時は付けず、並び順だけで位置を表す
+      expect(lastSavedClaim()?.when).toBeUndefined();
+      expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+        'event:event-last-seen',
+        `claim:${lastSavedClaim()?.id}`,
+        'claim:claim-user-guess',
+      ]);
     });
   });
 
@@ -318,17 +323,6 @@ describe('ClaimForm のキーボード操作', () => {
       expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
       expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('ソース内の位置')).not.toBeInTheDocument();
-    });
-
-    it('入力欄を表示しなくても、位置から求めた日時は主張に保存する', async () => {
-      const user = userEvent.setup();
-      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
-      render(<ClaimForm compact defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
-
-      await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
-      await user.click(screen.getByRole('button', { name: '書き足す' }));
-
-      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時 });
     });
 
     it('本文だけを編集しても、入力済みの日時・ソース内の位置を保持する', async () => {

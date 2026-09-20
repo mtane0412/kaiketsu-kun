@@ -29,7 +29,8 @@ export type Id = string;
  *   例「1995年7月頃」→ earliest: '1995-06-01', latest: '1995-08-31'
  * - 実在の日時が無い場合（作中の時系列や話数など）: order に並び順の数値を入れます。
  *
- * 注意: earliest と order の両方が無い時刻参照は、時系列ビューでは「時期不明」の列に置かれます。
+ * 注意: 時系列ボード上の位置は、時刻参照ではなく案件の並び順（Case.timelineOrder）で決まります。
+ * order は、述べられた時点（Claim.statedAt）やソースの公開時点の並べ替えに使用します。
  */
 export type TimeRef = {
   /** 資料に書かれていた通りの表記です。 */
@@ -146,7 +147,8 @@ export type Claim = {
   /** この主張が言及している人物です。 */
   mentionedPersonIds: Id[];
   /**
-   * この主張が述べる出来事の日時です。時系列ボード上の位置は、この日時で決まります。
+   * この主張が述べる出来事の日時です。時系列ボード上の位置は決めませんが、
+   * 日時と矛盾する位置には並べられません（src/domain/timeline-order.ts）。
    * 同じ出来事に束ねた他の主張と食い違う場合があります。
    */
   when?: TimeRef;
@@ -180,4 +182,10 @@ export type Case = {
   events: Event[];
   claims: Claim[];
   relationships: Relationship[];
+  /**
+   * 時系列ボードの項目（出来事の束、出来事に束ねていない主張）の並び順です。
+   * 要素は 'event:出来事のID' または 'claim:主張のID' の形のキーです。
+   * 載っていない項目は末尾に並べ、ボードの項目ではなくなったキーは無視します（src/domain/timeline-order.ts）。
+   */
+  timelineOrder: string[];
 };

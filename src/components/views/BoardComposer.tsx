@@ -4,7 +4,7 @@
  * 時系列ボードの書き足したい位置に開く、主張の1欄入力です。SNSに投稿する感覚で書けるよう、
  * 本文の1欄と投稿ボタンだけを表示します（ClaimForm の compact）。日時・ソース内の位置は、
  * 投稿後に主張の「詳細」から編集します。
- * 書いた位置から決まる初期値（出来事・日時）は defaults で受け取り、日時は入力させずに自動で付けます。
+ * 書いた位置から決まる初期値（束ねる出来事、時系列の並び順の中での位置）は defaults で受け取ります。
  * このコンポーネントは「やめる」と、編集中の主張の削除を加えます。
  */
 'use client';
@@ -41,7 +41,6 @@ export function BoardComposer({ initial, defaults, onClose }: BoardComposerProps
 
   return (
     <div className="rounded border border-sky-300 bg-white p-3 shadow-sm">
-      {defaults?.when && <p className="mb-1 text-xs text-slate-500">日時: {defaults.when.text}</p>}
       <ClaimForm
         initial={initial}
         defaults={defaults}

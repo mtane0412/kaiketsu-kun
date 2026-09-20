@@ -6,11 +6,14 @@
  * 2. 時刻表記（earliest / latest が解釈でき、区間が逆転していないこと）
  * 3. 参照の整合性（IDの参照先と、主張の本文のメンションの参照先が案件内に存在すること）と、主張のソース必須の規則
  *
+ * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
+ *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
 import { z } from 'zod';
 import { parseContent, type MentionKind } from './mention';
 import { isValidPartialIso, toInterval } from './time-ref';
+import { legacyTimelineOrder } from './timeline-order';
 import type { Case } from './types';
 
 const idSchema = z.string().min(1);
@@ -124,6 +127,8 @@ const caseSchema = z.object({
       basisClaimIds: z.array(idSchema),
     })
   ),
+  // 並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で当時の表示順を補う）
+  timelineOrder: z.array(z.string()).optional(),
 });
 
 /**
@@ -185,9 +190,10 @@ export function parseCase(data: unknown): Case {
     throw new Error(`案件データの形式が正しくありません\n${details}`);
   }
 
-  const violations = findCaseViolations(result.data);
+  const parsed: Case = { ...result.data, timelineOrder: result.data.timelineOrder ?? legacyTimelineOrder(result.data) };
+  const violations = findCaseViolations(parsed);
   if (violations.length > 0) {
     throw new Error(`案件データの参照に問題があります\n${violations.join('\n')}`);
   }
-  return result.data;
+  return parsed;
 }
