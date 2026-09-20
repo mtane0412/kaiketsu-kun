@@ -49,24 +49,31 @@ describe('buildTimeline', () => {
     // 束の日時は、束ねた主張が述べる日時のうち最も早いもの
     expect(item.when?.text).toBe('8月12日 夜7時');
     expect(item.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
-    expect(item.persons.map((person) => person.name)).toEqual(['別荘の持ち主']);
+    // 県警の発表が言及している防犯カメラ（記録装置）も、人物として束に現れる
+    expect(item.persons.map((person) => person.name).sort()).toEqual(['別荘の持ち主', '県道の防犯カメラ'].sort());
   });
 
   it('出来事の束の中では、主張を述べる日時の早い順に並べ、日時を述べない主張を最後に置く', () => {
     const [item] = buildTimeline(sampleFictionalCase).items;
     if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
 
-    expect(item.claims.map((view) => view.claim.id)).toEqual(['claim-caretaker', 'claim-neighbor', 'claim-report']);
+    expect(item.claims.map((view) => view.claim.id)).toEqual([
+      'claim-caretaker',
+      'claim-police-camera',
+      'claim-neighbor',
+      'claim-report',
+    ]);
   });
 
   it('同じ出来事に束ねた主張同士で、述べる時刻が重ならない場合に、時刻の食い違いを示す', () => {
-    // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。架空日報の記述は日時を述べていない
+    // 前提: 管理人は「夜7時」、県警は「夜8時10分ごろ」、隣家の住人は「夜9時ごろ」と述べている。架空日報の記述は日時を述べていない
     const [item] = buildTimeline(sampleFictionalCase).items;
     if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
     const conflicts = Object.fromEntries(item.claims.map((view) => [view.claim.id, view.hasTimeConflict]));
 
     expect(conflicts).toEqual({
       'claim-caretaker': true,
+      'claim-police-camera': true,
       'claim-neighbor': true,
       'claim-report': false,
     });
@@ -85,9 +92,10 @@ describe('buildTimeline', () => {
     if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
     const conflicts = Object.fromEntries(item.claims.map((view) => [view.claim.id, view.hasPlaceConflict]));
 
-    // 架空日報の記述は場所を述べていないため、食い違いの対象にならない
+    // 架空日報の記述と県警の発表は場所を述べていないため、食い違いの対象にならない
     expect(conflicts).toEqual({
       'claim-caretaker': true,
+      'claim-police-camera': false,
       'claim-neighbor': true,
       'claim-report': false,
     });
@@ -122,8 +130,21 @@ describe('groupClaimsBySpeaker', () => {
     expect(groups.map((group) => [group.kind, group.label])).toEqual([
       ['person', '隣家の住人'],
       ['person', '管理人'],
+      ['person', '県警'],
       ['source', '架空日報 朝刊'],
       ['user', 'ユーザーの推測'],
+    ]);
+  });
+
+  it('組織も人物として登録し、組織を発言者とする主張をその名前のグループにまとめる', () => {
+    // 前提: サンプルでは、県警（組織）が「防犯カメラ（記録装置）に車が映っていた」と発表している
+    const 県警 = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県警');
+
+    expect(県警?.claims.map((item) => item.claim.id)).toEqual(['claim-police-camera']);
+    // 記録装置は、発表の中で言及されている人物として扱う
+    expect(県警?.claims[0]?.mentionedPersons.map((person) => person.name)).toEqual([
+      '県道の防犯カメラ',
+      '別荘の持ち主',
     ]);
   });
 
