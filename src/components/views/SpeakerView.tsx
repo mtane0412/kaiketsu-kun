@@ -15,7 +15,7 @@ export function SpeakerView({ target }: { target: Case }) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);
 
   if (groups.length === 0) {
-    return <p className="text-sm text-slate-500">主張がまだ登録されていません。「入力」タブから登録してください。</p>;
+    return <p className="text-sm text-slate-500">主張がまだ登録されていません。時系列のボードから書き足してください。</p>;
   }
 
   return (

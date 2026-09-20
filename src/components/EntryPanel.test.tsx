@@ -17,6 +17,15 @@ afterEach(() => {
 });
 
 describe('EntryPanel', () => {
+  it('initial を渡すと、その種類を選び、そのエンティティの編集から始める', () => {
+    // ボード上のメンションから開いた場合の入り口
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    expect(screen.getByRole('tab', { name: /人物/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '人物を編集' })).toBeInTheDocument();
+    expect(screen.getByLabelText('名前')).toHaveValue('管理人');
+  });
+
   it('人物を登録すると、登録済みの一覧に表示する', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);

@@ -62,6 +62,7 @@ type MentionTextareaProps = {
   onCreate: (kind: MentionKind, name: string) => DraftMention;
   required?: boolean;
   placeholder?: string;
+  autoFocus?: boolean;
 };
 
 export function MentionTextarea({
@@ -72,6 +73,7 @@ export function MentionTextarea({
   onCreate,
   required,
   placeholder,
+  autoFocus,
 }: MentionTextareaProps) {
   const id = useId();
   const listboxId = useId();
@@ -180,6 +182,7 @@ export function MentionTextarea({
         value={value.text}
         required={required}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         onChange={(event) => {
           const nextText = event.target.value;
           const nextCaret = event.target.selectionStart;

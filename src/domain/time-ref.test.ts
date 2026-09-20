@@ -2,7 +2,7 @@
  * 時刻参照（TimeRef）の解釈・並べ替え・食い違い判定のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { compareTimeRef, isTimeConflict, isValidPartialIso, toInterval } from './time-ref';
+import { compareTimeRef, isTimeConflict, isValidPartialIso, timeRefBetween, toInterval } from './time-ref';
 
 describe('isValidPartialIso', () => {
   it.each(['1998', '1998-08', '1998-08-12', '1998-08-12T19:00'])(
@@ -102,5 +102,41 @@ describe('isTimeConflict', () => {
   it('日時が無くorderだけを持つ同士は、orderが異なれば食い違いである', () => {
     expect(isTimeConflict({ text: '第3話', order: 3 }, { text: '第5話', order: 5 })).toBe(true);
     expect(isTimeConflict({ text: '第3話', order: 3 }, { text: '第3話の冒頭', order: 3 })).toBe(false);
+  });
+});
+
+describe('timeRefBetween', () => {
+  const 夜7時 = { text: '8月12日 夜7時', earliest: '1998-08-12T19:00' };
+  const 捜索の日 = { text: '8月15日', earliest: '1998-08-15' };
+
+  it('前後がどちらも日時を持つ場合は、前の始まりから後の終わりまでの区間を返す', () => {
+    expect(timeRefBetween(夜7時, 捜索の日)).toEqual({
+      text: '「8月12日 夜7時」から「8月15日」の間',
+      earliest: '1998-08-12T19:00',
+      latest: '1998-08-15',
+    });
+  });
+
+  it('後の時刻参照が latest を持つ場合は、その latest を区間の終わりにする', () => {
+    const 夏の終わり = { text: '8月下旬', earliest: '1998-08-21', latest: '1998-08-31' };
+
+    expect(timeRefBetween(夜7時, 夏の終わり)?.latest).toBe('1998-08-31');
+  });
+
+  it('求めた区間は、時系列で前の時刻参照より後、後の時刻参照より前に並ぶ', () => {
+    const 間 = timeRefBetween(夜7時, 捜索の日);
+
+    expect([捜索の日, 間, 夜7時].sort(compareTimeRef)).toEqual([夜7時, 間, 捜索の日]);
+  });
+
+  it('前後がどちらも並び順だけを持つ場合は、中間の並び順を返す', () => {
+    expect(timeRefBetween({ text: '第3話', order: 3 }, { text: '第4話', order: 4 })).toEqual({
+      text: '「第3話」から「第4話」の間',
+      order: 3.5,
+    });
+  });
+
+  it('日時と並び順が混在していて間を求められない場合は、undefined を返す', () => {
+    expect(timeRefBetween(夜7時, { text: '第4話', order: 4 })).toBeUndefined();
   });
 });

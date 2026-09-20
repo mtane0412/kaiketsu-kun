@@ -20,13 +20,14 @@ import {
   claimToDraft,
   deriveClaimLinks,
   draftToContent,
+  formatMention,
   parseContent,
   type ClaimDraft,
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import type { Assessment, Case, Claim } from '@/domain/types';
+import type { Assessment, Case, Claim, Id, TimeRef } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SelectField, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
@@ -62,12 +63,25 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
   }
 }
 
-type ClaimFormProps = {
-  initial?: Claim;
-  onDone: () => void;
+/**
+ * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
+ */
+export type ClaimDefaults = {
+  /** 出来事の束の中で書いた場合の出来事です。本文に出来事のメンションが無いときに採用します。 */
+  eventId?: Id;
+  /** 項目と項目の間で書いた場合の、前後から求めた日時です。「証言が述べる日時」の初期値にします。 */
+  when?: TimeRef;
 };
 
-export function ClaimForm({ initial, onDone }: ClaimFormProps) {
+type ClaimFormProps = {
+  initial?: Claim;
+  defaults?: ClaimDefaults;
+  onDone: () => void;
+  /** 内容欄に初期フォーカスを置くかどうかです。ボード上で開いた入力欄にすぐ書き始められるようにします。 */
+  autoFocus?: boolean;
+};
+
+export function ClaimForm({ initial, defaults, onDone, autoFocus }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
 
@@ -78,14 +92,23 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [locator, setLocator] = useState(initial?.locator ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
-  const [when, setWhen] = useState(timeRefToDraft(initial?.when));
+  const [when, setWhen] = useState(timeRefToDraft(initial?.when ?? defaults?.when));
   const [assessment, setAssessment] = useState<Assessment>(initial?.assessment ?? 'unverified');
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when);
+  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when || defaults?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
-  const content = draftToContent({ ...draft, text: draft.text.trim() });
+  const typedContent = draftToContent({ ...draft, text: draft.text.trim() });
+  // 出来事の束の中で書いた主張は、本文に出来事のメンションが無ければ、その出来事のメンションを末尾に補う。
+  // 参照を項目に直接設定せず本文に補うのは、「参照は本文から導出する」という規則を保つため
+  const defaultEvent =
+    deriveClaimLinks(typedContent).eventId === undefined
+      ? currentCase.events.find((event) => event.id === defaults?.eventId)
+      : undefined;
+  const content = defaultEvent
+    ? `${typedContent} ${formatMention({ kind: 'event', id: defaultEvent.id, label: defaultEvent.title })}`
+    : typedContent;
   const links = deriveClaimLinks(content);
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
@@ -149,7 +172,17 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form
+      onSubmit={handleSubmit}
+      onKeyDown={(event) => {
+        // Ctrl/Command+Enter はIMEの変換確定と競合しないため、isComposing の確認は不要
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          event.currentTarget.requestSubmit();
+        }
+      }}
+      className="space-y-3"
+    >
       <MentionTextarea
         label="内容"
         value={draft}
@@ -157,6 +190,7 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
         candidates={candidates}
         onCreate={handleCreate}
         required
+        autoFocus={autoFocus}
         placeholder="例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊"
       />
       <p className="text-xs text-slate-500">

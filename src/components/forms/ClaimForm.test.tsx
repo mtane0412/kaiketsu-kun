@@ -230,4 +230,55 @@ describe('ClaimForm のキーボード操作', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(screen.getByLabelText('内容')).toHaveValue('@管理');
   });
+
+  describe('ボード上の位置から決まる初期値（defaults）', () => {
+    it('出来事の束の中で書いた主張は、本文に「@出来事」を書かなくても、その出来事に束ねて保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      // 参照は本文から導出する規則を保つため、出来事のメンションを本文の末尾に補う
+      expect(lastSavedClaim()).toMatchObject({
+        speaker: { kind: 'user' },
+        content: '別荘の電話は12日の夜から不通だった。 @[持ち主が最後に目撃された](event:event-last-seen)',
+        eventId: 'event-last-seen',
+      });
+    });
+
+    it('本文に別の出来事を「@」で書いた場合は、本文の出来事を優先する', async () => {
+      const user = userEvent.setup();
+      useCaseStore.getState().upsert('events', { id: 'event-search', title: '警察が別荘を捜索した' });
+      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '捜索は半日で終わった。@警察が', '出来事 警察が別荘を捜索した');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({ eventId: 'event-search' });
+    });
+
+    it('位置から求めた日時を「証言が述べる日時」の初期値にし、書き換えずに保存できる', async () => {
+      const user = userEvent.setup();
+      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
+      render(<ClaimForm defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
+
+      expect(screen.getByLabelText('証言が述べる日時：表記')).toHaveValue('「8月12日 夜7時」から「8月15日」の間');
+      await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時 });
+    });
+  });
+
+  it('Ctrl+Enter（macOSではCommand+Enter）で保存する', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    render(<ClaimForm onDone={onDone} />);
+
+    await user.type(screen.getByLabelText('内容'), '配達の時刻を調べたい。{Control>}{Enter}{/Control}');
+
+    expect(lastSavedClaim()).toMatchObject({ content: '配達の時刻を調べたい。' });
+    expect(onDone).toHaveBeenCalledOnce();
+  });
 });
