@@ -1,0 +1,94 @@
+/**
+ * 主張1件の表示
+ *
+ * 時系列ビューと証言者別ビューで共有します。
+ * ユーザーの推測は、証言と見分けられるよう破線の枠と「推測」の表示で区別します。
+ */
+import type { ClaimView } from '@/domain/case-views';
+import { ASSESSMENT_LABELS } from '@/domain/labels';
+import type { Assessment } from '@/domain/types';
+
+const ASSESSMENT_STYLES: Record<Assessment, string> = {
+  unverified: 'bg-slate-100 text-slate-600',
+  credible: 'bg-emerald-100 text-emerald-700',
+  doubtful: 'bg-amber-100 text-amber-800',
+};
+
+type ClaimCardProps = {
+  view: ClaimView;
+  /** 発言者名を表示するかどうかです。証言者別ビューではグループ見出しと重複するため非表示にします。 */
+  showSpeaker: boolean;
+  /** 対象の出来事名を表示するかどうかです。時系列ビューでは出来事の下に並ぶため非表示にします。 */
+  showEvent: boolean;
+};
+
+export function ClaimCard({ view, showSpeaker, showEvent }: ClaimCardProps) {
+  const { claim } = view;
+  const isUserSpeculation = claim.speaker.kind === 'user';
+
+  return (
+    <li
+      className={`rounded border p-3 text-sm ${
+        isUserSpeculation ? 'border-dashed border-violet-300 bg-violet-50' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
+        {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
+        {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
+        <span className={`rounded px-1.5 py-0.5 ${ASSESSMENT_STYLES[claim.assessment]}`}>
+          {ASSESSMENT_LABELS[claim.assessment]}
+        </span>
+        {view.hasTimeConflict && (
+          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">時刻が見立てと食い違う</span>
+        )}
+        {view.hasPlaceConflict && (
+          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">場所が見立てと食い違う</span>
+        )}
+      </div>
+
+      <p className="whitespace-pre-line text-slate-900">{claim.content}</p>
+
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-slate-500">
+        {showEvent && view.event && (
+          <>
+            <dt>出来事</dt>
+            <dd>{view.event.title}</dd>
+          </>
+        )}
+        {claim.when && (
+          <>
+            <dt>述べる日時</dt>
+            <dd>{claim.when.text}</dd>
+          </>
+        )}
+        {view.place && (
+          <>
+            <dt>述べる場所</dt>
+            <dd>{view.place.name}</dd>
+          </>
+        )}
+        {view.mentionedPersons.length > 0 && (
+          <>
+            <dt>言及</dt>
+            <dd>{view.mentionedPersons.map((person) => person.name).join('、')}</dd>
+          </>
+        )}
+        {view.source && (
+          <>
+            <dt>ソース</dt>
+            <dd>
+              {view.source.title}
+              {claim.locator && `（${claim.locator}）`}
+            </dd>
+          </>
+        )}
+        {claim.statedAt && (
+          <>
+            <dt>述べた時点</dt>
+            <dd>{claim.statedAt.text}</dd>
+          </>
+        )}
+      </dl>
+    </li>
+  );
+}

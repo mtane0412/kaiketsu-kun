@@ -1,0 +1,23 @@
+/**
+ * 列挙値の表示名
+ * 入力フォームとビューの両方で同じ表示名を使うため、ここに集約します。
+ */
+import type { Assessment, SourceKind } from './types';
+
+/** 主張に対する評価の表示名です。 */
+export const ASSESSMENT_LABELS: Record<Assessment, string> = {
+  unverified: '未検証',
+  credible: '信頼できる',
+  doubtful: '疑わしい',
+};
+
+/** ソースの種類の表示名です。 */
+export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
+  article: '記事',
+  book: '書籍',
+  'court-record': '裁判記録',
+  broadcast: '放送',
+  web: 'ウェブ',
+  'fiction-episode': '作品の話数',
+  other: 'その他',
+};
