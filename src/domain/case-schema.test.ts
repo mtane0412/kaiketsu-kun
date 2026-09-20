@@ -15,6 +15,17 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(sampleFictionalCase))).toEqual(sampleFictionalCase);
   });
 
+  it('評価を廃止する前に保存したデータは、主張の評価を取り除いて受け付ける', () => {
+    // 前提: 以前の版では、主張ごとに assessment（信頼できる・疑わしい・未検証）を保存していた
+    const 評価付きの旧データ = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, assessment: 'credible' })),
+    };
+
+    // 検証: 読み込みに成功し、評価の項目は残らない
+    expect(parseCase(toJsonData(評価付きの旧データ))).toEqual(sampleFictionalCase);
+  });
+
   it('必須の項目が欠けているデータを拒否する', () => {
     const 主張一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
 

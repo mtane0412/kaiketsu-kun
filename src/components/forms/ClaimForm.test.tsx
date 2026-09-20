@@ -48,7 +48,6 @@ describe('ClaimForm', () => {
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
       when: { text: '1998-08-13', earliest: '1998-08-13' },
-      assessment: 'unverified',
     });
     expect(onDone).toHaveBeenCalledOnce();
   });
@@ -147,17 +146,25 @@ describe('ClaimForm', () => {
     expect(useCaseStore.getState().currentCase.claims).toEqual(sampleFictionalCase.claims);
   });
 
+  it('主張に真偽の評価を付ける入力欄を持たない', () => {
+    // 発表者が警察であっても内容が真実とは限らないため、主張には「信頼できる」などの評価を付けない
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    expect(screen.queryByLabelText('評価')).not.toBeInTheDocument();
+  });
+
   it('既存の主張を編集すると、同じIDのまま置き換える', async () => {
     const user = userEvent.setup();
     const 隣家の証言 = sampleFictionalCase.claims[1]!;
     render(<ClaimForm initial={隣家の証言} onDone={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText('評価'), '疑わしい');
+    await user.clear(screen.getByLabelText('ソース内の位置'));
+    await user.type(screen.getByLabelText('ソース内の位置'), '社会面 3段目');
     await user.click(screen.getByRole('button', { name: '主張を保存' }));
 
     const { claims } = useCaseStore.getState().currentCase;
     expect(claims).toHaveLength(sampleFictionalCase.claims.length);
-    expect(claims.find((claim) => claim.id === 隣家の証言.id)).toEqual({ ...隣家の証言, assessment: 'doubtful' });
+    expect(claims.find((claim) => claim.id === 隣家の証言.id)).toEqual({ ...隣家の証言, locator: '社会面 3段目' });
   });
 });
 
@@ -283,14 +290,14 @@ describe('ClaimForm のキーボード操作', () => {
   });
 
   describe('ボード上の簡易表示（compact）', () => {
-    it('本文の1欄と投稿ボタンだけを表示し、日時・評価・ソース内の位置の入力欄を表示しない', () => {
+    it('本文の1欄と投稿ボタンだけを表示し、日時・ソース内の位置の入力欄を表示しない', () => {
       render(<ClaimForm compact onDone={vi.fn()} />);
 
       expect(screen.getByLabelText('内容')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '書き足す' })).toBeInTheDocument();
       expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
       expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('評価')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('ソース内の位置')).not.toBeInTheDocument();
     });
 
     it('入力欄を表示しなくても、位置から求めた日時は主張に保存する', async () => {
@@ -301,11 +308,11 @@ describe('ClaimForm のキーボード操作', () => {
       await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
       await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時, assessment: 'unverified' });
+      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時 });
     });
 
-    it('本文だけを編集しても、入力済みの日時・評価・ソース内の位置を保持する', async () => {
-      // 前提: 管理人の証言は、日時「8月12日 夜7時」、評価「疑わしい」、位置「第3章 112ページ」を持つ
+    it('本文だけを編集しても、入力済みの日時・ソース内の位置を保持する', async () => {
+      // 前提: 管理人の証言は、日時「8月12日 夜7時」、位置「第3章 112ページ」を持つ
       const user = userEvent.setup();
       const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
       render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);
@@ -319,7 +326,6 @@ describe('ClaimForm のキーボード操作', () => {
         when: 管理人の証言.when,
         statedAt: 管理人の証言.statedAt,
         locator: '第3章 112ページ',
-        assessment: 'doubtful',
       });
     });
   });

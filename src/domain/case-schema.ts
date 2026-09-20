@@ -86,6 +86,7 @@ const caseSchema = z.object({
     })
   ),
   claims: z.array(
+    // 評価（assessment）を廃止する前に保存したデータも読み込めるよう、未知のキーは拒否せずに取り除く（z.object の既定の動作）
     z.object({
       id: idSchema,
       speaker: speakerSchema,
@@ -97,7 +98,6 @@ const caseSchema = z.object({
       mentionedPersonIds: z.array(idSchema),
       when: timeRefSchema.optional(),
       placeId: idSchema.optional(),
-      assessment: z.enum(['credible', 'doubtful', 'unverified']),
     })
   ),
   relationships: z.array(

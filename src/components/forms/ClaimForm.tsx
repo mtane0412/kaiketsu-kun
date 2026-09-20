@@ -4,7 +4,7 @@
  * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事・ソースを書くと、発言者・ソース・
  * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
- * 本文から導出できない項目（日時・評価・ソース内の位置）は「詳細」にまとめています。
+ * 本文から導出できない項目（日時・ソース内の位置）は「詳細」にまとめています。
  *
  * compact を指定すると、ボード上の入力欄として本文の1欄と投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持し、
@@ -19,7 +19,7 @@
 import { nanoid } from 'nanoid';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { USER_SPEAKER_LABEL } from '@/domain/case-views';
-import { ASSESSMENT_LABELS, MENTION_KIND_LABELS } from '@/domain/labels';
+import { MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   claimToDraft,
   deriveClaimLinks,
@@ -31,9 +31,9 @@ import {
   type MentionKind,
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import type { Assessment, Case, Claim, Id, TimeRef } from '@/domain/types';
+import type { Case, Claim, Id, TimeRef } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SelectField, SubmitButton, TextField, TimeRefInput } from './fields';
+import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
 
 const SOURCE_SPEAKER_LABEL = 'ソース自体の記述';
@@ -101,7 +101,6 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const [locator, setLocator] = useState(initial?.locator ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
   const [when, setWhen] = useState(timeRefToDraft(initial?.when ?? defaults?.when));
-  const [assessment, setAssessment] = useState<Assessment>(initial?.assessment ?? 'unverified');
   const [error, setError] = useState<string | null>(null);
 
   const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when || defaults?.when);
@@ -159,7 +158,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     }
 
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-    const claim: Claim = { id: initial?.id ?? nanoid(), content, assessment, ...links };
+    const claim: Claim = { id: initial?.id ?? nanoid(), content, ...links };
     if (locator.trim()) claim.locator = locator.trim();
     if (statedAtResult.value) claim.statedAt = statedAtResult.value;
     if (whenResult.value) claim.when = whenResult.value;
@@ -228,20 +227,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         </dl>
         <details open={hasDetails} className="rounded border border-slate-200 p-2">
           <summary className="cursor-pointer text-xs font-medium text-slate-600">
-            詳細（日時・評価・ソース内の位置）
+            詳細（日時・ソース内の位置）
           </summary>
           <div className="mt-2 space-y-3">
             <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
             <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
-            <div className="grid grid-cols-2 gap-2">
-              <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
-              <SelectField
-                label="評価"
-                value={assessment}
-                onChange={(value) => setAssessment(value as Assessment)}
-                options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
-              />
-            </div>
+            <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
           </div>
         </details>
         </>

@@ -140,7 +140,6 @@ describe('claimToDraft', () => {
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
       placeId: 'place-villa',
-      assessment: 'unverified',
     };
 
     const draft = claimToDraft(旧形式の主張, sampleFictionalCase);

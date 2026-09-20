@@ -3,14 +3,7 @@
  * 入力フォームとビューの両方で同じ表示名を使うため、ここに集約します。
  */
 import type { MentionKind } from './mention';
-import type { Assessment, SourceKind } from './types';
-
-/** 主張に対する評価の表示名です。 */
-export const ASSESSMENT_LABELS: Record<Assessment, string> = {
-  unverified: '未検証',
-  credible: '信頼できる',
-  doubtful: '疑わしい',
-};
+import type { SourceKind } from './types';
 
 /** ソースの種類の表示名です。 */
 export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
