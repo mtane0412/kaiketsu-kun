@@ -2,11 +2,12 @@
  * 型定義の書き心地を確かめるための架空の案件サンプル
  *
  * このファイルの人物・場所・出来事・資料はすべて架空です。
- * 次の4点が型で表現できることを確認する目的で作成しています。
+ * 次の5点が型で表現できることを確認する目的で作成しています。
  * - 同じ出来事について、2人の証言が述べる時刻が食い違うこと
  * - 出来事が起きた時点と、証言が述べられた時点が別の時間軸であること
  * - 発言者を特定できない報道の記述を主張として扱えること
  * - ユーザーの推測を証言と区別し、関係の根拠として参照できること
+ * - 組織（県警）や記録装置（防犯カメラ）を、人物と同じく発言しうる主体として扱えること
  *
  * 主張の本文（content）は、人物・場所・出来事・ソースへの参照を `@[表示名](種類:ID)` の形式で含みます。
  * 各主張の speaker・sourceId・eventId・placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
@@ -34,6 +35,8 @@ export const sampleFictionalCase: Case = {
     { id: 'person-owner', name: '別荘の持ち主' },
     { id: 'person-neighbor', name: '隣家の住人' },
     { id: 'person-caretaker', name: '管理人', aliases: ['元管理人'] },
+    { id: 'person-police', name: '県警', note: '組織です。' },
+    { id: 'person-road-camera', name: '県道の防犯カメラ', note: '記録装置です。別荘へ向かう道路に設置されています。' },
   ],
   places: [{ id: 'place-villa', name: '湖畔の別荘' }],
   events: [
@@ -78,6 +81,18 @@ export const sampleFictionalCase: Case = {
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜7時', earliest: '1998-08-12T19:00' },
       placeId: 'place-villa',
+    },
+    {
+      id: 'claim-police-camera',
+      speaker: { kind: 'person', personIds: ['person-police'] },
+      sourceId: 'source-newspaper',
+      locator: '社会面',
+      content:
+        '@[県警](person:person-police): @[県道の防犯カメラ](person:person-road-camera)に、夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+      statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
+      eventId: 'event-last-seen',
+      mentionedPersonIds: ['person-road-camera', 'person-owner'],
+      when: { text: '8月12日 夜8時10分ごろ', earliest: '1998-08-12T20:00', latest: '1998-08-12T20:20' },
     },
     {
       id: 'claim-user-guess',
