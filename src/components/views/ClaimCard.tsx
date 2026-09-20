@@ -3,15 +3,24 @@
  *
  * 時系列ビューと証言者別ビューで共有します。
  * ユーザーの推測は、証言と見分けられるよう破線の枠と「推測」の表示で区別します。
+ * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
  */
 import type { ClaimView } from '@/domain/case-views';
 import { ASSESSMENT_LABELS } from '@/domain/labels';
+import type { MentionKind } from '@/domain/mention';
 import type { Assessment } from '@/domain/types';
 
 const ASSESSMENT_STYLES: Record<Assessment, string> = {
   unverified: 'bg-slate-100 text-slate-600',
   credible: 'bg-emerald-100 text-emerald-700',
   doubtful: 'bg-amber-100 text-amber-800',
+};
+
+const MENTION_STYLES: Record<MentionKind, string> = {
+  person: 'bg-sky-100 text-sky-800',
+  place: 'bg-emerald-100 text-emerald-800',
+  event: 'bg-amber-100 text-amber-800',
+  source: 'bg-slate-200 text-slate-700',
 };
 
 type ClaimCardProps = {
@@ -46,7 +55,17 @@ export function ClaimCard({ view, showSpeaker, showEvent }: ClaimCardProps) {
         )}
       </div>
 
-      <p className="whitespace-pre-line text-slate-900">{claim.content}</p>
+      <p className="whitespace-pre-line text-slate-900">
+        {view.contentSegments.map((segment, index) =>
+          segment.type === 'mention' ? (
+            <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
+              @{segment.label}
+            </span>
+          ) : (
+            segment.text
+          )
+        )}
+      </p>
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-slate-500">
         {showEvent && view.event && (

@@ -5,12 +5,15 @@
  * 参照先（出来事・人物・場所・ソース）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
+import { resolveContent, type ContentSegment } from './mention';
 import { compareTimeRef, isTimeConflict } from './time-ref';
 import type { Case, Claim, Event, Id, Person, Place, Source } from './types';
 
 /** 表示用に参照先を解決した主張です。 */
 export type ClaimView = {
   claim: Claim;
+  /** 本文を文字列とメンションに分解したものです。メンションの表示名はエンティティの現在の名前です。 */
+  contentSegments: ContentSegment[];
   speakerLabel: string;
   source?: Source;
   event?: Event;
@@ -75,6 +78,7 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
 
   return {
     claim,
+    contentSegments: resolveContent(claim.content, target),
     speakerLabel,
     source,
     event,

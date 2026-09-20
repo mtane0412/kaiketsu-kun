@@ -4,11 +4,12 @@
  * JSONから読み込んだデータは型の保証が無いため、次の3点を検証してから Case として扱います。
  * 1. 形式（必須項目と値の型）
  * 2. 時刻表記（earliest / latest が解釈でき、区間が逆転していないこと）
- * 3. 参照の整合性（IDの参照先が案件内に存在すること）と、主張のソース必須の規則
+ * 3. 参照の整合性（IDの参照先と、主張の本文のメンションの参照先が案件内に存在すること）と、主張のソース必須の規則
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
 import { z } from 'zod';
+import { parseContent, type MentionKind } from './mention';
 import { isValidPartialIso, toInterval } from './time-ref';
 import type { Case } from './types';
 
@@ -127,6 +128,13 @@ export function findCaseViolations(target: Case): string[] {
   const eventIds = idsOf(target.events);
   const claimIds = idsOf(target.claims);
 
+  const mentionTargets: Record<MentionKind, { ids: Set<string>; name: string }> = {
+    person: { ids: personIds, name: '人物' },
+    place: { ids: placeIds, name: '場所' },
+    event: { ids: eventIds, name: '出来事' },
+    source: { ids: sourceIds, name: 'ソース' },
+  };
+
   const check = (known: Set<string>, id: string | undefined, entityName: string) => {
     if (id !== undefined && !known.has(id)) {
       violations.push(`存在しない${entityName}を参照しています: ${id}`);
@@ -146,6 +154,10 @@ export function findCaseViolations(target: Case): string[] {
     check(eventIds, claim.eventId, '出来事');
     check(placeIds, claim.placeId, '場所');
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
+    // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
+    for (const segment of parseContent(claim.content)) {
+      if (segment.type === 'mention') check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
+    }
   }
   for (const relationship of target.relationships) {
     check(personIds, relationship.fromPersonId, '人物');

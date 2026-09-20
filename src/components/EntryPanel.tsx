@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { contentToPlainText } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
 import { EventForm, PersonForm, PlaceForm, SourceForm } from './forms/BasicForms';
@@ -69,7 +70,7 @@ const SECTIONS: Section[] = [
   {
     key: 'claims',
     label: '主張',
-    listItems: (target) => target.claims.map((claim) => ({ id: claim.id, label: truncate(claim.content) })),
+    listItems: (target) => target.claims.map((claim) => ({ id: claim.id, label: truncate(contentToPlainText(claim.content, target)) })),
     renderForm: (target, editingId, onDone) => (
       <ClaimForm initial={target.claims.find((claim) => claim.id === editingId)} onDone={onDone} />
     ),
