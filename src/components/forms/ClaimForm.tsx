@@ -56,7 +56,7 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
     case 'place':
       return { key: 'places', entity: { id, name } };
     case 'event':
-      return { key: 'events', entity: { id, title: name, participantIds: [] } };
+      return { key: 'events', entity: { id, title: name } };
     case 'source':
       return { key: 'sources', entity: { id, title: name, kind: 'other' } };
   }

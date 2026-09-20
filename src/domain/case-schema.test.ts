@@ -24,7 +24,7 @@ describe('parseCase', () => {
   it('解釈できない時刻表記を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
-      events: [{ ...sampleFictionalCase.events[0], when: { text: '8月12日', earliest: '1998年8月12日' } }],
+      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, when: { text: '8月12日', earliest: '1998年8月12日' } })),
     };
 
     expect(() => parseCase(toJsonData(データ))).toThrow('earliest');
@@ -33,7 +33,10 @@ describe('parseCase', () => {
   it('latestがearliestより前の時刻参照を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
-      events: [{ ...sampleFictionalCase.events[0], when: { text: '逆転', earliest: '1998-08', latest: '1998-07' } }],
+      claims: sampleFictionalCase.claims.map((claim) => ({
+        ...claim,
+        when: { text: '逆転', earliest: '1998-08', latest: '1998-07' },
+      })),
     };
 
     expect(() => parseCase(toJsonData(データ))).toThrow('latest が earliest より前です');

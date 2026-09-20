@@ -2,12 +2,15 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジック
  *
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
+ * 時系列の骨格は主張です。ボード上の位置は主張が述べる日時（Claim.when）で決まり、
+ * 出来事は同じ事柄についての主張を束ねるラベルとして、束ねた主張から位置・場所・人物を導出します。
+ * 食い違いは、特定の見立てとの比較ではなく、同じ出来事に束ねた主張同士の比較で判定します。
  * 参照先（出来事・人物・場所・ソース）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { resolveContent, type ContentSegment } from './mention';
 import { compareTimeRef, isTimeConflict } from './time-ref';
-import type { Case, Claim, Event, Id, Person, Place, Source } from './types';
+import type { Case, Claim, Event, Id, Person, Place, Source, TimeRef } from './types';
 
 /** 表示用に参照先を解決した主張です。 */
 export type ClaimView = {
@@ -20,25 +23,38 @@ export type ClaimView = {
   /** この主張が述べる場所です。 */
   place?: Place;
   mentionedPersons: Person[];
-  /** 主張が述べる時刻が、出来事の見立ての時刻と食い違っているかどうかです。 */
+  /** 同じ出来事に束ねた他の主張と、述べる時刻が食い違っているかどうかです。 */
   hasTimeConflict: boolean;
-  /** 主張が述べる場所が、出来事の見立ての場所と異なるかどうかです。 */
+  /** 同じ出来事に束ねた他の主張と、述べる場所が異なるかどうかです。 */
   hasPlaceConflict: boolean;
 };
 
-/** 時系列ビューの1行（1つの出来事）です。 */
-export type TimelineEntry = {
-  event: Event;
-  place?: Place;
-  participants: Person[];
-  claims: ClaimView[];
-};
+/**
+ * 時系列ボードの1項目です。
+ *
+ * - event: 出来事の束。when・places・persons は束ねた主張から導出した値です。
+ * - claim: 出来事に束ねていない主張。
+ */
+export type TimelineItem =
+  | {
+      kind: 'event';
+      event: Event;
+      /** 束ねた主張が述べる日時のうち、最も早いものです。ボード上の位置を決めます。 */
+      when?: TimeRef;
+      /** 束ねた主張が述べる場所です（重複なし）。 */
+      places: Place[];
+      /** 束ねた主張が言及している人物です（重複なし）。 */
+      persons: Person[];
+      claims: ClaimView[];
+    }
+  | { kind: 'claim'; when?: TimeRef; view: ClaimView };
 
 /** 時系列ビュー全体です。 */
 export type Timeline = {
-  entries: TimelineEntry[];
-  /** 出来事に紐づかない主張（人物評、ユーザーの推測など）です。 */
-  unlinkedClaims: ClaimView[];
+  /** 日時の早い順に並べた項目です。 */
+  items: TimelineItem[];
+  /** 並べるための日時（earliest または order）を持たない項目です。 */
+  undatedItems: TimelineItem[];
 };
 
 /** 証言者別ビューの1グループです。 */
@@ -61,7 +77,7 @@ function findOrThrow<T extends { id: Id }>(items: T[], id: Id, entityName: strin
   return found;
 }
 
-/** 主張の参照先を解決し、見立てとの食い違いを判定します。 */
+/** 主張の参照先を解決し、同じ出来事に束ねた他の主張との食い違いを判定します。 */
 function toClaimView(target: Case, claim: Claim): ClaimView {
   const source = claim.sourceId === undefined ? undefined : findOrThrow(target.sources, claim.sourceId, 'ソース');
   const event = claim.eventId === undefined ? undefined : findOrThrow(target.events, claim.eventId, '出来事');
@@ -76,6 +92,11 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     speakerLabel = USER_SPEAKER_LABEL;
   }
 
+  const siblings =
+    claim.eventId === undefined
+      ? []
+      : target.claims.filter((other) => other.eventId === claim.eventId && other.id !== claim.id);
+
   return {
     claim,
     contentSegments: resolveContent(claim.content, target),
@@ -84,9 +105,10 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     event,
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
-    hasTimeConflict: isTimeConflict(claim.when, event?.when),
+    hasTimeConflict: siblings.some((other) => isTimeConflict(claim.when, other.when)),
     hasPlaceConflict:
-      claim.placeId !== undefined && event?.placeId !== undefined && claim.placeId !== event.placeId,
+      claim.placeId !== undefined &&
+      siblings.some((other) => other.placeId !== undefined && other.placeId !== claim.placeId),
   };
 }
 
@@ -95,25 +117,55 @@ function sortByStatedAt(claims: ClaimView[]): ClaimView[] {
   return [...claims].sort((a, b) => compareTimeRef(a.claim.statedAt, b.claim.statedAt));
 }
 
+/** 時刻参照が、時系列に並べるための情報（earliest または order）を持つかどうかを返します。 */
+function isSortable(ref: TimeRef | undefined): boolean {
+  return ref?.earliest !== undefined || ref?.order !== undefined;
+}
+
+/** 重複を除いた配列を返します。順序は最初に現れた順です。 */
+function unique<T>(items: T[]): T[] {
+  return [...new Set(items)];
+}
+
+/** 出来事と、その出来事に束ねた主張から、ボードの項目を組み立てます。 */
+function toEventItem(event: Event, claims: ClaimView[]): TimelineItem {
+  // 述べる日時の早い順。日時が同じ、または日時を述べない主張同士は、述べられた時点の早い順
+  const sorted = [...claims].sort(
+    (a, b) => compareTimeRef(a.claim.when, b.claim.when) || compareTimeRef(a.claim.statedAt, b.claim.statedAt)
+  );
+  return {
+    kind: 'event',
+    event,
+    when: sorted.map((view) => view.claim.when).find(isSortable),
+    places: unique(sorted.flatMap((view) => (view.place ? [view.place] : []))),
+    persons: unique(sorted.flatMap((view) => view.mentionedPersons)),
+    claims: sorted,
+  };
+}
+
 /**
  * 時系列ビューを組み立てます。
- * 出来事は起きた時点の早い順に、各出来事の主張は述べられた時点の早い順に並べます。
+ * 出来事の束と、出来事に束ねていない主張を、主張が述べる日時の早い順に並べます。
+ * 並べるための日時を持たない項目は undatedItems に、出来事、主張の順でまとめます。
  */
 export function buildTimeline(target: Case): Timeline {
   const claimViews = target.claims.map((claim) => toClaimView(target, claim));
 
-  const entries = [...target.events]
-    .sort((a, b) => compareTimeRef(a.when, b.when))
-    .map((event) => ({
-      event,
-      place: event.placeId === undefined ? undefined : findOrThrow(target.places, event.placeId, '場所'),
-      participants: event.participantIds.map((id) => findOrThrow(target.persons, id, '人物')),
-      claims: sortByStatedAt(claimViews.filter((view) => view.claim.eventId === event.id)),
-    }));
+  const all: TimelineItem[] = [
+    ...target.events.map((event) =>
+      toEventItem(
+        event,
+        claimViews.filter((view) => view.claim.eventId === event.id)
+      )
+    ),
+    ...sortByStatedAt(claimViews.filter((view) => view.claim.eventId === undefined)).map(
+      (view): TimelineItem => ({ kind: 'claim', when: view.claim.when, view })
+    ),
+  ];
 
   return {
-    entries,
-    unlinkedClaims: sortByStatedAt(claimViews.filter((view) => view.claim.eventId === undefined)),
+    items: all.filter((item) => isSortable(item.when)).sort((a, b) => compareTimeRef(a.when, b.when)),
+    undatedItems: all.filter((item) => !isSortable(item.when)),
   };
 }
 

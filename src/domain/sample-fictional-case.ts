@@ -40,9 +40,6 @@ export const sampleFictionalCase: Case = {
     {
       id: 'event-last-seen',
       title: '持ち主が最後に目撃された',
-      when: { text: '1998年8月12日の夜', earliest: '1998-08-12T18:00', latest: '1998-08-12T23:59' },
-      placeId: 'place-villa',
-      participantIds: ['person-owner'],
     },
   ],
   claims: [
