@@ -1,12 +1,13 @@
 /**
  * 主張（証言・ソース自体の記述・ユーザーの推測）の入力フォーム
  *
- * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事・ソースを書くと、発言者・ソース・
+ * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事・ソースを書くと、ソース・
  * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
+ * 誰の発言かは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。新規登録でも編集でも選べます。
  * 本文から導出できない項目（日時・ソース内の位置）は「詳細」にまとめています。
  *
- * compact を指定すると、ボード上の入力欄として本文の1欄と投稿ボタンだけを表示します（SNSに投稿する感覚で
+ * compact を指定すると、ボード上の入力欄として本文の1欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、束ねる出来事と時系列の並び順の中での位置を決めます。
  *
@@ -18,7 +19,6 @@
 
 import { nanoid } from 'nanoid';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { USER_SPEAKER_LABEL } from '@/domain/case-views';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   claimToDraft,
@@ -36,8 +36,7 @@ import type { Case, Claim, Id } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
-
-const SOURCE_SPEAKER_LABEL = 'ソース自体の記述';
+import { SPEAKER_KIND_LABELS, SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
 
 /** 案件に登録済みのエンティティを、メンションの候補に変換します。 */
 function caseToCandidates(target: Case): MentionCandidate[] {
@@ -102,6 +101,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
   );
+  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial?.speaker));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [locator, setLocator] = useState(initial?.locator ?? '');
@@ -125,14 +125,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const links = deriveClaimLinks(content);
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
-  const speakerLabel =
-    links.speaker.kind === 'person'
-      ? links.speaker.personIds.map((id) => labelOf('person', id)).join('、')
-      : links.speaker.kind === 'source'
-        ? SOURCE_SPEAKER_LABEL
-        : USER_SPEAKER_LABEL;
   const summaryItems: { term: string; description: string | undefined }[] = [
-    { term: '発言者', description: speakerLabel },
     { term: MENTION_KIND_LABELS.source, description: labelOf('source', links.sourceId) },
     { term: MENTION_KIND_LABELS.event, description: labelOf('event', links.eventId) },
     { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
@@ -148,8 +141,13 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    if (links.speaker.kind === 'person' && links.sourceId === undefined) {
-      setError('人物の証言にはソースが必要です。本文に「@ソース名」を加えてください');
+    if (speaker.kind === 'person' && speaker.personIds.length === 0) {
+      setError('発言者の人物を選んでください。「発言者」から選べます');
+      return;
+    }
+    if (speaker.kind !== 'user' && links.sourceId === undefined) {
+      const kindLabel = SPEAKER_KIND_LABELS.find((item) => item.kind === speaker.kind)?.label;
+      setError(`${kindLabel}にはソースが必要です。本文に「@ソース名」を加えてください`);
       return;
     }
     const statedAtResult = draftToTimeRef(statedAt);
@@ -164,16 +162,17 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     }
 
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-    const claim: Claim = { id: initial?.id ?? nanoid(), content, ...links };
+    const claim: Claim = { id: initial?.id ?? nanoid(), speaker: toSpeaker(speaker), content, ...links };
     if (locator.trim()) claim.locator = locator.trim();
     if (statedAtResult.value) claim.statedAt = statedAtResult.value;
     if (whenResult.value) claim.when = whenResult.value;
 
-    // 新規作成した後に本文から消されたエンティティは保存しない
-    const mentionedIds = new Set(
-      parseContent(content).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : []))
-    );
-    const newEntries = pending.filter((item) => mentionedIds.has(item.mention.id)).map((item) => item.entry);
+    // 新規作成した後に、本文からも発言者からも外されたエンティティは保存しない
+    const usedIds = new Set([
+      ...parseContent(content).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : [])),
+      ...(claim.speaker.kind === 'person' ? claim.speaker.personIds : []),
+    ]);
+    const newEntries = pending.filter((item) => usedIds.has(item.mention.id)).map((item) => item.entry);
 
     // 書いた位置に並べるのは、この保存でボードに新しく現れる項目だけ
     const boardKey =
@@ -215,14 +214,14 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         hideLabel={compact}
         placeholder={
           compact
-            ? '分かったことを書く（「@」で人物・場所・出来事・ソース、先頭を「@人物:」にするとその人物の証言）'
-            : '例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊'
+            ? '分かったことを書く（「@」で人物・場所・出来事・ソース。誰の発言かは下の「発言者」で選ぶ）'
+            : '例: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊'
         }
       />
       {!compact && (
         <>
         <p className="text-xs text-slate-500">
-          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。複数人が同じことを述べた場合は「@人物 @人物:」と並べます。
+          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。誰の発言かは、保存ボタンの横の「発言者」で選びます（複数人が同じことを述べた場合は、全員を選びます）。
         </p>
         <dl
           aria-label="本文から読み取った参照"
@@ -251,6 +250,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       )}
       <FormError message={error} />
       <div className="flex items-center justify-end gap-3">
+        <SpeakerPicker
+          value={speaker}
+          onChange={setSpeaker}
+          persons={candidates.filter((candidate) => candidate.kind === 'person')}
+          onCreatePerson={(name) => handleCreate('person', name)}
+        />
         {actions}
         <SubmitButton label={compact && !initial ? '書き足す' : '主張を保存'} />
       </div>

@@ -64,6 +64,31 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(旧データ))).toEqual(sampleFictionalCase);
   });
 
+  it('発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除いて受け付ける', () => {
+    // 前提: 以前の版では、本文の先頭の「@人物:」から発言者を導出しており、本文に発言者の記法が残っている
+    const 旧データ = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-newspaper-left',
+          speaker: { kind: 'person', personIds: ['person-neighbor'] },
+          sourceId: 'source-newspaper',
+          content:
+            '@[隣家の住人](person:person-neighbor): 郵便受けに新聞が残っていた。 @[架空日報 朝刊](source:source-newspaper)',
+          mentionedPersonIds: [],
+        },
+      ],
+      timelineOrder: [...sampleFictionalCase.timelineOrder, 'claim:claim-newspaper-left'],
+    };
+
+    const 読み込んだ主張 = parseCase(toJsonData(旧データ)).claims.at(-1);
+
+    // 検証: 発言者は項目に残り、本文からは記法だけが消える
+    expect(読み込んだ主張?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
+    expect(読み込んだ主張?.content).toBe('郵便受けに新聞が残っていた。 @[架空日報 朝刊](source:source-newspaper)');
+  });
+
   it('人物の発言者が1人もいない主張を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,

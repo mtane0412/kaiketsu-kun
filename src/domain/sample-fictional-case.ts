@@ -62,7 +62,7 @@ export const sampleFictionalCase: Case = {
       sourceId: 'source-newspaper',
       locator: '社会面',
       content: 
-        '@[隣家の住人](person:person-neighbor): 夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
       statedAt: { text: '1998年8月13日', earliest: '1998-08-13' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -75,7 +75,7 @@ export const sampleFictionalCase: Case = {
       sourceId: 'source-book',
       locator: '第3章 112ページ',
       content: 
-        '@[管理人](person:person-caretaker): 夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。@[持ち主が最後に目撃された](event:event-last-seen) @[湖畔の夏 20年目の証言（架空の書籍）](source:source-book)',
+        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。@[持ち主が最後に目撃された](event:event-last-seen) @[湖畔の夏 20年目の証言（架空の書籍）](source:source-book)',
       statedAt: { text: '2018年', earliest: '2018-01-01', latest: '2018-12-31' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -88,7 +88,7 @@ export const sampleFictionalCase: Case = {
       sourceId: 'source-newspaper',
       locator: '社会面',
       content:
-        '@[県警](person:person-police): @[県道の防犯カメラ](person:person-road-camera)に、夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+        '@[県道の防犯カメラ](person:person-road-camera)に、夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-road-camera', 'person-owner'],

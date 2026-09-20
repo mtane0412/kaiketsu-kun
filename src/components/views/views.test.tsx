@@ -211,6 +211,43 @@ describe('TimelineView への書き足し', () => {
     expect(useCaseStore.getState().currentCase.claims.filter((claim) => claim.id === 'claim-police-search')).toHaveLength(1);
   });
 
+  it('ボードに書き足すときに、誰の発言かを「発言者」で紐づけられる', async () => {
+    const user = userEvent.setup();
+    render(<StoreBoard />);
+
+    await user.click(screen.getByRole('button', { name: 'ボードに書き足す' }));
+    await user.type(screen.getByLabelText('内容'), '持ち主は几帳面な人だった。 @架空日報');
+    await user.click(screen.getByRole('option', { name: 'ソース 架空日報 朝刊' }));
+    await user.click(screen.getByRole('button', { name: /^発言者/ }));
+    await user.click(screen.getByRole('radio', { name: '人物の証言' }));
+    await user.click(screen.getByRole('checkbox', { name: '隣家の住人' }));
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    // 検証: カードに発言者の名前が現れ、本文には発言者の記法が入らない
+    const 書き足した主張 = screen.getByText(/持ち主は几帳面な人だった。/).closest('li')!;
+    expect(within(書き足した主張).getByText('隣家の住人')).toBeInTheDocument();
+    expect(useCaseStore.getState().currentCase.claims.at(-1)).toMatchObject({
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
+      content: '持ち主は几帳面な人だった。 @[架空日報 朝刊](source:source-newspaper)',
+    });
+  });
+
+  it('ボード上の主張を編集して、あとから発言者を紐づけられる', async () => {
+    // 前提: 捜索の記述は「ソース自体の記述」として保存されている。これを県警の発表に改める
+    const user = userEvent.setup();
+    render(<StoreBoard />);
+
+    const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
+    await user.click(within(捜索).getByRole('button', { name: 'この主張を編集' }));
+    await user.click(screen.getByRole('button', { name: '発言者: ソース自体の記述' }));
+    await user.click(screen.getByRole('radio', { name: '人物の証言' }));
+    await user.click(screen.getByRole('checkbox', { name: '県警' }));
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-police-search');
+    expect(保存後).toEqual({ ...捜索の記述, speaker: { kind: 'person', personIds: ['person-police'] } });
+  });
+
   it('編集中の主張を削除できる', async () => {
     const user = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(true);

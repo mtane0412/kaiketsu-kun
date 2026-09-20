@@ -76,11 +76,14 @@ describe('EntryPanel', () => {
     render(<EntryPanel />);
 
     await user.click(screen.getByRole('tab', { name: /主張/ }));
-    await user.click(screen.getByRole('button', { name: /^@管理人: 夜7時に見回りをしたとき.*を編集/ }));
+    await user.click(screen.getByRole('button', { name: /^夜7時に見回りをしたとき.*を編集/ }));
 
     expect(screen.getByLabelText('内容')).toHaveValue(
-      '@管理人: 夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。@持ち主が最後に目撃された @湖畔の夏 20年目の証言（架空の書籍）'
+      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。@持ち主が最後に目撃された @湖畔の夏 20年目の証言（架空の書籍）'
     );
+
+    // 検証: 発言者は本文ではなく「発言者」に読み込む
+    expect(screen.getByRole('button', { name: '発言者: 管理人' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '編集を取り消す' }));
 

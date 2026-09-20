@@ -7,11 +7,12 @@
  * 3. 参照の整合性（IDの参照先と、主張の本文のメンションの参照先が案件内に存在すること）と、主張のソース必須の規則
  *
  * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
+ * 発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除きます（発言者は speaker に保存済みです）。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
 import { z } from 'zod';
-import { parseContent, type MentionKind } from './mention';
+import { parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { isValidPartialIso, toInterval } from './time-ref';
 import { legacyTimelineOrder } from './timeline-order';
 import type { Case } from './types';
@@ -190,7 +191,14 @@ export function parseCase(data: unknown): Case {
     throw new Error(`案件データの形式が正しくありません\n${details}`);
   }
 
-  const parsed: Case = { ...result.data, timelineOrder: result.data.timelineOrder ?? legacyTimelineOrder(result.data) };
+  const parsed: Case = {
+    ...result.data,
+    claims: result.data.claims.map((claim) => ({
+      ...claim,
+      content: stripLegacySpeakerPrefix(claim.content, claim.speaker),
+    })),
+    timelineOrder: result.data.timelineOrder ?? legacyTimelineOrder(result.data),
+  };
   const violations = findCaseViolations(parsed);
   if (violations.length > 0) {
     throw new Error(`案件データの参照に問題があります\n${violations.join('\n')}`);
