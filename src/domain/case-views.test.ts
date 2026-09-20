@@ -50,7 +50,7 @@ describe('buildTimeline', () => {
     expect(item.when?.text).toBe('8月12日 夜7時');
     expect(item.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
     // 県警の発表が言及している防犯カメラ（記録装置）も、人物として束に現れる
-    expect(item.persons.map((person) => person.name).sort()).toEqual(['別荘の持ち主', '県道の防犯カメラ'].sort());
+    expect(item.persons.map((person) => person.name)).toEqual(['別荘の持ち主', '県道の防犯カメラ']);
   });
 
   it('出来事の束の中では、主張を述べる日時の早い順に並べ、日時を述べない主張を最後に置く', () => {
