@@ -79,15 +79,32 @@ function findOrThrow<T extends { id: Id }>(items: T[], id: Id, entityName: strin
   return found;
 }
 
+/** 経由した人物の名前（伝えた順）を「（県警 → 架空日報 朝刊 による）」の形にします。経由が無い場合は空文字列を返します。 */
+export function formatViaLabel(viaNames: string[]): string {
+  return viaNames.length > 0 ? `（${viaNames.join(' → ')} による）` : '';
+}
+
+/** 主張の発言者の表示名を返します。複数の人物は「、」でつなぎ、発言者がいない主張はユーザーの推測とします。 */
+function speakerLabelOf(target: Case, claim: Claim): string {
+  return claim.speaker.kind === 'person'
+    ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、')
+    : USER_SPEAKER_LABEL;
+}
+
+/**
+ * 主張が誰の発言で、誰を経由して伝わったかを、1行の文字列で返します。
+ * 例「県道の防犯カメラ（県警 → 架空日報 朝刊 による）」。一覧のように、カードを使わずに主張を並べる箇所で使用します。
+ */
+export function describeClaimAttribution(target: Case, claim: Claim): string {
+  const viaNames = claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物').name);
+  return `${speakerLabelOf(target, claim)}${formatViaLabel(viaNames)}`;
+}
+
 /** 主張の参照先を解決し、同じ出来事に束ねた他の主張との食い違いを判定します。 */
 function toClaimView(target: Case, claim: Claim): ClaimView {
   const event = claim.eventId === undefined ? undefined : findOrThrow(target.events, claim.eventId, '出来事');
   const place = claim.placeId === undefined ? undefined : findOrThrow(target.places, claim.placeId, '場所');
 
-  const speakerLabel =
-    claim.speaker.kind === 'person'
-      ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、')
-      : USER_SPEAKER_LABEL;
 
   const siblings =
     claim.eventId === undefined
@@ -97,7 +114,7 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
   return {
     claim,
     contentSegments: resolveContent(claim.content, target),
-    speakerLabel,
+    speakerLabel: speakerLabelOf(target, claim),
     viaPersons: claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
     event,
     place,

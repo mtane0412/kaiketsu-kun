@@ -12,6 +12,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { describeClaimAttribution } from '@/domain/case-views';
 import { contentToPlainText } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
@@ -32,8 +33,8 @@ function truncate(text: string): string {
 type Section = {
   key: EntryKey;
   label: string;
-  /** 一覧に表示する要素のIDと表示名を返します。 */
-  listItems: (target: Case) => { id: Id; label: string }[];
+  /** 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（主張の発言者と経由）。 */
+  listItems: (target: Case) => { id: Id; label: string; caption?: string }[];
   /** 入力フォームを描画します。editingId が null の場合は新規登録です。 */
   renderForm: (target: Case, editingId: Id | null, onDone: () => void) => ReactNode;
 };
@@ -66,7 +67,12 @@ const SECTIONS: Section[] = [
   {
     key: 'claims',
     label: '主張',
-    listItems: (target) => target.claims.map((claim) => ({ id: claim.id, label: truncate(contentToPlainText(claim.content, target)) })),
+    listItems: (target) =>
+      target.claims.map((claim) => ({
+        id: claim.id,
+        label: truncate(contentToPlainText(claim.content, target)),
+        caption: describeClaimAttribution(target, claim),
+      })),
     renderForm: (target, editingId, onDone) => (
       <ClaimForm initial={target.claims.find((claim) => claim.id === editingId)} onDone={onDone} />
     ),
@@ -169,7 +175,10 @@ export function EntryPanel({ initial }: EntryPanelProps) {
                   item.id === editingId ? 'border-sky-400 bg-sky-50' : 'border-slate-200 bg-white'
                 }`}
               >
-                <span className="min-w-0 truncate">{item.label}</span>
+                <span className="min-w-0">
+                  {item.caption && <span className="block truncate text-xs font-semibold text-slate-600">{item.caption}</span>}
+                  <span className="block truncate">{item.label}</span>
+                </span>
                 <span className="flex shrink-0 gap-2 text-xs">
                   <button
                     type="button"

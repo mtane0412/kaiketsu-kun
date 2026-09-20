@@ -71,6 +71,23 @@ describe('EntryPanel', () => {
     expect(useCaseStore.getState().currentCase.persons).toHaveLength(sampleFictionalCase.persons.length);
   });
 
+  it('主張の一覧に、誰の発言かと、誰を経由して伝わったかを示す', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.click(screen.getByRole('tab', { name: /主張/ }));
+    const 一覧 = screen.getByRole('list', { name: '登録済みの主張' });
+
+    // 前提: 管理人の証言は書籍を経由し、防犯カメラの記録は県警と架空日報を経由している
+    const 管理人の証言 = within(一覧).getByText(/^夜7時に見回りをしたとき/).closest('li')!;
+    expect(管理人の証言).toHaveTextContent('管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
+    const 防犯カメラの記録 = within(一覧).getByText(/^夜8時10分ごろ/).closest('li')!;
+    expect(防犯カメラの記録).toHaveTextContent('県道の防犯カメラ（県警 → 架空日報 朝刊 による）');
+    // 発言者を選んでいない主張は、ユーザーの推測として示す
+    const 推測 = within(一覧).getByText(/^@管理人の証言は事件の20年後/).closest('li')!;
+    expect(推測).toHaveTextContent('ユーザーの推測');
+  });
+
   it('登録済みの主張の編集を選ぶと、フォームに内容を読み込み、取り消しで新規登録に戻る', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);
