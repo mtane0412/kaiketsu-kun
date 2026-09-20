@@ -7,15 +7,8 @@
  * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと主張の編集・詳細ボタンを表示します。
  */
 import type { ClaimView } from '@/domain/case-views';
-import { ASSESSMENT_LABELS } from '@/domain/labels';
 import type { MentionKind } from '@/domain/mention';
-import type { Assessment, Id } from '@/domain/types';
-
-const ASSESSMENT_STYLES: Record<Assessment, string> = {
-  unverified: 'bg-slate-100 text-slate-600',
-  credible: 'bg-emerald-100 text-emerald-700',
-  doubtful: 'bg-amber-100 text-amber-800',
-};
+import type { Id } from '@/domain/types';
 
 const MENTION_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100 text-sky-800',
@@ -34,7 +27,7 @@ type ClaimCardProps = {
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
   /** 主張の編集ボタンが選ばれたときに呼び出します。 */
   onEdit?: () => void;
-  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時・評価・ソース内の位置を編集する導線です。 */
+  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時・ソース内の位置を編集する導線です。 */
   onOpenDetails?: () => void;
 };
 
@@ -51,9 +44,6 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
       <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
         {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
-        <span className={`rounded px-1.5 py-0.5 ${ASSESSMENT_STYLES[claim.assessment]}`}>
-          {ASSESSMENT_LABELS[claim.assessment]}
-        </span>
         {view.hasTimeConflict && (
           <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と時刻が食い違う</span>
         )}

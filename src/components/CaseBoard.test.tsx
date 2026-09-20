@@ -43,7 +43,7 @@ describe('CaseBoard', () => {
     expect(screen.queryByRole('complementary', { name: '登録済みの一覧' })).not.toBeInTheDocument();
   });
 
-  it('主張の「詳細」を選ぶと、日時・評価・ソース内の位置を編集できるフォームをパネルに開く', async () => {
+  it('主張の「詳細」を選ぶと、日時・ソース内の位置を編集できるフォームをパネルに開く', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
     render(<CaseBoard />);

@@ -25,7 +25,6 @@ describe('buildTimeline', () => {
           content: '警察が別荘を捜索した。',
           mentionedPersonIds: [],
           when: { text: '8月15日', earliest: '1998-08-15' },
-          assessment: 'unverified',
         },
         {
           id: 'claim-arrival',
@@ -34,7 +33,6 @@ describe('buildTimeline', () => {
           content: '持ち主は8月10日に別荘に到着した。',
           mentionedPersonIds: [],
           when: { text: '8月10日', earliest: '1998-08-10' },
-          assessment: 'unverified',
         },
       ],
     };
@@ -141,7 +139,6 @@ describe('groupClaimsBySpeaker', () => {
           content: '持ち主とは挨拶をする程度の付き合いだった。',
           statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
           mentionedPersonIds: ['person-owner'],
-          assessment: 'unverified',
         },
       ],
     };

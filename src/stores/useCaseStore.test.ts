@@ -12,7 +12,6 @@ const 新しい証言: Claim = {
   sourceId: 'source-newspaper',
   content: '翌朝、別荘の郵便受けに新聞が残ったままだった。',
   mentionedPersonIds: ['person-owner'],
-  assessment: 'unverified',
 };
 
 beforeEach(() => {
@@ -27,11 +26,11 @@ describe('upsert', () => {
   });
 
   it('既存のIDの主張は、追加せずに置き換える', () => {
-    useCaseStore.getState().upsert('claims', { ...sampleFictionalCase.claims[1]!, assessment: 'credible' });
+    useCaseStore.getState().upsert('claims', { ...sampleFictionalCase.claims[1]!, locator: '社会面 3段目' });
 
     const claims = useCaseStore.getState().currentCase.claims;
     expect(claims).toHaveLength(sampleFictionalCase.claims.length);
-    expect(claims.find((claim) => claim.id === 'claim-neighbor')?.assessment).toBe('credible');
+    expect(claims.find((claim) => claim.id === 'claim-neighbor')?.locator).toBe('社会面 3段目');
   });
 
   it('存在しない人物を参照する主張はエラーにし、案件を変更しない', () => {

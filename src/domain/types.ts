@@ -115,9 +115,6 @@ export type Speaker =
   | { kind: 'source' }
   | { kind: 'user' };
 
-/** 主張に対するユーザーの評価です。 */
-export type Assessment = 'credible' | 'doubtful' | 'unverified';
-
 /**
  * 「誰が・どのソースで・何を述べたか」の1単位です。
  *
@@ -148,7 +145,6 @@ export type Claim = {
   when?: TimeRef;
   /** この主張が述べる出来事の場所です。同じ出来事に束ねた他の主張と食い違う場合があります。 */
   placeId?: Id;
-  assessment: Assessment;
 };
 
 /**

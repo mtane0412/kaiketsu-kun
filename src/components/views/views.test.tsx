@@ -22,6 +22,15 @@ describe('TimelineView', () => {
     expect(within(entry).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
   });
 
+  it('主張に「信頼できる」「疑わしい」「未検証」といった真偽の評価を表示しない', () => {
+    // 誰が述べたかを示すだけに留め、内容が真実かどうかのラベルは付けない
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    expect(screen.queryByText('信頼できる')).not.toBeInTheDocument();
+    expect(screen.queryByText('疑わしい')).not.toBeInTheDocument();
+    expect(screen.queryByText('未検証')).not.toBeInTheDocument();
+  });
+
   it('本文のメンションは、トークンの記法ではなくエンティティの現在の名前で表示する', () => {
     // 前提: 本文のトークンが控えている表示名は「別荘の持ち主」だが、人物はその後「湖畔荘のオーナー」に改名されている
     const 案件: Case = {
@@ -62,7 +71,6 @@ describe('TimelineView', () => {
           content: '警察が別荘を捜索した。',
           mentionedPersonIds: [],
           when: { text: '8月15日', earliest: '1998-08-15' },
-          assessment: 'unverified',
         },
       ],
     };
@@ -100,7 +108,6 @@ const 捜索の記述: Claim = {
   content: '警察が別荘を捜索した。 @[架空日報 朝刊](source:source-newspaper)',
   mentionedPersonIds: [],
   when: { text: '8月15日', earliest: '1998-08-15' },
-  assessment: 'unverified',
 };
 
 describe('TimelineView への書き足し', () => {
@@ -210,7 +217,7 @@ describe('TimelineView への書き足し', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
   });
 
-  it('主張の「詳細」から、日時・評価・ソース内の位置の編集を開く', async () => {
+  it('主張の「詳細」から、日時・ソース内の位置の編集を開く', async () => {
     const user = userEvent.setup();
     const onOpenClaimDetails = vi.fn();
     const currentCase = useCaseStore.getState().currentCase;

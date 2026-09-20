@@ -52,7 +52,6 @@ export const sampleFictionalCase: Case = {
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
-      assessment: 'credible',
     },
     {
       id: 'claim-neighbor',
@@ -66,7 +65,6 @@ export const sampleFictionalCase: Case = {
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜9時ごろ', earliest: '1998-08-12T20:30', latest: '1998-08-12T21:30' },
       placeId: 'place-villa',
-      assessment: 'unverified',
     },
     {
       id: 'claim-caretaker',
@@ -80,7 +78,6 @@ export const sampleFictionalCase: Case = {
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜7時', earliest: '1998-08-12T19:00' },
       placeId: 'place-villa',
-      assessment: 'doubtful',
     },
     {
       id: 'claim-user-guess',
@@ -88,7 +85,6 @@ export const sampleFictionalCase: Case = {
       content: 
         '@[管理人](person:person-caretaker)の証言は事件の20年後に初めて出たもので、@[隣家の住人](person:person-neighbor)の証言と2時間食い違う。管理人と@[別荘の持ち主](person:person-owner)の間に金銭の問題があった可能性を調べたい。',
       mentionedPersonIds: ['person-caretaker', 'person-neighbor', 'person-owner'],
-      assessment: 'unverified',
     },
   ],
   relationships: [
