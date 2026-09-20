@@ -1,0 +1,12 @@
+{
+  "name": "testimony-board",
+  "version": "0.0.0",
+  "private": true,
+  "description": "証言とソースを起点に、出来事・人物・場所を時系列で整理する調査ボード",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

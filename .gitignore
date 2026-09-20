@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.env*
+# 実在の人物に関する推測を含む実データ置き場（公開リポジトリにコミットしない）
+src/domain/private/
+.DS_Store
