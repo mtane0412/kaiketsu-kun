@@ -194,9 +194,13 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
     return mention;
   };
 
-  if (claim.speaker.kind === 'person' && derived.speaker.kind !== 'person') {
-    const speakers = claim.speaker.personIds.map((id) => `@${supplement('person', id).label}`);
-    text = `${speakers.join(' ')}: ${text}`;
+  if (claim.speaker.kind === 'person') {
+    // 本文の先頭に書かれていない発言者だけを補う。本文に発言者が1人もいない場合は、コロンも補う
+    const written = derived.speaker.kind === 'person' ? derived.speaker.personIds : [];
+    const speakers = claim.speaker.personIds
+      .filter((id) => !written.includes(id))
+      .map((id) => `@${supplement('person', id).label}`);
+    if (speakers.length > 0) text = `${speakers.join(' ')}${written.length > 0 ? ' ' : ': '}${text}`;
   }
   const missing: [MentionKind, Id | undefined][] = [
     ...claim.mentionedPersonIds

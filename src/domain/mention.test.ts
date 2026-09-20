@@ -206,6 +206,25 @@ describe('claimToDraft（発言者が複数の主張）', () => {
   });
 });
 
+describe('claimToDraft（本文の発言者が項目より少ない主張）', () => {
+  it('本文の先頭に書かれていない発言者を先頭に補う（編集で発言者を失わないため）', () => {
+    // 前提: 手で編集したJSONなどで、項目の発言者は2人だが、本文の先頭には隣家の住人しか書かれていない
+    const 主張: Claim = {
+      id: 'claim-partial-speakers',
+      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
+      sourceId: 'source-newspaper',
+      content: `${formatMention(隣家の住人)}: 別荘の明かりがついていた。 ${formatMention(朝刊)}`,
+      mentionedPersonIds: [],
+    };
+
+    const draft = claimToDraft(主張, sampleFictionalCase);
+
+    expect(draft.text).toBe('@管理人 @隣家の住人: 別荘の明かりがついていた。 @架空日報 朝刊');
+    const 保存後の発言者 = deriveClaimLinks(draftToContent(draft)).speaker;
+    expect(保存後の発言者).toEqual({ kind: 'person', personIds: ['person-caretaker', 'person-neighbor'] });
+  });
+});
+
 describe('findMentionQuery', () => {
   it('カーソルの直前にある「@」以降の文字列を、候補の検索語として返す', () => {
     const text = '庭に@持ち';
