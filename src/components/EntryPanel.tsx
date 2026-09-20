@@ -1,7 +1,7 @@
 /**
  * 登録済みの一覧（台帳）
  *
- * ソース・人物・場所・出来事・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
+ * 人物・場所・出来事・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
  * 一覧の「編集」を選ぶとフォームが編集に切り替わり、「削除」は他のデータから参照されている場合に
  * 理由を示して中止します。
  *
@@ -15,7 +15,7 @@ import { useState, type ReactNode } from 'react';
 import { contentToPlainText } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
-import { EventForm, PersonForm, PlaceForm, SourceForm } from './forms/BasicForms';
+import { EventForm, PersonForm, PlaceForm } from './forms/BasicForms';
 import { ClaimForm } from './forms/ClaimForm';
 
 /** このパネルで扱う一覧の名前です。関係（relationships）はグラフ表示を移植する段階で追加します。 */
@@ -39,14 +39,6 @@ type Section = {
 };
 
 const SECTIONS: Section[] = [
-  {
-    key: 'sources',
-    label: 'ソース',
-    listItems: (target) => target.sources.map((source) => ({ id: source.id, label: source.title })),
-    renderForm: (target, editingId, onDone) => (
-      <SourceForm initial={target.sources.find((source) => source.id === editingId)} onDone={onDone} />
-    ),
-  },
   {
     key: 'persons',
     label: '人物',
@@ -82,7 +74,7 @@ const SECTIONS: Section[] = [
 ];
 
 type EntryPanelProps = {
-  /** 最初に選ぶ種類と、編集から始めるエンティティです。省略すると、ソースの新規登録から始めます。 */
+  /** 最初に選ぶ種類と、編集から始めるエンティティです。省略すると、人物の新規登録から始めます。 */
   initial?: { key: EntryKey; id: Id };
 };
 
@@ -90,7 +82,7 @@ export function EntryPanel({ initial }: EntryPanelProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const remove = useCaseStore((state) => state.remove);
 
-  const [activeKey, setActiveKey] = useState<EntryKey>(initial?.key ?? 'sources');
+  const [activeKey, setActiveKey] = useState<EntryKey>(initial?.key ?? 'persons');
   const [editingId, setEditingId] = useState<Id | null>(initial?.id ?? null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // 保存のたびに値を進め、新規登録フォームを再マウントして入力欄を空に戻す

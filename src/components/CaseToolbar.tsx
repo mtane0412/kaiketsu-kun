@@ -18,8 +18,7 @@ const BUTTON_CLASS = 'rounded border border-slate-300 bg-white px-2.5 py-1.5 tex
 /** 案件にデータが1件でも入力されているかどうかを判定します。 */
 function hasAnyData(target: Case): boolean {
   return (
-    target.sources.length +
-      target.persons.length +
+    target.persons.length +
       target.places.length +
       target.events.length +
       target.claims.length +

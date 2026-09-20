@@ -5,13 +5,13 @@
  * 時系列の骨格は主張です。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まり、
  * 出来事は同じ事柄についての主張を束ねるラベルとして、束ねた主張から日時・場所・人物を導出します。
  * 食い違いは、特定の見立てとの比較ではなく、同じ出来事に束ねた主張同士の比較で判定します。
- * 参照先（出来事・人物・場所・ソース）が見つからない場合は、データ破損として例外を投げます。
+ * 参照先（出来事・人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { resolveContent, type ContentSegment } from './mention';
 import { compareTimeRef, isTimeConflict } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
-import type { Case, Claim, Event, Id, Person, Place, Source, TimeRef } from './types';
+import type { Case, Claim, Event, Id, Person, Place, TimeRef } from './types';
 
 /** 表示用に参照先を解決した主張です。 */
 export type ClaimView = {
@@ -19,7 +19,8 @@ export type ClaimView = {
   /** 本文を文字列とメンションに分解したものです。メンションの表示名はエンティティの現在の名前です。 */
   contentSegments: ContentSegment[];
   speakerLabel: string;
-  source?: Source;
+  /** 発言者の発言をユーザーに伝えた人物です。伝えた順に並びます。 */
+  viaPersons: Person[];
   event?: Event;
   /** この主張が述べる場所です。 */
   place?: Place;
@@ -61,7 +62,7 @@ export type Timeline = {
 /** 証言者別ビューの1グループです。 */
 export type SpeakerGroup = {
   key: string;
-  kind: 'person' | 'source' | 'user';
+  kind: 'person' | 'user';
   label: string;
   claims: ClaimView[];
 };
@@ -80,18 +81,13 @@ function findOrThrow<T extends { id: Id }>(items: T[], id: Id, entityName: strin
 
 /** 主張の参照先を解決し、同じ出来事に束ねた他の主張との食い違いを判定します。 */
 function toClaimView(target: Case, claim: Claim): ClaimView {
-  const source = claim.sourceId === undefined ? undefined : findOrThrow(target.sources, claim.sourceId, 'ソース');
   const event = claim.eventId === undefined ? undefined : findOrThrow(target.events, claim.eventId, '出来事');
   const place = claim.placeId === undefined ? undefined : findOrThrow(target.places, claim.placeId, '場所');
 
-  let speakerLabel: string;
-  if (claim.speaker.kind === 'person') {
-    speakerLabel = claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、');
-  } else if (claim.speaker.kind === 'source') {
-    speakerLabel = source?.title ?? 'ソース不明の記述';
-  } else {
-    speakerLabel = USER_SPEAKER_LABEL;
-  }
+  const speakerLabel =
+    claim.speaker.kind === 'person'
+      ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、')
+      : USER_SPEAKER_LABEL;
 
   const siblings =
     claim.eventId === undefined
@@ -102,7 +98,7 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     claim,
     contentSegments: resolveContent(claim.content, target),
     speakerLabel,
-    source,
+    viaPersons: claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
     event,
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
@@ -171,8 +167,9 @@ export function buildTimeline(target: Case): Timeline {
 
 /**
  * 証言者別ビューを組み立てます。
- * 人物（案件への登録順）、ソース自体の記述（ソースの登録順）、ユーザーの推測の順にグループを並べます。
+ * 人物（案件への登録順）、ユーザーの推測の順にグループを並べます。
  * 主張が1件も無い発言者のグループは作りません。複数の人物が述べた主張は、それぞれの人物のグループに入れます。
+ * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   const claimViews = target.claims.map((claim) => toClaimView(target, claim));
@@ -186,13 +183,6 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     ),
   }));
 
-  const sourceGroups: SpeakerGroup[] = target.sources.map((source) => ({
-    key: `source:${source.id}`,
-    kind: 'source',
-    label: source.title,
-    claims: claimViews.filter((view) => view.claim.speaker.kind === 'source' && view.claim.sourceId === source.id),
-  }));
-
   const userGroup: SpeakerGroup = {
     key: 'user',
     kind: 'user',
@@ -200,7 +190,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     claims: claimViews.filter((view) => view.claim.speaker.kind === 'user'),
   };
 
-  return [...personGroups, ...sourceGroups, userGroup]
+  return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
     .map((group) => ({ ...group, claims: sortByStatedAt(group.claims) }));
 }

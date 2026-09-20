@@ -1,17 +1,17 @@
 /**
  * メンション（主張の本文中の @ によるエンティティ参照）
  *
- * 主張の本文（Claim.content）は、人物・場所・出来事・ソースへの参照を
+ * 主張の本文（Claim.content）は、人物・場所・出来事への参照を
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
- * Claim の speaker・sourceId・eventId・placeId・mentionedPersonIds は、このトークンから導出します。
+ * Claim の eventId・placeId・mentionedPersonIds は、このトークンから導出します。
+ * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
  * 導出の規則:
- * - 本文の先頭が人物のメンションで、その直後がコロン（: または ：）の場合、その人物が発言者です。
- *   人物のメンションを空白または読点（、）で区切って並べた場合は、全員が発言者です。
- *   並びの途中に文章（「と」など）を挟んだ場合は、発言者として扱いません。
- * - 発言者の人物がいない場合、ソースのメンションがあれば「ソース自体の記述」、無ければ「ユーザーの推測」です。
- * - ソース・出来事・場所は、それぞれ最初のメンションを採用します。
- * - 発言者以外の人物のメンションは、言及している人物です。
+ * - 出来事・場所は、それぞれ最初のメンションを採用します。
+ * - 人物のメンションは、言及している人物です。
+ *
+ * 以前の版では、本文の先頭を「@人物:」と書くとその人物を発言者として導出していました。
+ * その頃に保存した本文に残っている発言者の記法は、読み込み時に stripLegacySpeakerPrefix で取り除きます。
  *
  * 入力欄（textarea）では、トークンの代わりに `@表示名` の素の文字列を表示します。
  * この入力欄の状態を「下書き（ClaimDraft）」と呼び、保存時に draftToContent で本文に変換します。
@@ -19,10 +19,10 @@
 import type { Case, Claim, Id, Speaker } from './types';
 
 /** メンションで参照できるエンティティの種類です。 */
-export type MentionKind = 'person' | 'place' | 'event' | 'source';
+export type MentionKind = 'person' | 'place' | 'event';
 
 /** メンションの種類の一覧です。新規作成の選択肢は、この順序で表示します。 */
-export const MENTION_KINDS: MentionKind[] = ['person', 'place', 'event', 'source'];
+export const MENTION_KINDS: MentionKind[] = ['person', 'place', 'event'];
 
 /** 本文を分解した1要素です。 */
 export type ContentSegment =
@@ -35,12 +35,13 @@ export type DraftMention = { kind: MentionKind; id: Id; label: string };
 export type ClaimDraft = { text: string; mentions: DraftMention[] };
 
 /** 本文のトークンから導出した、主張の参照です。 */
-export type ClaimLinks = Pick<Claim, 'speaker' | 'sourceId' | 'eventId' | 'placeId' | 'mentionedPersonIds'>;
+export type ClaimLinks = Pick<Claim, 'eventId' | 'placeId' | 'mentionedPersonIds'>;
 
-const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event|source):([^)\s]+)\)/g;
-const SPEAKER_DELIMITER_PATTERN = /^\s*[:：]/;
-/** 発言者の人物を並べるときの区切り（空白と読点）だけで構成された文字列です。 */
-const SPEAKER_SEPARATOR_PATTERN = /^[\s、,，]*$/;
+const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event):([^)\s]+)\)/g;
+/**
+ * 以前の版の発言者の記法です。本文の先頭に人物のメンションを空白または読点で区切って並べ、コロン（: または ：）で閉じます。
+ */
+const LEGACY_SPEAKER_PREFIX_PATTERN = /^(?:@\[[^\]]*\]\(person:[^)\s]+\)[\s、,，]*)+[:：]\s*/;
 
 /**
  * メンションを本文用のトークンに変換します。
@@ -72,8 +73,6 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
       return target.places.find((place) => place.id === id)?.name;
     case 'event':
       return target.events.find((event) => event.id === id)?.title;
-    case 'source':
-      return target.sources.find((source) => source.id === id)?.title;
   }
 }
 
@@ -96,54 +95,38 @@ export function contentToPlainText(content: string, target: Case): string {
     .join('');
 }
 
-/**
- * 本文の先頭に並んだ発言者の人物のIDを、書かれた順に（重複を含めて）返します。発言者がいない場合は空の配列を返します。
- * 先頭から「人物のメンション」と「区切りだけの文字列」が交互に続き、最後の人物の直後がコロンで始まる場合に限り、発言者とみなします。
- */
-function findSpeakerPersonIds(segments: ContentSegment[]): Id[] {
-  const personIds: Id[] = [];
-  for (const segment of segments) {
-    if (segment.type === 'mention') {
-      if (segment.kind !== 'person') return [];
-      personIds.push(segment.id);
-    } else if (SPEAKER_DELIMITER_PATTERN.test(segment.text)) {
-      return personIds;
-    } else if (personIds.length === 0 || !SPEAKER_SEPARATOR_PATTERN.test(segment.text)) {
-      return [];
-    }
-  }
-  return [];
-}
-
 /** 本文のトークンから、主張の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
 export function deriveClaimLinks(content: string): ClaimLinks {
-  const segments = parseContent(content);
-  const speakerPersonIds = findSpeakerPersonIds(segments);
-
-  const mentions = segments.filter((segment) => segment.type === 'mention').slice(speakerPersonIds.length);
+  const mentions = parseContent(content).filter((segment) => segment.type === 'mention');
   const firstIdOf = (kind: MentionKind) => mentions.find((mention) => mention.kind === kind)?.id;
-  const sourceId = firstIdOf('source');
   const eventId = firstIdOf('event');
   const placeId = firstIdOf('place');
 
-  let speaker: Speaker;
-  if (speakerPersonIds.length > 0) {
-    speaker = { kind: 'person', personIds: [...new Set(speakerPersonIds)] };
-  } else {
-    speaker = sourceId === undefined ? { kind: 'user' } : { kind: 'source' };
-  }
-
   // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
   const links: ClaimLinks = {
-    speaker,
     mentionedPersonIds: [
       ...new Set(mentions.filter((mention) => mention.kind === 'person').map((mention) => mention.id)),
     ],
   };
-  if (sourceId !== undefined) links.sourceId = sourceId;
   if (eventId !== undefined) links.eventId = eventId;
   if (placeId !== undefined) links.placeId = placeId;
   return links;
+}
+
+/**
+ * 発言者を本文の先頭に「@人物:」と書いていた頃の本文から、発言者の記法を取り除いて返します。
+ *
+ * 注意: 先頭に並んだ人物の全員が項目の発言者（speaker）に含まれる場合に限り、取り除きます。
+ * 含まれない人物がいる場合は、発言者の記法ではなく文章とみなし、本文を変えません。
+ */
+export function stripLegacySpeakerPrefix(content: string, speaker: Speaker): string {
+  if (speaker.kind !== 'person') return content;
+  const prefix = LEGACY_SPEAKER_PREFIX_PATTERN.exec(content)?.[0];
+  if (prefix === undefined) return content;
+  const isSpeakerPrefix = parseContent(prefix).every(
+    (segment) => segment.type !== 'mention' || speaker.personIds.includes(segment.id)
+  );
+  return isSpeakerPrefix ? content.slice(prefix.length) : content;
 }
 
 /**
@@ -188,9 +171,9 @@ export function draftToContent(draft: ClaimDraft): string {
 /**
  * 保存済みの主張を下書きに変換します。
  *
- * メンション導入前に保存された主張は、参照を項目（speaker・sourceId など）にだけ持ち、本文にトークンを持ちません。
- * そのまま編集して保存すると参照が失われるため、本文から導出できない参照を、発言者は先頭に、
- * それ以外は末尾にメンションとして補います。
+ * メンション導入前に保存された主張は、参照を項目（eventId など）にだけ持ち、本文にトークンを持ちません。
+ * そのまま編集して保存すると参照が失われるため、本文から導出できない参照を、末尾にメンションとして補います。
+ * 発言者と経由は入力欄の「発言者」で扱うため、本文には補いません。
  */
 export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   const segments = resolveContent(claim.content, target);
@@ -200,32 +183,19 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   let text = contentToPlainText(claim.content, target);
 
   const derived = deriveClaimLinks(claim.content);
-  const supplement = (kind: MentionKind, id: Id): DraftMention => {
-    const label = findEntityName(target, kind, id);
-    if (label === undefined) throw new Error(`主張が存在しない参照を持っています: ${kind}:${id}`);
-    const mention = { kind, id, label };
-    mentions.push(mention);
-    return mention;
-  };
-
-  if (claim.speaker.kind === 'person') {
-    // 本文の先頭に書かれていない発言者だけを補う。本文に発言者が1人もいない場合は、コロンも補う
-    const written = derived.speaker.kind === 'person' ? derived.speaker.personIds : [];
-    const speakers = claim.speaker.personIds
-      .filter((id) => !written.includes(id))
-      .map((id) => `@${supplement('person', id).label}`);
-    if (speakers.length > 0) text = `${speakers.join(' ')}${written.length > 0 ? ' ' : ': '}${text}`;
-  }
   const missing: [MentionKind, Id | undefined][] = [
     ...claim.mentionedPersonIds
       .filter((id) => !derived.mentionedPersonIds.includes(id))
       .map((id): [MentionKind, Id] => ['person', id]),
     ['event', derived.eventId === undefined ? claim.eventId : undefined],
     ['place', derived.placeId === undefined ? claim.placeId : undefined],
-    ['source', derived.sourceId === undefined ? claim.sourceId : undefined],
   ];
   for (const [kind, id] of missing) {
-    if (id !== undefined) text += ` @${supplement(kind, id).label}`;
+    if (id === undefined) continue;
+    const label = findEntityName(target, kind, id);
+    if (label === undefined) throw new Error(`主張が存在しない参照を持っています: ${kind}:${id}`);
+    mentions.push({ kind, id, label });
+    text += ` @${label}`;
   }
   return { text, mentions };
 }

@@ -11,6 +11,7 @@ import {
   formatMention,
   parseContent,
   parseDraft,
+  stripLegacySpeakerPrefix,
   type DraftMention,
 } from './mention';
 import { sampleFictionalCase } from './sample-fictional-case';
@@ -21,7 +22,6 @@ const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label:
 const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
 const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
 const 目撃: DraftMention = { kind: 'event', id: 'event-last-seen', label: '持ち主が最後に目撃された' };
-const 朝刊: DraftMention = { kind: 'source', id: 'source-newspaper', label: '架空日報 朝刊' };
 
 describe('parseContent', () => {
   it('本文を、文字列とメンションの並びに分解する', () => {
@@ -48,75 +48,24 @@ describe('contentToPlainText', () => {
 });
 
 describe('deriveClaimLinks', () => {
-  it('先頭の「@人物:」を発言者とし、残りのメンションから各参照を導出する', () => {
+  it('本文のメンションから、出来事・場所・言及している人物を導出する（発言者と経由は本文から導出しない）', () => {
     const content = [
-      `${formatMention(隣家の住人)}: 夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`,
-      `${formatMention(目撃)} ${formatMention(朝刊)}`,
+      `夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`,
+      `${formatMention(目撃)}`,
     ].join('');
 
     expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      sourceId: 'source-newspaper',
       eventId: 'event-last-seen',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
     });
   });
 
-  it('全角のコロンでも発言者として扱う', () => {
-    const content = `${formatMention(隣家の住人)}：新聞が残っていた。`;
+  it('本文の先頭に「@人物:」と書いても発言者として扱わず、言及している人物に含める', () => {
+    // 発言者は入力欄の「発言者」で選ぶため、本文の書き方で発言者が決まることはない
+    const content = `${formatMention(隣家の住人)}: 新聞が残っていた。`;
 
-    expect(deriveClaimLinks(content).speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
-  });
-
-  it('先頭に人物のメンションが並び、その直後がコロンの場合は、全員を発言者とする', () => {
-    // 前提: 1つの記事が、隣家の住人と管理人の2人が同じことを述べたと伝えている
-    const content = `${formatMention(隣家の住人)} ${formatMention(管理人)}: 庭に${formatMention(持ち主)}の姿が見えた。${formatMention(朝刊)}`;
-
-    expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-      sourceId: 'source-newspaper',
-      mentionedPersonIds: ['person-owner'],
-    });
-  });
-
-  it('発言者の人物は読点（、）で区切ってもよく、同じ人物の重複は1件にまとめる', () => {
-    const content = `${formatMention(隣家の住人)}、${formatMention(管理人)}、${formatMention(隣家の住人)}：新聞が残っていた。`;
-
-    expect(deriveClaimLinks(content).speaker).toEqual({
-      kind: 'person',
-      personIds: ['person-neighbor', 'person-caretaker'],
-    });
-  });
-
-  it('先頭の人物の並びに文章が挟まる場合は、発言者ではなく言及している人物として扱う', () => {
-    // 「と」のような文章を挟むと、どこまでが発言者かを機械的に決められないため、発言者として扱わない
-    const content = `${formatMention(隣家の住人)}と${formatMention(管理人)}: 新聞が残っていた。${formatMention(朝刊)}`;
-
-    expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'source' },
-      sourceId: 'source-newspaper',
-      mentionedPersonIds: ['person-neighbor', 'person-caretaker'],
-    });
-  });
-
-  it('先頭の人物の直後がコロンでない場合は、発言者ではなく言及している人物として扱う', () => {
-    const content = `${formatMention(持ち主)}は12日夜から連絡が取れない。${formatMention(朝刊)}`;
-
-    expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'source' },
-      sourceId: 'source-newspaper',
-      mentionedPersonIds: ['person-owner'],
-    });
-  });
-
-  it('発言者もソースも無い本文は、ユーザーの推測として扱う', () => {
-    const content = `${formatMention(隣家の住人)}は時刻を勘違いしているのではないか。`;
-
-    expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'user' },
-      mentionedPersonIds: ['person-neighbor'],
-    });
+    expect(deriveClaimLinks(content)).toEqual({ mentionedPersonIds: ['person-neighbor'] });
   });
 
   it('同じ種類のメンションが複数ある場合は最初のものを採用し、人物の重複は1件にまとめる', () => {
@@ -127,6 +76,37 @@ describe('deriveClaimLinks', () => {
 
     expect(links.placeId).toBe('place-villa');
     expect(links.mentionedPersonIds).toEqual(['person-owner']);
+  });
+});
+
+describe('stripLegacySpeakerPrefix', () => {
+  it('発言者を本文の先頭に「@人物:」と書いていた頃の本文から、発言者の記法を取り除く', () => {
+    const content = `${formatMention(隣家の住人)}: 庭に${formatMention(持ち主)}の姿が見えた。`;
+
+    expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(
+      `庭に${formatMention(持ち主)}の姿が見えた。`
+    );
+  });
+
+  it('複数の発言者を空白や読点で並べた記法と、全角のコロンも取り除く', () => {
+    const content = `${formatMention(隣家の住人)}、${formatMention(管理人)}：新聞が残っていた。`;
+
+    expect(
+      stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] })
+    ).toBe('新聞が残っていた。');
+  });
+
+  it('先頭の人物が項目の発言者に含まれない場合は、本文を変えない（発言者の記法ではなく文章とみなす）', () => {
+    const content = `${formatMention(持ち主)}: この人物についてのメモ。`;
+
+    expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(content);
+    expect(stripLegacySpeakerPrefix(content, { kind: 'user' })).toBe(content);
+  });
+
+  it('先頭の人物の直後がコロンでない本文は変えない', () => {
+    const content = `${formatMention(隣家の住人)}は時刻を勘違いしているのではないか。`;
+
+    expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(content);
   });
 });
 
@@ -175,19 +155,18 @@ describe('claimToDraft', () => {
       const links = deriveClaimLinks(content);
 
       expect(content).toBe(claim.content);
-      expect(links.speaker).toEqual(claim.speaker);
-      expect(links.sourceId).toBe(claim.sourceId);
       expect(links.eventId).toBe(claim.eventId);
       expect(links.placeId).toBe(claim.placeId);
       expect(links.mentionedPersonIds).toEqual(claim.mentionedPersonIds);
     }
   });
 
-  it('メンション導入前の主張は、項目にだけ保存されていた参照を本文に補う（編集で参照を失わないため）', () => {
+  it('メンション導入前の主張は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
+    // 発言者と経由は入力欄の「発言者」で扱うため、本文には補わない
     const 旧形式の主張: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      sourceId: 'source-newspaper',
+      viaPersonIds: ['person-newspaper'],
       content: '庭に持ち主の姿が見えた。',
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -197,51 +176,13 @@ describe('claimToDraft', () => {
     const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
 
     expect(draft.text).toBe(
-      '@隣家の住人: 庭に持ち主の姿が見えた。 @別荘の持ち主 @持ち主が最後に目撃された @湖畔の別荘 @架空日報 朝刊'
+      '庭に持ち主の姿が見えた。 @別荘の持ち主 @持ち主が最後に目撃された @湖畔の別荘'
     );
     expect(deriveClaimLinks(draftToContent(draft))).toEqual({
-      speaker: 旧形式の主張.speaker,
-      sourceId: 旧形式の主張.sourceId,
       eventId: 旧形式の主張.eventId,
       placeId: 旧形式の主張.placeId,
       mentionedPersonIds: 旧形式の主張.mentionedPersonIds,
     });
-  });
-});
-
-describe('claimToDraft（発言者が複数の主張）', () => {
-  it('本文にトークンを持たない主張は、発言者の全員を先頭に補う', () => {
-    const 旧形式の主張: Claim = {
-      id: 'claim-legacy-two-speakers',
-      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-      sourceId: 'source-newspaper',
-      content: '別荘の明かりがついていた。',
-      mentionedPersonIds: [],
-    };
-
-    const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
-
-    expect(draft.text).toBe('@隣家の住人 @管理人: 別荘の明かりがついていた。 @架空日報 朝刊');
-    expect(deriveClaimLinks(draftToContent(draft)).speaker).toEqual(旧形式の主張.speaker);
-  });
-});
-
-describe('claimToDraft（本文の発言者が項目より少ない主張）', () => {
-  it('本文の先頭に書かれていない発言者を先頭に補う（編集で発言者を失わないため）', () => {
-    // 前提: 手で編集したJSONなどで、項目の発言者は2人だが、本文の先頭には隣家の住人しか書かれていない
-    const 主張: Claim = {
-      id: 'claim-partial-speakers',
-      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-      sourceId: 'source-newspaper',
-      content: `${formatMention(隣家の住人)}: 別荘の明かりがついていた。 ${formatMention(朝刊)}`,
-      mentionedPersonIds: [],
-    };
-
-    const draft = claimToDraft(主張, sampleFictionalCase);
-
-    expect(draft.text).toBe('@管理人 @隣家の住人: 別荘の明かりがついていた。 @架空日報 朝刊');
-    const 保存後の発言者 = deriveClaimLinks(draftToContent(draft)).speaker;
-    expect(保存後の発言者).toEqual({ kind: 'person', personIds: ['person-caretaker', 'person-neighbor'] });
   });
 });
 

@@ -9,7 +9,7 @@ import { groupClaimsBySpeaker } from '@/domain/case-views';
 import type { Case } from '@/domain/types';
 import { ClaimCard } from './ClaimCard';
 
-const KIND_LABELS = { person: '人物', source: 'ソース自体の記述', user: 'ユーザー' } as const;
+const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
 
 export function SpeakerView({ target }: { target: Case }) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);

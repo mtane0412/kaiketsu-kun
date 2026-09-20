@@ -44,7 +44,6 @@ const MENTION_HIGHLIGHT_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100',
   place: 'bg-emerald-100',
   event: 'bg-amber-100',
-  source: 'bg-slate-200',
 };
 
 /** textarea とハイライト層で一致させる文字組み（枠線の幅・余白・文字の大きさ・折り返し）の指定です。 */

@@ -64,6 +64,30 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(旧データ))).toEqual(sampleFictionalCase);
   });
 
+  it('発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除いて受け付ける', () => {
+    // 前提: 以前の版では、本文の先頭の「@人物:」から発言者を導出しており、本文に発言者の記法が残っている
+    const 旧データ = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-newspaper-left',
+          speaker: { kind: 'person', personIds: ['person-neighbor'] },
+          viaPersonIds: ['person-newspaper'],
+          content: '@[隣家の住人](person:person-neighbor): 郵便受けに新聞が残っていた。',
+          mentionedPersonIds: [],
+        },
+      ],
+      timelineOrder: [...sampleFictionalCase.timelineOrder, 'claim:claim-newspaper-left'],
+    };
+
+    const 読み込んだ主張 = parseCase(toJsonData(旧データ)).claims.at(-1);
+
+    // 検証: 発言者は項目に残り、本文からは記法だけが消える
+    expect(読み込んだ主張?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
+    expect(読み込んだ主張?.content).toBe('郵便受けに新聞が残っていた。');
+  });
+
   it('人物の発言者が1人もいない主張を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
@@ -111,13 +135,24 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('latest が earliest より前です');
   });
 
-  it('ユーザー以外の発言者による主張にソースが無い場合は拒否する', () => {
+  it('経由が存在しない人物を参照している主張を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
-      claims: [{ ...sampleFictionalCase.claims[1], sourceId: undefined }],
+      claims: [{ ...sampleFictionalCase.claims[1], viaPersonIds: ['person-unknown'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('ユーザーの推測以外の主張にはソースが必要です');
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+  });
+
+  it('ユーザーの推測に経由を指定した主張を拒否する', () => {
+    // 経由は「誰かの発言を誰が伝えたか」を表すため、発言者がいないユーザーの推測には付けられない
+    const 推測 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-user-guess')!;
+    const データ = {
+      ...sampleFictionalCase,
+      claims: [...sampleFictionalCase.claims.filter((claim) => claim !== 推測), { ...推測, viaPersonIds: ['person-newspaper'] }],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('ユーザーの推測に経由は指定できません: claim-user-guess');
   });
 
   it('存在しない人物を参照している主張を拒否する', () => {
@@ -152,5 +187,134 @@ describe('parseCase', () => {
     };
 
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない主張を参照しています: claim-unknown');
+  });
+});
+
+/** ソース（Source）を人物とは別の種類のエンティティとして持っていた頃の案件データです。 */
+const ソースを持つ旧データ = {
+  id: 'case-legacy',
+  name: 'ソースを持っていた頃の案件',
+  sources: [
+    {
+      id: 'source-newspaper',
+      title: '架空日報 朝刊',
+      kind: 'article',
+      url: 'https://example.co.jp/news/19980814',
+      publishedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
+      note: '社会面の記事',
+    },
+  ],
+  persons: [{ id: 'person-neighbor', name: '隣家の住人' }],
+  places: [],
+  events: [],
+  claims: [
+    {
+      id: 'claim-testimony',
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
+      sourceId: 'source-newspaper',
+      locator: '社会面',
+      content: '庭に人影が見えた。 @[架空日報 朝刊](source:source-newspaper)',
+      mentionedPersonIds: [],
+    },
+    {
+      id: 'claim-narration',
+      speaker: { kind: 'source' },
+      sourceId: 'source-newspaper',
+      content: '持ち主と連絡が取れなくなっている。 @[架空日報 朝刊](source:source-newspaper)',
+      mentionedPersonIds: [],
+    },
+    {
+      id: 'claim-guess',
+      speaker: { kind: 'user' },
+      sourceId: 'source-newspaper',
+      content: '@[架空日報 朝刊](source:source-newspaper)の記事は誤報ではないか。',
+      mentionedPersonIds: [],
+    },
+  ],
+  relationships: [],
+  timelineOrder: ['claim:claim-testimony', 'claim:claim-narration', 'claim:claim-guess'],
+};
+
+describe('parseCase（ソースを人物に統合する前のデータ）', () => {
+  it('ソースを人物に変換し、URL・公開時点・メモを人物のメモにまとめる', () => {
+    const 読み込んだ案件 = parseCase(toJsonData(ソースを持つ旧データ));
+
+    expect(読み込んだ案件.persons).toEqual([
+      { id: 'person-neighbor', name: '隣家の住人' },
+      {
+        id: 'source-newspaper',
+        name: '架空日報 朝刊',
+        note: '社会面の記事\nhttps://example.co.jp/news/19980814\n公開・刊行: 1998年8月14日',
+      },
+    ]);
+    expect(読み込んだ案件).not.toHaveProperty('sources');
+  });
+
+  it('人物の証言は、ソースを経由に移し、本文の末尾のソースのメンションを取り除く', () => {
+    const 証言 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-testimony');
+
+    // 検証: ソース内の位置（locator）は入力欄を廃止したが、値は失わない
+    expect(証言).toEqual({
+      id: 'claim-testimony',
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
+      viaPersonIds: ['source-newspaper'],
+      locator: '社会面',
+      content: '庭に人影が見えた。',
+      mentionedPersonIds: [],
+    });
+  });
+
+  it('ソース自体の記述は、ソースだった人物を発言者にする（経由は無し）', () => {
+    const 記述 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-narration');
+
+    expect(記述).toEqual({
+      id: 'claim-narration',
+      speaker: { kind: 'person', personIds: ['source-newspaper'] },
+      viaPersonIds: [],
+      content: '持ち主と連絡が取れなくなっている。',
+      mentionedPersonIds: [],
+    });
+  });
+
+  it('ユーザーの推測が言及していたソースは、本文の人物のメンションに変換する（発言者にも経由にもしない）', () => {
+    const 推測 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-guess');
+
+    expect(推測).toEqual({
+      id: 'claim-guess',
+      speaker: { kind: 'user' },
+      viaPersonIds: [],
+      content: '@[架空日報 朝刊](person:source-newspaper)の記事は誤報ではないか。',
+      mentionedPersonIds: ['source-newspaper'],
+    });
+  });
+
+  it('ソースと同じ名前の人物が登録済みの場合は、人物を増やさずにその人物へまとめる', () => {
+    // 前提: 「県警」が人物としてもソースとしても登録されている
+    const 旧データ = {
+      ...ソースを持つ旧データ,
+      sources: [{ id: 'source-police', title: '県警', kind: 'other', note: '記者発表' }],
+      persons: [{ id: 'person-police', name: '県警', note: '組織です。' }],
+      claims: [
+        {
+          id: 'claim-announcement',
+          speaker: { kind: 'source' },
+          sourceId: 'source-police',
+          content: '捜索を始めた。 @[県警](source:source-police)',
+          mentionedPersonIds: [],
+        },
+      ],
+      timelineOrder: ['claim:claim-announcement'],
+    };
+
+    const 読み込んだ案件 = parseCase(toJsonData(旧データ));
+
+    expect(読み込んだ案件.persons).toEqual([{ id: 'person-police', name: '県警', note: '組織です。\n記者発表' }]);
+    expect(読み込んだ案件.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
+  });
+
+  it('変換後のデータは、もう一度読み込んでも変わらない', () => {
+    const 一度目 = parseCase(toJsonData(ソースを持つ旧データ));
+
+    expect(parseCase(toJsonData(一度目))).toEqual(一度目);
   });
 });

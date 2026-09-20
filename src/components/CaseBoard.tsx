@@ -34,7 +34,6 @@ const ENTRY_KEY_BY_MENTION_KIND: Record<MentionKind, EntryKey> = {
   person: 'persons',
   place: 'places',
   event: 'events',
-  source: 'sources',
 };
 
 /** 右側のパネルの状態です。entity が null の場合は、編集対象を決めずに一覧を開いています。 */
