@@ -16,6 +16,7 @@ import { sampleFictionalCase } from './sample-fictional-case';
 import type { Claim } from './types';
 
 const 隣家の住人: DraftMention = { kind: 'person', id: 'person-neighbor', label: '隣家の住人' };
+const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label: '管理人' };
 const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
 const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
 const 目撃: DraftMention = { kind: 'event', id: 'event-last-seen', label: '持ち主が最後に目撃された' };
@@ -53,7 +54,7 @@ describe('deriveClaimLinks', () => {
     ].join('');
 
     expect(deriveClaimLinks(content)).toEqual({
-      speaker: { kind: 'person', personId: 'person-neighbor' },
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
       sourceId: 'source-newspaper',
       eventId: 'event-last-seen',
       placeId: 'place-villa',
@@ -64,7 +65,38 @@ describe('deriveClaimLinks', () => {
   it('全角のコロンでも発言者として扱う', () => {
     const content = `${formatMention(隣家の住人)}：新聞が残っていた。`;
 
-    expect(deriveClaimLinks(content).speaker).toEqual({ kind: 'person', personId: 'person-neighbor' });
+    expect(deriveClaimLinks(content).speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
+  });
+
+  it('先頭に人物のメンションが並び、その直後がコロンの場合は、全員を発言者とする', () => {
+    // 前提: 1つの記事が、隣家の住人と管理人の2人が同じことを述べたと伝えている
+    const content = `${formatMention(隣家の住人)} ${formatMention(管理人)}: 庭に${formatMention(持ち主)}の姿が見えた。${formatMention(朝刊)}`;
+
+    expect(deriveClaimLinks(content)).toEqual({
+      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
+      sourceId: 'source-newspaper',
+      mentionedPersonIds: ['person-owner'],
+    });
+  });
+
+  it('発言者の人物は読点（、）で区切ってもよく、同じ人物の重複は1件にまとめる', () => {
+    const content = `${formatMention(隣家の住人)}、${formatMention(管理人)}、${formatMention(隣家の住人)}：新聞が残っていた。`;
+
+    expect(deriveClaimLinks(content).speaker).toEqual({
+      kind: 'person',
+      personIds: ['person-neighbor', 'person-caretaker'],
+    });
+  });
+
+  it('先頭の人物の並びに文章が挟まる場合は、発言者ではなく言及している人物として扱う', () => {
+    // 「と」のような文章を挟むと、どこまでが発言者かを機械的に決められないため、発言者として扱わない
+    const content = `${formatMention(隣家の住人)}と${formatMention(管理人)}: 新聞が残っていた。${formatMention(朝刊)}`;
+
+    expect(deriveClaimLinks(content)).toEqual({
+      speaker: { kind: 'source' },
+      sourceId: 'source-newspaper',
+      mentionedPersonIds: ['person-neighbor', 'person-caretaker'],
+    });
   });
 
   it('先頭の人物の直後がコロンでない場合は、発言者ではなく言及している人物として扱う', () => {
@@ -134,7 +166,7 @@ describe('claimToDraft', () => {
   it('メンション導入前の主張は、項目にだけ保存されていた参照を本文に補う（編集で参照を失わないため）', () => {
     const 旧形式の主張: Claim = {
       id: 'claim-legacy',
-      speaker: { kind: 'person', personId: 'person-neighbor' },
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
       sourceId: 'source-newspaper',
       content: '庭に持ち主の姿が見えた。',
       eventId: 'event-last-seen',
@@ -154,6 +186,23 @@ describe('claimToDraft', () => {
       placeId: 旧形式の主張.placeId,
       mentionedPersonIds: 旧形式の主張.mentionedPersonIds,
     });
+  });
+});
+
+describe('claimToDraft（発言者が複数の主張）', () => {
+  it('本文にトークンを持たない主張は、発言者の全員を先頭に補う', () => {
+    const 旧形式の主張: Claim = {
+      id: 'claim-legacy-two-speakers',
+      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
+      sourceId: 'source-newspaper',
+      content: '別荘の明かりがついていた。',
+      mentionedPersonIds: [],
+    };
+
+    const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
+
+    expect(draft.text).toBe('@隣家の住人 @管理人: 別荘の明かりがついていた。 @架空日報 朝刊');
+    expect(deriveClaimLinks(draftToContent(draft)).speaker).toEqual(旧形式の主張.speaker);
   });
 });
 

@@ -106,12 +106,13 @@ export type Event = {
 /**
  * 主張を述べた主体です。
  *
- * - person: 登場人物の証言・台詞
+ * - person: 登場人物の証言・台詞。1つのソースが複数人の同じ発言として伝えている場合は、全員を personIds に持ちます（1人以上）。
+ *   別のソースや別の時点でそれぞれが述べた場合は、独立した裏付けかどうかを比べられるよう、別々の主張にします。
  * - source: 発言者を特定できないソース自体の記述（報道の地の文、漫画のナレーションなど）
  * - user: ユーザー自身の推測
  */
 export type Speaker =
-  | { kind: 'person'; personId: Id }
+  | { kind: 'person'; personIds: Id[] }
   | { kind: 'source' }
   | { kind: 'user' };
 
