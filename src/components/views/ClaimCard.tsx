@@ -14,7 +14,6 @@ const MENTION_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100 text-sky-800',
   place: 'bg-emerald-100 text-emerald-800',
   event: 'bg-amber-100 text-amber-800',
-  source: 'bg-slate-200 text-slate-700',
 };
 
 type ClaimCardProps = {
@@ -27,7 +26,7 @@ type ClaimCardProps = {
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
   /** 主張の編集ボタンが選ばれたときに呼び出します。 */
   onEdit?: () => void;
-  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時・ソース内の位置を編集する導線です。 */
+  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
   onOpenDetails?: () => void;
 };
 
@@ -44,6 +43,9 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
       <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
         {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
+        {view.viaPersons.length > 0 && (
+          <span className="text-slate-500">{`（${view.viaPersons.map((person) => person.name).join(' → ')} による）`}</span>
+        )}
         {view.hasTimeConflict && (
           <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と時刻が食い違う</span>
         )}
@@ -110,13 +112,10 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
             <dd>{view.mentionedPersons.map((person) => person.name).join('、')}</dd>
           </>
         )}
-        {view.source && (
+        {claim.locator && (
           <>
-            <dt>ソース</dt>
-            <dd>
-              {view.source.title}
-              {claim.locator && `（${claim.locator}）`}
-            </dd>
+            <dt>資料内の位置</dt>
+            <dd>{claim.locator}</dd>
           </>
         )}
         {claim.statedAt && (

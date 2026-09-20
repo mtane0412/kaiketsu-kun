@@ -13,7 +13,7 @@ import type { Case, Claim, TimeRef } from './types';
 
 /** ユーザーの推測として、出来事に束ねていない主張を作ります。 */
 function 主張(id: string, when?: TimeRef, eventId?: string): Claim {
-  const claim: Claim = { id, speaker: { kind: 'user' }, content: `${id}の内容`, mentionedPersonIds: [] };
+  const claim: Claim = { id, speaker: { kind: 'user' }, viaPersonIds: [], content: `${id}の内容`, mentionedPersonIds: [] };
   if (when) claim.when = when;
   if (eventId) claim.eventId = eventId;
   return claim;
@@ -23,7 +23,6 @@ function 案件(parts: Partial<Case>): Case {
   return {
     id: 'case-lakeside',
     name: '湖畔の別荘の失踪',
-    sources: [],
     persons: [],
     places: [],
     events: [],

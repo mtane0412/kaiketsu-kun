@@ -22,7 +22,6 @@ const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label:
 const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
 const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
 const 目撃: DraftMention = { kind: 'event', id: 'event-last-seen', label: '持ち主が最後に目撃された' };
-const 朝刊: DraftMention = { kind: 'source', id: 'source-newspaper', label: '架空日報 朝刊' };
 
 describe('parseContent', () => {
   it('本文を、文字列とメンションの並びに分解する', () => {
@@ -49,14 +48,13 @@ describe('contentToPlainText', () => {
 });
 
 describe('deriveClaimLinks', () => {
-  it('本文のメンションから、ソース・出来事・場所・言及している人物を導出する（発言者は本文から導出しない）', () => {
+  it('本文のメンションから、出来事・場所・言及している人物を導出する（発言者と経由は本文から導出しない）', () => {
     const content = [
       `夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`,
-      `${formatMention(目撃)} ${formatMention(朝刊)}`,
+      `${formatMention(目撃)}`,
     ].join('');
 
     expect(deriveClaimLinks(content)).toEqual({
-      sourceId: 'source-newspaper',
       eventId: 'event-last-seen',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
@@ -65,12 +63,9 @@ describe('deriveClaimLinks', () => {
 
   it('本文の先頭に「@人物:」と書いても発言者として扱わず、言及している人物に含める', () => {
     // 発言者は入力欄の「発言者」で選ぶため、本文の書き方で発言者が決まることはない
-    const content = `${formatMention(隣家の住人)}: 新聞が残っていた。${formatMention(朝刊)}`;
+    const content = `${formatMention(隣家の住人)}: 新聞が残っていた。`;
 
-    expect(deriveClaimLinks(content)).toEqual({
-      sourceId: 'source-newspaper',
-      mentionedPersonIds: ['person-neighbor'],
-    });
+    expect(deriveClaimLinks(content)).toEqual({ mentionedPersonIds: ['person-neighbor'] });
   });
 
   it('同じ種類のメンションが複数ある場合は最初のものを採用し、人物の重複は1件にまとめる', () => {
@@ -160,7 +155,6 @@ describe('claimToDraft', () => {
       const links = deriveClaimLinks(content);
 
       expect(content).toBe(claim.content);
-      expect(links.sourceId).toBe(claim.sourceId);
       expect(links.eventId).toBe(claim.eventId);
       expect(links.placeId).toBe(claim.placeId);
       expect(links.mentionedPersonIds).toEqual(claim.mentionedPersonIds);
@@ -168,11 +162,11 @@ describe('claimToDraft', () => {
   });
 
   it('メンション導入前の主張は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
-    // 発言者は入力欄の「発言者」で扱うため、本文には補わない
+    // 発言者と経由は入力欄の「発言者」で扱うため、本文には補わない
     const 旧形式の主張: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      sourceId: 'source-newspaper',
+      viaPersonIds: ['person-newspaper'],
       content: '庭に持ち主の姿が見えた。',
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -182,10 +176,9 @@ describe('claimToDraft', () => {
     const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
 
     expect(draft.text).toBe(
-      '庭に持ち主の姿が見えた。 @別荘の持ち主 @持ち主が最後に目撃された @湖畔の別荘 @架空日報 朝刊'
+      '庭に持ち主の姿が見えた。 @別荘の持ち主 @持ち主が最後に目撃された @湖畔の別荘'
     );
     expect(deriveClaimLinks(draftToContent(draft))).toEqual({
-      sourceId: 旧形式の主張.sourceId,
       eventId: 旧形式の主張.eventId,
       placeId: 旧形式の主張.placeId,
       mentionedPersonIds: 旧形式の主張.mentionedPersonIds,

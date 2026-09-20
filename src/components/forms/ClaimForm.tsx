@@ -1,11 +1,13 @@
 /**
- * 主張（証言・ソース自体の記述・ユーザーの推測）の入力フォーム
+ * 主張（人物や媒体の発言・ユーザーの推測）の入力フォーム
  *
- * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事・ソースを書くと、ソース・
+ * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事を書くと、
  * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
- * 誰の発言かは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。新規登録でも編集でも選べます。
- * 本文から導出できない項目（日時・ソース内の位置）は「詳細」にまとめています。
+ * 誰の発言か、誰を経由して伝わったかは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。
+ * 新規登録でも編集でも選べます。発言者を選ばない主張は、ユーザーの推測です。
+ * 本文から導出できない項目（日時）は「詳細」にまとめています。
+ * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
  *
  * compact を指定すると、ボード上の入力欄として本文の1欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
@@ -34,9 +36,9 @@ import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
 import { resolveTimelineOrder, timelineKeyOf } from '@/domain/timeline-order';
 import type { Case, Claim, Id } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
+import { FormError, SubmitButton, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
-import { SPEAKER_KIND_LABELS, SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
+import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
 
 /** 案件に登録済みのエンティティを、メンションの候補に変換します。 */
 function caseToCandidates(target: Case): MentionCandidate[] {
@@ -49,7 +51,6 @@ function caseToCandidates(target: Case): MentionCandidate[] {
     })),
     ...target.places.map((place) => ({ kind: 'place' as const, id: place.id, label: place.name })),
     ...target.events.map((event) => ({ kind: 'event' as const, id: event.id, label: event.title })),
-    ...target.sources.map((source) => ({ kind: 'source' as const, id: source.id, label: source.title })),
   ];
 }
 
@@ -62,8 +63,6 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
       return { key: 'places', entity: { id, name } };
     case 'event':
       return { key: 'events', entity: { id, title: name } };
-    case 'source':
-      return { key: 'sources', entity: { id, title: name, kind: 'other' } };
   }
 }
 
@@ -101,15 +100,14 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
   );
-  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial?.speaker));
+  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
-  const [locator, setLocator] = useState(initial?.locator ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
   const [when, setWhen] = useState(timeRefToDraft(initial?.when));
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when);
+  const hasDetails = Boolean(initial?.statedAt || initial?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
   const typedContent = draftToContent({ ...draft, text: draft.text.trim() });
@@ -126,7 +124,6 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
   const summaryItems: { term: string; description: string | undefined }[] = [
-    { term: MENTION_KIND_LABELS.source, description: labelOf('source', links.sourceId) },
     { term: MENTION_KIND_LABELS.event, description: labelOf('event', links.eventId) },
     { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
@@ -141,13 +138,8 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    if (speaker.kind === 'person' && speaker.personIds.length === 0) {
-      setError('発言者の人物を選んでください。「発言者」から選べます');
-      return;
-    }
-    if (speaker.kind !== 'user' && links.sourceId === undefined) {
-      const kindLabel = SPEAKER_KIND_LABELS.find((item) => item.kind === speaker.kind)?.label;
-      setError(`${kindLabel}にはソースが必要です。本文に「@ソース名」を加えてください`);
+    if (speaker.personIds.length === 0 && speaker.viaPersonIds.length > 0) {
+      setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
     const statedAtResult = draftToTimeRef(statedAt);
@@ -162,15 +154,22 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     }
 
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-    const claim: Claim = { id: initial?.id ?? nanoid(), speaker: toSpeaker(speaker), content, ...links };
-    if (locator.trim()) claim.locator = locator.trim();
+    const claim: Claim = {
+      id: initial?.id ?? nanoid(),
+      speaker: toSpeaker(speaker),
+      viaPersonIds: speaker.viaPersonIds,
+      content,
+      ...links,
+    };
+    if (initial?.locator) claim.locator = initial.locator;
     if (statedAtResult.value) claim.statedAt = statedAtResult.value;
     if (whenResult.value) claim.when = whenResult.value;
 
-    // 新規作成した後に、本文からも発言者からも外されたエンティティは保存しない
+    // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
     const usedIds = new Set([
       ...parseContent(content).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : [])),
-      ...(claim.speaker.kind === 'person' ? claim.speaker.personIds : []),
+      ...speaker.personIds,
+      ...speaker.viaPersonIds,
     ]);
     const newEntries = pending.filter((item) => usedIds.has(item.mention.id)).map((item) => item.entry);
 
@@ -214,14 +213,14 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         hideLabel={compact}
         placeholder={
           compact
-            ? '分かったことを書く（「@」で人物・場所・出来事・ソース。誰の発言かは下の「発言者」で選ぶ）'
-            : '例: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊'
+            ? '分かったことを書く（「@」で人物・場所・出来事。誰の発言かは下の「発言者」で選ぶ）'
+            : '例: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
         }
       />
       {!compact && (
         <>
         <p className="text-xs text-slate-500">
-          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。誰の発言かは、保存ボタンの横の「発言者」で選びます（複数人が同じことを述べた場合は、全員を選びます）。
+          「@」で人物・場所・出来事を参照します。未登録の名前はその場で作成できます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない主張は、ユーザーの推測です。
         </p>
         <dl
           aria-label="本文から読み取った参照"
@@ -238,12 +237,11 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         </dl>
         <details open={hasDetails} className="rounded border border-slate-200 p-2">
           <summary className="cursor-pointer text-xs font-medium text-slate-600">
-            詳細（日時・ソース内の位置）
+            詳細（日時）
           </summary>
           <div className="mt-2 space-y-3">
             <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
             <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
-            <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
           </div>
         </details>
         </>

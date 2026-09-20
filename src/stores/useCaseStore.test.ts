@@ -9,7 +9,7 @@ import { BACKUP_STORAGE_KEY, STORAGE_KEY, useCaseStore } from './useCaseStore';
 const 新しい証言: Claim = {
   id: 'claim-postman',
   speaker: { kind: 'person', personIds: ['person-neighbor'] },
-  sourceId: 'source-newspaper',
+  viaPersonIds: ['person-newspaper'],
   content: '翌朝、別荘の郵便受けに新聞が残ったままだった。',
   mentionedPersonIds: ['person-owner'],
 };
@@ -78,6 +78,14 @@ describe('remove', () => {
 
     const ids = useCaseStore.getState().currentCase.claims.map((claim) => claim.id);
     expect(ids).not.toContain('claim-report');
+  });
+
+  it('主張の経由としてだけ参照されている人物（媒体）も削除できず、案件を変更しない', () => {
+    // 前提: 書籍「湖畔の夏」は、管理人の証言の経由としてだけ参照されている（発言者でも、本文のメンションでもない）
+    expect(() => useCaseStore.getState().remove('persons', 'person-book')).toThrow(
+      '他のデータから参照されているため削除できません'
+    );
+    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
   });
 
   it('主張から参照されている人物は削除できず、案件を変更しない', () => {
@@ -152,6 +160,7 @@ describe('時系列ボードの並び順', () => {
   const 捜索の推測: Claim = {
     id: 'claim-police-search',
     speaker: { kind: 'user' },
+    viaPersonIds: [],
     content: '警察が別荘を捜索したはずだ。',
     mentionedPersonIds: [],
     when: { text: '8月15日', earliest: '1998-08-15' },

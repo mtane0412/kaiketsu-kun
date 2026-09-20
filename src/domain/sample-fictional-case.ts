@@ -5,38 +5,27 @@
  * 次の5点が型で表現できることを確認する目的で作成しています。
  * - 同じ出来事について、2人の証言が述べる時刻が食い違うこと
  * - 出来事が起きた時点と、証言が述べられた時点が別の時間軸であること
- * - 発言者を特定できない報道の記述を主張として扱えること
+ * - 報道の地の文を、媒体（新聞）の発言として扱えること
  * - ユーザーの推測を証言と区別し、関係の根拠として参照できること
- * - 組織（県警）や記録装置（防犯カメラ）を、人物と同じく発言しうる主体として扱えること
+ * - 組織（県警）・記録装置（防犯カメラ）・媒体（新聞、書籍）を、人物と同じく発言しうる主体として扱えること
+ * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、経由（viaPersonIds）で表せること
  *
- * 主張の本文（content）は、人物・場所・出来事・ソースへの参照を `@[表示名](種類:ID)` の形式で含みます。
- * 各主張の speaker・sourceId・eventId・placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
+ * 主張の本文（content）は、人物・場所・出来事への参照を `@[表示名](種類:ID)` の形式で含みます。
+ * 各主張の eventId・placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
  */
 import type { Case } from './types';
 
 export const sampleFictionalCase: Case = {
   id: 'case-lakeside',
   name: '湖畔の別荘失踪事件（架空）',
-  sources: [
-    {
-      id: 'source-newspaper',
-      title: '架空日報 朝刊',
-      kind: 'article',
-      publishedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
-    },
-    {
-      id: 'source-book',
-      title: '湖畔の夏 20年目の証言（架空の書籍）',
-      kind: 'book',
-      publishedAt: { text: '2018年', earliest: '2018-01-01', latest: '2018-12-31' },
-    },
-  ],
   persons: [
     { id: 'person-owner', name: '別荘の持ち主' },
     { id: 'person-neighbor', name: '隣家の住人' },
     { id: 'person-caretaker', name: '管理人', aliases: ['元管理人'] },
     { id: 'person-police', name: '県警', note: '組織です。' },
     { id: 'person-road-camera', name: '県道の防犯カメラ', note: '記録装置です。別荘へ向かう道路に設置されています。' },
+    { id: 'person-newspaper', name: '架空日報 朝刊', note: '媒体です。1998年8月14日の記事を参照しています。' },
+    { id: 'person-book', name: '湖畔の夏 20年目の証言（架空の書籍）', note: '媒体です。2018年に刊行されました。' },
   ],
   places: [{ id: 'place-villa', name: '湖畔の別荘' }],
   events: [
@@ -48,10 +37,10 @@ export const sampleFictionalCase: Case = {
   claims: [
     {
       id: 'claim-report',
-      speaker: { kind: 'source' },
-      sourceId: 'source-newspaper',
+      speaker: { kind: 'person', personIds: ['person-newspaper'] },
+      viaPersonIds: [],
       locator: '社会面',
-      content: '@[別荘の持ち主](person:person-owner)は12日夜から連絡が取れなくなっている。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+      content: '@[別荘の持ち主](person:person-owner)は12日夜から連絡が取れなくなっている。@[持ち主が最後に目撃された](event:event-last-seen)',
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -59,10 +48,10 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-neighbor',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      sourceId: 'source-newspaper',
+      viaPersonIds: ['person-newspaper'],
       locator: '社会面',
       content: 
-        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。@[持ち主が最後に目撃された](event:event-last-seen)',
       statedAt: { text: '1998年8月13日', earliest: '1998-08-13' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -72,10 +61,10 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-caretaker',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      sourceId: 'source-book',
+      viaPersonIds: ['person-book'],
       locator: '第3章 112ページ',
       content: 
-        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。@[持ち主が最後に目撃された](event:event-last-seen) @[湖畔の夏 20年目の証言（架空の書籍）](source:source-book)',
+        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。@[持ち主が最後に目撃された](event:event-last-seen)',
       statedAt: { text: '2018年', earliest: '2018-01-01', latest: '2018-12-31' },
       eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
@@ -84,19 +73,20 @@ export const sampleFictionalCase: Case = {
     },
     {
       id: 'claim-police-camera',
-      speaker: { kind: 'person', personIds: ['person-police'] },
-      sourceId: 'source-newspaper',
+      speaker: { kind: 'person', personIds: ['person-road-camera'] },
+      viaPersonIds: ['person-police', 'person-newspaper'],
       locator: '社会面',
       content:
-        '@[県道の防犯カメラ](person:person-road-camera)に、夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
+        '夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen)',
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
       eventId: 'event-last-seen',
-      mentionedPersonIds: ['person-road-camera', 'person-owner'],
+      mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜8時10分ごろ', earliest: '1998-08-12T20:00', latest: '1998-08-12T20:20' },
     },
     {
       id: 'claim-user-guess',
       speaker: { kind: 'user' },
+      viaPersonIds: [],
       content: 
         '@[管理人](person:person-caretaker)の証言は事件の20年後に初めて出たもので、@[隣家の住人](person:person-neighbor)の証言と2時間食い違う。管理人と@[別荘の持ち主](person:person-owner)の間に金銭の問題があった可能性を調べたい。',
       mentionedPersonIds: ['person-caretaker', 'person-neighbor', 'person-owner'],

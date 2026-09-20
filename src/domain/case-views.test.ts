@@ -20,16 +20,16 @@ describe('buildTimeline', () => {
         ...sampleFictionalCase.claims,
         {
           id: 'claim-police-search',
-          speaker: { kind: 'source' },
-          sourceId: 'source-newspaper',
+          speaker: { kind: 'person', personIds: ['person-newspaper'] },
+          viaPersonIds: [],
           content: '警察が別荘を捜索した。',
           mentionedPersonIds: [],
           when: { text: '8月15日', earliest: '1998-08-15' },
         },
         {
           id: 'claim-arrival',
-          speaker: { kind: 'source' },
-          sourceId: 'source-newspaper',
+          speaker: { kind: 'person', personIds: ['person-newspaper'] },
+          viaPersonIds: [],
           content: '持ち主は8月10日に別荘に到着した。',
           mentionedPersonIds: [],
           when: { text: '8月10日', earliest: '1998-08-10' },
@@ -50,8 +50,8 @@ describe('buildTimeline', () => {
     // 束の日時は、束ねた主張が述べる日時のうち最も早いもの
     expect(item.when?.text).toBe('8月12日 夜7時');
     expect(item.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
-    // 県警の発表が言及している防犯カメラ（記録装置）も、人物として束に現れる
-    expect(item.persons.map((person) => person.name)).toEqual(['別荘の持ち主', '県道の防犯カメラ']);
+    // 束に現れる人物は、本文で言及されている人物。発言者と経由（防犯カメラ・県警・新聞）は含めない
+    expect(item.persons.map((person) => person.name)).toEqual(['別荘の持ち主']);
   });
 
   it('出来事の束の中では、主張を述べる日時の早い順に並べ、日時を述べない主張を最後に置く', () => {
@@ -127,27 +127,28 @@ describe('buildTimeline', () => {
 });
 
 describe('groupClaimsBySpeaker', () => {
-  it('人物、ソース自体の記述、ユーザーの推測の順にグループを作る', () => {
+  it('人物（案件への登録順）、ユーザーの推測の順にグループを作る。新聞のような媒体も人物として並ぶ', () => {
     const groups = groupClaimsBySpeaker(sampleFictionalCase);
 
     expect(groups.map((group) => [group.kind, group.label])).toEqual([
       ['person', '隣家の住人'],
       ['person', '管理人'],
-      ['person', '県警'],
-      ['source', '架空日報 朝刊'],
+      ['person', '県道の防犯カメラ'],
+      ['person', '架空日報 朝刊'],
       ['user', 'ユーザーの推測'],
     ]);
   });
 
-  it('組織も人物として登録し、組織を発言者とする主張をその名前のグループにまとめる', () => {
-    // 前提: サンプルでは、県警（組織）が「防犯カメラ（記録装置）に車が映っていた」と発表している
-    const 県警 = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県警');
+  it('経由した人物は発言者ではないため、その人物のグループには入れない', () => {
+    // 前提: サンプルでは、防犯カメラの記録を県警が発表し、架空日報が報じている（発言者: 防犯カメラ、経由: 県警 → 架空日報）
+    const groups = groupClaimsBySpeaker(sampleFictionalCase);
+    const 防犯カメラ = groups.find((group) => group.label === '県道の防犯カメラ');
 
-    expect(県警?.claims.map((item) => item.claim.id)).toEqual(['claim-police-camera']);
-    // 記録装置は、発表の中で言及されている人物として扱う
-    expect(県警?.claims[0]?.mentionedPersons.map((person) => person.name)).toEqual([
-      '県道の防犯カメラ',
-      '別荘の持ち主',
+    expect(防犯カメラ?.claims.map((item) => item.claim.id)).toEqual(['claim-police-camera']);
+    expect(groups.find((group) => group.label === '県警')).toBeUndefined();
+    // 地の文の記述だけが、架空日報のグループに入る
+    expect(groups.find((group) => group.label === '架空日報 朝刊')?.claims.map((item) => item.claim.id)).toEqual([
+      'claim-report',
     ]);
   });
 
@@ -159,7 +160,7 @@ describe('groupClaimsBySpeaker', () => {
         {
           id: 'claim-caretaker-early',
           speaker: { kind: 'person', personIds: ['person-caretaker'] },
-          sourceId: 'source-newspaper',
+          viaPersonIds: ['person-newspaper'],
           content: '持ち主とは挨拶をする程度の付き合いだった。',
           statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
           mentionedPersonIds: ['person-owner'],
@@ -181,7 +182,7 @@ describe('groupClaimsBySpeaker', () => {
         {
           id: 'claim-two-speakers',
           speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-          sourceId: 'source-newspaper',
+          viaPersonIds: ['person-newspaper'],
           content: '持ち主は几帳面な人だった。',
           mentionedPersonIds: ['person-owner'],
         },
@@ -197,9 +198,9 @@ describe('groupClaimsBySpeaker', () => {
     expect(管理人?.claims.find((item) => item.claim.id === 'claim-two-speakers')?.speakerLabel).toBe('隣家の住人、管理人');
   });
 
-  it('主張にソース名を添える', () => {
-    const 管理人 = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '管理人');
+  it('主張に、経由した人物を伝えた順に添える', () => {
+    const 防犯カメラ = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
 
-    expect(管理人?.claims[0]?.source?.title).toBe('湖畔の夏 20年目の証言（架空の書籍）');
+    expect(防犯カメラ?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
   });
 });

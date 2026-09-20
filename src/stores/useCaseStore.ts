@@ -25,7 +25,7 @@ export const STORAGE_KEY = 'testimony-board-case';
 export const BACKUP_STORAGE_KEY = 'testimony-board-case-backup';
 
 /** 案件が持つ一覧の名前です。 */
-export type CollectionKey = 'sources' | 'persons' | 'places' | 'events' | 'claims' | 'relationships';
+export type CollectionKey = 'persons' | 'places' | 'events' | 'claims' | 'relationships';
 
 /** 一覧の名前と、その一覧に保存する要素の組です。 */
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
@@ -61,7 +61,6 @@ function createEmptyCase(): Case {
   return {
     id: nanoid(),
     name: '新しい案件',
-    sources: [],
     persons: [],
     places: [],
     events: [],

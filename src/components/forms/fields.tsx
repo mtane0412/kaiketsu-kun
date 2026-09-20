@@ -1,5 +1,5 @@
 /**
- * 入力フォームで共有する部品（テキスト欄・選択欄・時刻入力欄・エラー表示・保存ボタン）
+ * 入力フォームで共有する部品（テキスト欄・時刻入力欄・エラー表示・保存ボタン）
  */
 'use client';
 
@@ -48,32 +48,6 @@ export function TextField({ label, value, onChange, required, multiline, placeho
           onChange={(event) => onChange(event.target.value)}
         />
       )}
-    </div>
-  );
-}
-
-type SelectFieldProps = {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-};
-
-/** ラベル付きの選択欄です。 */
-export function SelectField({ label, value, onChange, options }: SelectFieldProps) {
-  const id = useId();
-  return (
-    <div>
-      <label htmlFor={id} className={LABEL_CLASS}>
-        {label}
-      </label>
-      <select id={id} className={INPUT_CLASS} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }

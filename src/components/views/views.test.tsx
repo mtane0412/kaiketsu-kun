@@ -66,8 +66,8 @@ describe('TimelineView', () => {
         ...sampleFictionalCase.claims,
         {
           id: 'claim-police-search',
-          speaker: { kind: 'source' },
-          sourceId: 'source-newspaper',
+          speaker: { kind: 'person', personIds: ['person-newspaper'] },
+          viaPersonIds: [],
           content: '警察が別荘を捜索した。',
           mentionedPersonIds: [],
           when: { text: '8月15日', earliest: '1998-08-15' },
@@ -112,9 +112,9 @@ function StoreBoard({ onOpenEntity }: { onOpenEntity?: (kind: string, id: string
 /** 警察の捜索（8月15日）についての、出来事に束ねていない主張です。 */
 const 捜索の記述: Claim = {
   id: 'claim-police-search',
-  speaker: { kind: 'source' },
-  sourceId: 'source-newspaper',
-  content: '警察が別荘を捜索した。 @[架空日報 朝刊](source:source-newspaper)',
+  speaker: { kind: 'person', personIds: ['person-newspaper'] },
+  viaPersonIds: [],
+  content: '警察が別荘を捜索した。',
   mentionedPersonIds: [],
   when: { text: '8月15日', earliest: '1998-08-15' },
 };
@@ -216,36 +216,43 @@ describe('TimelineView への書き足し', () => {
     render(<StoreBoard />);
 
     await user.click(screen.getByRole('button', { name: 'ボードに書き足す' }));
-    await user.type(screen.getByLabelText('内容'), '持ち主は几帳面な人だった。 @架空日報');
-    await user.click(screen.getByRole('option', { name: 'ソース 架空日報 朝刊' }));
+    await user.type(screen.getByLabelText('内容'), '持ち主は几帳面な人だった。');
     await user.click(screen.getByRole('button', { name: /^発言者/ }));
-    await user.click(screen.getByRole('radio', { name: '人物の証言' }));
-    await user.click(screen.getByRole('checkbox', { name: '隣家の住人' }));
+    await user.click(within(screen.getByRole('group', { name: '発言者' })).getByRole('checkbox', { name: '隣家の住人' }));
+    await user.click(within(screen.getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊' }));
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    // 検証: カードに発言者の名前が現れ、本文には発言者の記法が入らない
+    // 検証: カードに発言者の名前と経由が現れ、本文には発言者の記法が入らない
     const 書き足した主張 = screen.getByText(/持ち主は几帳面な人だった。/).closest('li')!;
     expect(within(書き足した主張).getByText('隣家の住人')).toBeInTheDocument();
+    expect(within(書き足した主張).getByText('（架空日報 朝刊 による）')).toBeInTheDocument();
     expect(useCaseStore.getState().currentCase.claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      content: '持ち主は几帳面な人だった。 @[架空日報 朝刊](source:source-newspaper)',
+      viaPersonIds: ['person-newspaper'],
+      content: '持ち主は几帳面な人だった。',
     });
   });
 
   it('ボード上の主張を編集して、あとから発言者を紐づけられる', async () => {
-    // 前提: 捜索の記述は「ソース自体の記述」として保存されている。これを県警の発表に改める
+    // 前提: 捜索の記述は、架空日報の地の文（発言者: 架空日報）として保存されている。これを、架空日報が伝えた県警の発表に改める
     const user = userEvent.setup();
     render(<StoreBoard />);
 
     const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
     await user.click(within(捜索).getByRole('button', { name: 'この主張を編集' }));
-    await user.click(screen.getByRole('button', { name: '発言者: ソース自体の記述' }));
-    await user.click(screen.getByRole('radio', { name: '人物の証言' }));
-    await user.click(screen.getByRole('checkbox', { name: '県警' }));
+    await user.click(screen.getByRole('button', { name: '発言者: 架空日報 朝刊' }));
+    const 発言者欄 = screen.getByRole('group', { name: '発言者' });
+    await user.click(within(発言者欄).getByRole('checkbox', { name: '架空日報 朝刊' }));
+    await user.click(within(発言者欄).getByRole('checkbox', { name: '県警' }));
+    await user.click(within(screen.getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊' }));
     await user.click(screen.getByRole('button', { name: '主張を保存' }));
 
     const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-police-search');
-    expect(保存後).toEqual({ ...捜索の記述, speaker: { kind: 'person', personIds: ['person-police'] } });
+    expect(保存後).toEqual({
+      ...捜索の記述,
+      speaker: { kind: 'person', personIds: ['person-police'] },
+      viaPersonIds: ['person-newspaper'],
+    });
   });
 
   it('編集中の主張を削除できる', async () => {
@@ -273,7 +280,7 @@ describe('TimelineView への書き足し', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
   });
 
-  it('主張の「詳細」から、日時・ソース内の位置の編集を開く', async () => {
+  it('主張の「詳細」から、日時の編集を開く', async () => {
     const user = userEvent.setup();
     const onOpenClaimDetails = vi.fn();
     const currentCase = useCaseStore.getState().currentCase;
@@ -305,8 +312,8 @@ describe('SpeakerView', () => {
 
     const 管理人 = screen.getByRole('region', { name: '管理人' });
     expect(within(管理人).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
-    // 本文のメンション（「@」で始まる）ではなく、ソース欄の表示を検証する
-    expect(within(管理人).getByText(/^湖畔の夏 20年目の証言/)).toBeInTheDocument();
+    // 発言者名はグループの見出しと重複するため示さないが、経由は主張ごとに示す
+    expect(within(管理人).getByText('（湖畔の夏 20年目の証言（架空の書籍） による）')).toBeInTheDocument();
 
     const 推測 = screen.getByRole('region', { name: 'ユーザーの推測' });
     expect(within(推測).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();

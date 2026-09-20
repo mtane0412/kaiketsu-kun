@@ -1,13 +1,13 @@
 /**
  * メンション（主張の本文中の @ によるエンティティ参照）
  *
- * 主張の本文（Claim.content）は、人物・場所・出来事・ソースへの参照を
+ * 主張の本文（Claim.content）は、人物・場所・出来事への参照を
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
- * Claim の sourceId・eventId・placeId・mentionedPersonIds は、このトークンから導出します。
- * 発言者（Claim.speaker）は本文から導出しません。入力欄の「発言者」で選びます。
+ * Claim の eventId・placeId・mentionedPersonIds は、このトークンから導出します。
+ * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
  * 導出の規則:
- * - ソース・出来事・場所は、それぞれ最初のメンションを採用します。
+ * - 出来事・場所は、それぞれ最初のメンションを採用します。
  * - 人物のメンションは、言及している人物です。
  *
  * 以前の版では、本文の先頭を「@人物:」と書くとその人物を発言者として導出していました。
@@ -19,10 +19,10 @@
 import type { Case, Claim, Id, Speaker } from './types';
 
 /** メンションで参照できるエンティティの種類です。 */
-export type MentionKind = 'person' | 'place' | 'event' | 'source';
+export type MentionKind = 'person' | 'place' | 'event';
 
 /** メンションの種類の一覧です。新規作成の選択肢は、この順序で表示します。 */
-export const MENTION_KINDS: MentionKind[] = ['person', 'place', 'event', 'source'];
+export const MENTION_KINDS: MentionKind[] = ['person', 'place', 'event'];
 
 /** 本文を分解した1要素です。 */
 export type ContentSegment =
@@ -35,9 +35,9 @@ export type DraftMention = { kind: MentionKind; id: Id; label: string };
 export type ClaimDraft = { text: string; mentions: DraftMention[] };
 
 /** 本文のトークンから導出した、主張の参照です。 */
-export type ClaimLinks = Pick<Claim, 'sourceId' | 'eventId' | 'placeId' | 'mentionedPersonIds'>;
+export type ClaimLinks = Pick<Claim, 'eventId' | 'placeId' | 'mentionedPersonIds'>;
 
-const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event|source):([^)\s]+)\)/g;
+const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event):([^)\s]+)\)/g;
 /**
  * 以前の版の発言者の記法です。本文の先頭に人物のメンションを空白または読点で区切って並べ、コロン（: または ：）で閉じます。
  */
@@ -73,8 +73,6 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
       return target.places.find((place) => place.id === id)?.name;
     case 'event':
       return target.events.find((event) => event.id === id)?.title;
-    case 'source':
-      return target.sources.find((source) => source.id === id)?.title;
   }
 }
 
@@ -101,7 +99,6 @@ export function contentToPlainText(content: string, target: Case): string {
 export function deriveClaimLinks(content: string): ClaimLinks {
   const mentions = parseContent(content).filter((segment) => segment.type === 'mention');
   const firstIdOf = (kind: MentionKind) => mentions.find((mention) => mention.kind === kind)?.id;
-  const sourceId = firstIdOf('source');
   const eventId = firstIdOf('event');
   const placeId = firstIdOf('place');
 
@@ -111,7 +108,6 @@ export function deriveClaimLinks(content: string): ClaimLinks {
       ...new Set(mentions.filter((mention) => mention.kind === 'person').map((mention) => mention.id)),
     ],
   };
-  if (sourceId !== undefined) links.sourceId = sourceId;
   if (eventId !== undefined) links.eventId = eventId;
   if (placeId !== undefined) links.placeId = placeId;
   return links;
@@ -175,9 +171,9 @@ export function draftToContent(draft: ClaimDraft): string {
 /**
  * 保存済みの主張を下書きに変換します。
  *
- * メンション導入前に保存された主張は、参照を項目（sourceId など）にだけ持ち、本文にトークンを持ちません。
+ * メンション導入前に保存された主張は、参照を項目（eventId など）にだけ持ち、本文にトークンを持ちません。
  * そのまま編集して保存すると参照が失われるため、本文から導出できない参照を、末尾にメンションとして補います。
- * 発言者は入力欄の「発言者」で扱うため、本文には補いません。
+ * 発言者と経由は入力欄の「発言者」で扱うため、本文には補いません。
  */
 export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   const segments = resolveContent(claim.content, target);
@@ -193,7 +189,6 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
       .map((id): [MentionKind, Id] => ['person', id]),
     ['event', derived.eventId === undefined ? claim.eventId : undefined],
     ['place', derived.placeId === undefined ? claim.placeId : undefined],
-    ['source', derived.sourceId === undefined ? claim.sourceId : undefined],
   ];
   for (const [kind, id] of missing) {
     if (id === undefined) continue;
