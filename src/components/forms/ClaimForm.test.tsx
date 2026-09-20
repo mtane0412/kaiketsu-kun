@@ -361,4 +361,49 @@ describe('ClaimForm のキーボード操作', () => {
     expect(screen.getByLabelText('内容')).toHaveValue('@湖畔の別荘');
     expect(onDone).not.toHaveBeenCalled();
   });
+
+  it('確定したメンションは、入力欄の中で種類ごとの背景色をつけて示す（未確定の「@」にはつけない）', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await typeAndChoose(user, '@隣家', '人物 隣家の住人');
+    await typeAndChoose(user, 'が@湖畔', '場所 湖畔の別荘');
+    await user.type(screen.getByLabelText('内容'), 'にいた。@未登録の名前');
+
+    expect(screen.getByText('@隣家の住人')).toHaveClass('bg-sky-100');
+    expect(screen.getByText('@湖畔の別荘')).toHaveClass('bg-emerald-100');
+    expect(screen.queryByText('@未登録の名前')).not.toBeInTheDocument();
+  });
+
+  it('メンションの直後でBackspaceキーを押すと、メンションを1文字ずつではなくまとめて削除する', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    await typeAndChoose(user, '庭に@隣家', '人物 隣家の住人');
+
+    await user.keyboard('{Backspace}');
+
+    expect(screen.getByLabelText('内容')).toHaveValue('庭に');
+    expect(screen.queryByText('@隣家の住人')).not.toBeInTheDocument();
+  });
+
+  it('メンションではない文字は、Backspaceキーで1文字ずつ削除する', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    await typeAndChoose(user, '@隣家', '人物 隣家の住人');
+    await user.type(screen.getByLabelText('内容'), 'が来た');
+
+    await user.keyboard('{Backspace}');
+
+    expect(screen.getByLabelText('内容')).toHaveValue('@隣家の住人が来');
+  });
+
+  it('日本語入力の変換中のBackspaceキーでは、メンションを削除しない', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    await typeAndChoose(user, '@隣家', '人物 隣家の住人');
+
+    fireEvent.keyDown(screen.getByLabelText('内容'), { key: 'Backspace', isComposing: true });
+
+    expect(screen.getByLabelText('内容')).toHaveValue('@隣家の住人');
+  });
 });

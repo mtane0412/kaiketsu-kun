@@ -10,6 +10,7 @@ import {
   findMentionQuery,
   formatMention,
   parseContent,
+  parseDraft,
   type DraftMention,
 } from './mention';
 import { sampleFictionalCase } from './sample-fictional-case';
@@ -145,6 +146,25 @@ describe('draftToContent', () => {
     expect(draftToContent({ text: '@山田花子が来た。', mentions: [山田, 山田花子] })).toBe(
       `${formatMention(山田花子)}が来た。`
     );
+  });
+});
+
+describe('parseDraft', () => {
+  it('下書きを、文字列と登録済みのメンションの並びに分解する（入力欄の色づけと一括削除に使う）', () => {
+    const text = '@隣家の住人: 庭に@別荘の持ち主の姿が見えた。連絡先は info@example.co.jp';
+
+    expect(parseDraft({ text, mentions: [隣家の住人, 持ち主] })).toEqual([
+      { type: 'mention', ...隣家の住人 },
+      { type: 'text', text: ': 庭に' },
+      { type: 'mention', ...持ち主 },
+      { type: 'text', text: 'の姿が見えた。連絡先は info@example.co.jp' },
+    ]);
+  });
+
+  it('メンションが登録されていない下書きは、1つの文字列として返す', () => {
+    expect(parseDraft({ text: '@隣家の住人が来た。', mentions: [] })).toEqual([
+      { type: 'text', text: '@隣家の住人が来た。' },
+    ]);
   });
 });
 
