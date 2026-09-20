@@ -230,4 +230,109 @@ describe('ClaimForm のキーボード操作', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(screen.getByLabelText('内容')).toHaveValue('@管理');
   });
+
+  describe('ボード上の位置から決まる初期値（defaults）', () => {
+    it('出来事の束の中で書いた主張は、本文に「@出来事」を書かなくても、その出来事に束ねて保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      // 参照は本文から導出する規則を保つため、出来事のメンションを本文の末尾に補う
+      expect(lastSavedClaim()).toMatchObject({
+        speaker: { kind: 'user' },
+        content: '別荘の電話は12日の夜から不通だった。 @[持ち主が最後に目撃された](event:event-last-seen)',
+        eventId: 'event-last-seen',
+      });
+    });
+
+    it('本文に別の出来事を「@」で書いた場合は、本文の出来事を優先する', async () => {
+      const user = userEvent.setup();
+      useCaseStore.getState().upsert('events', { id: 'event-search', title: '警察が別荘を捜索した' });
+      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '捜索は半日で終わった。@警察が', '出来事 警察が別荘を捜索した');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({ eventId: 'event-search' });
+    });
+
+    it('位置から求めた日時を「証言が述べる日時」の初期値にし、書き換えずに保存できる', async () => {
+      const user = userEvent.setup();
+      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
+      render(<ClaimForm defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
+
+      expect(screen.getByLabelText('証言が述べる日時：表記')).toHaveValue('「8月12日 夜7時」から「8月15日」の間');
+      await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時 });
+    });
+  });
+
+  it('Ctrl+Enter（macOSではCommand+Enter）で保存する', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    render(<ClaimForm onDone={onDone} />);
+
+    await user.type(screen.getByLabelText('内容'), '配達の時刻を調べたい。{Control>}{Enter}{/Control}');
+
+    expect(lastSavedClaim()).toMatchObject({ content: '配達の時刻を調べたい。' });
+    expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  describe('ボード上の簡易表示（compact）', () => {
+    it('本文の1欄と投稿ボタンだけを表示し、日時・評価・ソース内の位置の入力欄を表示しない', () => {
+      render(<ClaimForm compact onDone={vi.fn()} />);
+
+      expect(screen.getByLabelText('内容')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '書き足す' })).toBeInTheDocument();
+      expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('評価')).not.toBeInTheDocument();
+    });
+
+    it('入力欄を表示しなくても、位置から求めた日時は主張に保存する', async () => {
+      const user = userEvent.setup();
+      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
+      render(<ClaimForm compact defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+      await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時, assessment: 'unverified' });
+    });
+
+    it('本文だけを編集しても、入力済みの日時・評価・ソース内の位置を保持する', async () => {
+      // 前提: 管理人の証言は、日時「8月12日 夜7時」、評価「疑わしい」、位置「第3章 112ページ」を持つ
+      const user = userEvent.setup();
+      const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
+      render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), ' 玄関は施錠されていた。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-caretaker');
+      expect(保存後?.content).toContain('玄関は施錠されていた。');
+      expect(保存後).toMatchObject({
+        when: 管理人の証言.when,
+        statedAt: 管理人の証言.statedAt,
+        locator: '第3章 112ページ',
+        assessment: 'doubtful',
+      });
+    });
+  });
+
+  it('メンションの候補が開いているときのCtrl+Enterは、候補の確定だけを行い、保存しない', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    render(<ClaimForm onDone={onDone} />);
+
+    // 前提: 「@湖畔」で登録済みの場所「湖畔の別荘」が候補の先頭に出ている
+    await user.type(screen.getByLabelText('内容'), '@湖畔{Control>}{Enter}{/Control}');
+
+    expect(screen.getByLabelText('内容')).toHaveValue('@湖畔の別荘');
+    expect(onDone).not.toHaveBeenCalled();
+  });
 });

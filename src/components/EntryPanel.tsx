@@ -1,9 +1,13 @@
 /**
- * 入力パネル
+ * 登録済みの一覧（台帳）
  *
- * ソース・人物・場所・出来事・主張のうち1種類を選び、左に入力フォーム、右に登録済みの一覧を表示します。
+ * ソース・人物・場所・出来事・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
  * 一覧の「編集」を選ぶとフォームが編集に切り替わり、「削除」は他のデータから参照されている場合に
  * 理由を示して中止します。
+ *
+ * 日常の入力は時系列ボードへの書き足しで行います。このパネルは、ボード上のメンションや出来事の見出しから
+ * エンティティの詳細を編集するため、およびボードに現れていないエンティティを編集・削除するための導線です。
+ * initial は useState の初期化でのみ使用するため、対象を切り替えるときは呼び出し側で key を変えて再マウントしてください。
  */
 'use client';
 
@@ -14,8 +18,8 @@ import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
 import { EventForm, PersonForm, PlaceForm, SourceForm } from './forms/BasicForms';
 import { ClaimForm } from './forms/ClaimForm';
 
-/** 入力パネルで扱う一覧の名前です。関係（relationships）はグラフ表示を移植する段階で追加します。 */
-type EntryKey = Exclude<CollectionKey, 'relationships'>;
+/** このパネルで扱う一覧の名前です。関係（relationships）はグラフ表示を移植する段階で追加します。 */
+export type EntryKey = Exclude<CollectionKey, 'relationships'>;
 
 /** 一覧に表示する内容の最大文字数です。 */
 const ITEM_LABEL_MAX_LENGTH = 40;
@@ -77,12 +81,17 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export function EntryPanel() {
+type EntryPanelProps = {
+  /** 最初に選ぶ種類と、編集から始めるエンティティです。省略すると、ソースの新規登録から始めます。 */
+  initial?: { key: EntryKey; id: Id };
+};
+
+export function EntryPanel({ initial }: EntryPanelProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const remove = useCaseStore((state) => state.remove);
 
-  const [activeKey, setActiveKey] = useState<EntryKey>('sources');
-  const [editingId, setEditingId] = useState<Id | null>(null);
+  const [activeKey, setActiveKey] = useState<EntryKey>(initial?.key ?? 'sources');
+  const [editingId, setEditingId] = useState<Id | null>(initial?.id ?? null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // 保存のたびに値を進め、新規登録フォームを再マウントして入力欄を空に戻す
   const [formVersion, setFormVersion] = useState(0);
@@ -136,7 +145,7 @@ export function EntryPanel() {
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-6">
         <section>
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">

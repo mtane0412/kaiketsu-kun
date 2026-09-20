@@ -6,6 +6,10 @@
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
  * 本文から導出できない項目（日時・評価・ソース内の位置）は「詳細」にまとめています。
  *
+ * compact を指定すると、ボード上の入力欄として本文の1欄と投稿ボタンだけを表示します（SNSに投稿する感覚で
+ * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持し、
+ * 新規登録時は defaults の値を保存します。
+ *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
@@ -13,20 +17,21 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { USER_SPEAKER_LABEL } from '@/domain/case-views';
 import { ASSESSMENT_LABELS, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   claimToDraft,
   deriveClaimLinks,
   draftToContent,
+  formatMention,
   parseContent,
   type ClaimDraft,
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import type { Assessment, Case, Claim } from '@/domain/types';
+import type { Assessment, Case, Claim, Id, TimeRef } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SelectField, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
@@ -62,12 +67,29 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
   }
 }
 
-type ClaimFormProps = {
-  initial?: Claim;
-  onDone: () => void;
+/**
+ * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
+ */
+export type ClaimDefaults = {
+  /** 出来事の束の中で書いた場合の出来事です。本文に出来事のメンションが無いときに採用します。 */
+  eventId?: Id;
+  /** 項目と項目の間で書いた場合の、前後から求めた日時です。「証言が述べる日時」の初期値にします。 */
+  when?: TimeRef;
 };
 
-export function ClaimForm({ initial, onDone }: ClaimFormProps) {
+type ClaimFormProps = {
+  initial?: Claim;
+  defaults?: ClaimDefaults;
+  onDone: () => void;
+  /** 内容欄に初期フォーカスを置くかどうかです。ボード上で開いた入力欄にすぐ書き始められるようにします。 */
+  autoFocus?: boolean;
+  /** 本文の1欄と投稿ボタンだけを表示するかどうかです。 */
+  compact?: boolean;
+  /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
+  actions?: ReactNode;
+};
+
+export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
 
@@ -78,14 +100,23 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [locator, setLocator] = useState(initial?.locator ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
-  const [when, setWhen] = useState(timeRefToDraft(initial?.when));
+  const [when, setWhen] = useState(timeRefToDraft(initial?.when ?? defaults?.when));
   const [assessment, setAssessment] = useState<Assessment>(initial?.assessment ?? 'unverified');
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when);
+  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when || defaults?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
-  const content = draftToContent({ ...draft, text: draft.text.trim() });
+  const typedContent = draftToContent({ ...draft, text: draft.text.trim() });
+  // 出来事の束の中で書いた主張は、本文に出来事のメンションが無ければ、その出来事のメンションを末尾に補う。
+  // 参照を項目に直接設定せず本文に補うのは、「参照は本文から導出する」という規則を保つため
+  const defaultEvent =
+    deriveClaimLinks(typedContent).eventId === undefined
+      ? currentCase.events.find((event) => event.id === defaults?.eventId)
+      : undefined;
+  const content = defaultEvent
+    ? `${typedContent} ${formatMention({ kind: 'event', id: defaultEvent.id, label: defaultEvent.title })}`
+    : typedContent;
   const links = deriveClaimLinks(content);
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
@@ -149,7 +180,19 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form
+      onSubmit={handleSubmit}
+      onKeyDown={(event) => {
+        // 内容欄がメンションの候補の確定などで処理済みのキー操作では、保存しない
+        if (event.defaultPrevented) return;
+        // Ctrl/Command+Enter はIMEの変換確定と競合しないため、isComposing の確認は不要
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          event.currentTarget.requestSubmit();
+        }
+      }}
+      className="space-y-3"
+    >
       <MentionTextarea
         label="内容"
         value={draft}
@@ -157,44 +200,57 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
         candidates={candidates}
         onCreate={handleCreate}
         required
-        placeholder="例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊"
+        autoFocus={autoFocus}
+        hideLabel={compact}
+        placeholder={
+          compact
+            ? '分かったことを書く（「@」で人物・場所・出来事・ソース、先頭を「@人物:」にするとその人物の証言）'
+            : '例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊'
+        }
       />
-      <p className="text-xs text-slate-500">
-        「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
-      </p>
-      <dl
-        aria-label="本文から読み取った参照"
-        className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
-      >
-        {summaryItems
-          .filter((item) => item.description)
-          .map((item) => (
-            <div key={item.term} className="contents">
-              <dt className="font-medium">{item.term}</dt>
-              <dd>{item.description}</dd>
+      {!compact && (
+        <>
+        <p className="text-xs text-slate-500">
+          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
+        </p>
+        <dl
+          aria-label="本文から読み取った参照"
+          className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
+        >
+          {summaryItems
+            .filter((item) => item.description)
+            .map((item) => (
+              <div key={item.term} className="contents">
+                <dt className="font-medium">{item.term}</dt>
+                <dd>{item.description}</dd>
+              </div>
+            ))}
+        </dl>
+        <details open={hasDetails} className="rounded border border-slate-200 p-2">
+          <summary className="cursor-pointer text-xs font-medium text-slate-600">
+            詳細（日時・評価・ソース内の位置）
+          </summary>
+          <div className="mt-2 space-y-3">
+            <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
+            <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
+            <div className="grid grid-cols-2 gap-2">
+              <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
+              <SelectField
+                label="評価"
+                value={assessment}
+                onChange={(value) => setAssessment(value as Assessment)}
+                options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
+              />
             </div>
-          ))}
-      </dl>
-      <details open={hasDetails} className="rounded border border-slate-200 p-2">
-        <summary className="cursor-pointer text-xs font-medium text-slate-600">
-          詳細（日時・評価・ソース内の位置）
-        </summary>
-        <div className="mt-2 space-y-3">
-          <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
-          <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
-          <div className="grid grid-cols-2 gap-2">
-            <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
-            <SelectField
-              label="評価"
-              value={assessment}
-              onChange={(value) => setAssessment(value as Assessment)}
-              options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
-            />
           </div>
-        </div>
-      </details>
+        </details>
+        </>
+      )}
       <FormError message={error} />
-      <SubmitButton label="主張を保存" />
+      <div className="flex items-center justify-end gap-3">
+        {actions}
+        <SubmitButton label={compact && !initial ? '書き足す' : '主張を保存'} />
+      </div>
     </form>
   );
 }

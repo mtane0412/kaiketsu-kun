@@ -143,3 +143,26 @@ export function isTimeConflict(a: TimeRef | undefined, b: TimeRef | undefined): 
   }
   return false;
 }
+
+/**
+ * 時系列で隣り合う2つの時刻参照の間を表す時刻参照を返します。
+ * ボード上で項目と項目の間に書き足した主張の、日時の初期値として使用します。
+ *
+ * - 両方が日時を持つ場合: before の始まりから after の終わりまでの区間を返します。
+ * - 両方が日時を持たず order を持つ場合: 中間の order を返します。
+ * - それ以外: 間を求められないため、undefined を返します。
+ *
+ * 注意: 返す区間は「この間のどこか」を表す広い区間です。前後の時刻参照と区間が重なるため、
+ * isTimeConflict は食い違いと判定しません。
+ */
+export function timeRefBetween(before: TimeRef, after: TimeRef): TimeRef | undefined {
+  const text = `「${before.text}」から「${after.text}」の間`;
+
+  if (before.earliest !== undefined && after.earliest !== undefined) {
+    return { text, earliest: before.earliest, latest: after.latest ?? after.earliest };
+  }
+  if (toInterval(before) === null && toInterval(after) === null && before.order !== undefined && after.order !== undefined) {
+    return { text, order: (before.order + after.order) / 2 };
+  }
+  return undefined;
+}
