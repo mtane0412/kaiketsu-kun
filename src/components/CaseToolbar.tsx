@@ -47,8 +47,11 @@ export function CaseToolbar() {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `${currentCase.name}.json`;
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    // 一部のブラウザはダウンロードの開始前にURLが破棄されると失敗するため、破棄は次のタスクまで遅らせる
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
