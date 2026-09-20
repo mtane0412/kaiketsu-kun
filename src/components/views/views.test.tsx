@@ -114,7 +114,7 @@ describe('TimelineView への書き足し', () => {
 
     await user.click(screen.getByRole('button', { name: '「持ち主が最後に目撃された」に書き足す' }));
     await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     const entry = screen.getByRole('article', { name: '持ち主が最後に目撃された' });
     expect(within(entry).getByText(/別荘の電話は12日の夜から不通だった。/)).toBeInTheDocument();
@@ -127,8 +127,11 @@ describe('TimelineView への書き足し', () => {
     render(<StoreBoard />);
 
     await user.click(screen.getByRole('button', { name: '「8月12日 夜7時」と「8月15日」の間に書き足す' }));
+    // 日時は入力させず、書いた位置から自動で付けることを入力欄に示す
+    expect(screen.getByText('日時: 「8月12日 夜7時」から「8月15日」の間')).toBeInTheDocument();
+    expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     expect(useCaseStore.getState().currentCase.claims.at(-1)).toMatchObject({
       when: { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' },
@@ -150,7 +153,7 @@ describe('TimelineView への書き足し', () => {
 
     await user.click(screen.getByRole('button', { name: 'ボードに書き足す' }));
     await user.type(screen.getByLabelText('内容'), '持ち主の交友関係を調べたい。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     const 時期不明 = screen.getByRole('region', { name: '時期不明' });
     expect(within(時期不明).getByText('持ち主の交友関係を調べたい。')).toBeInTheDocument();
@@ -205,6 +208,18 @@ describe('TimelineView への書き足し', () => {
     await user.click(screen.getByRole('button', { name: 'この主張を削除' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
+  });
+
+  it('主張の「詳細」から、日時・評価・ソース内の位置の編集を開く', async () => {
+    const user = userEvent.setup();
+    const onOpenClaimDetails = vi.fn();
+    const currentCase = useCaseStore.getState().currentCase;
+    render(<TimelineView target={currentCase} onOpenClaimDetails={onOpenClaimDetails} />);
+
+    const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
+    await user.click(within(捜索).getByRole('button', { name: 'この主張の詳細' }));
+
+    expect(onOpenClaimDetails).toHaveBeenCalledWith('claim-police-search');
   });
 
   it('本文のメンションや出来事の見出しから、エンティティの編集を開く', async () => {

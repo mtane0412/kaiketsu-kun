@@ -281,4 +281,46 @@ describe('ClaimForm のキーボード操作', () => {
     expect(lastSavedClaim()).toMatchObject({ content: '配達の時刻を調べたい。' });
     expect(onDone).toHaveBeenCalledOnce();
   });
+
+  describe('ボード上の簡易表示（compact）', () => {
+    it('本文の1欄と投稿ボタンだけを表示し、日時・評価・ソース内の位置の入力欄を表示しない', () => {
+      render(<ClaimForm compact onDone={vi.fn()} />);
+
+      expect(screen.getByLabelText('内容')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '書き足す' })).toBeInTheDocument();
+      expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('評価')).not.toBeInTheDocument();
+    });
+
+    it('入力欄を表示しなくても、位置から求めた日時は主張に保存する', async () => {
+      const user = userEvent.setup();
+      const 位置から求めた日時 = { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' };
+      render(<ClaimForm compact defaults={{ when: 位置から求めた日時 }} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+      await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+      expect(lastSavedClaim()).toMatchObject({ when: 位置から求めた日時, assessment: 'unverified' });
+    });
+
+    it('本文だけを編集しても、入力済みの日時・評価・ソース内の位置を保持する', async () => {
+      // 前提: 管理人の証言は、日時「8月12日 夜7時」、評価「疑わしい」、位置「第3章 112ページ」を持つ
+      const user = userEvent.setup();
+      const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
+      render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), ' 玄関は施錠されていた。');
+      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+      const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-caretaker');
+      expect(保存後?.content).toContain('玄関は施錠されていた。');
+      expect(保存後).toMatchObject({
+        when: 管理人の証言.when,
+        statedAt: 管理人の証言.statedAt,
+        locator: '第3章 112ページ',
+        assessment: 'doubtful',
+      });
+    });
+  });
 });

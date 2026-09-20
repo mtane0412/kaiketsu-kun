@@ -63,6 +63,8 @@ type MentionTextareaProps = {
   required?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
+  /** ラベルを画面に表示せず、読み上げだけに使うかどうかです。 */
+  hideLabel?: boolean;
 };
 
 export function MentionTextarea({
@@ -74,6 +76,7 @@ export function MentionTextarea({
   required,
   placeholder,
   autoFocus,
+  hideLabel,
 }: MentionTextareaProps) {
   const id = useId();
   const listboxId = useId();
@@ -166,7 +169,7 @@ export function MentionTextarea({
 
   return (
     <div className="relative">
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-slate-600">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1 block text-xs font-medium text-slate-600'}>
         {label}
       </label>
       <textarea

@@ -43,6 +43,19 @@ describe('CaseBoard', () => {
     expect(screen.queryByRole('complementary', { name: '登録済みの一覧' })).not.toBeInTheDocument();
   });
 
+  it('主張の「詳細」を選ぶと、日時・評価・ソース内の位置を編集できるフォームをパネルに開く', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
+    render(<CaseBoard />);
+
+    const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
+    await user.click(within(隣家の証言).getByRole('button', { name: 'この主張の詳細' }));
+
+    const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
+    expect(within(panel).getByRole('heading', { name: '主張を編集' })).toBeInTheDocument();
+    expect(within(panel).getByLabelText('証言が述べる日時：表記')).toHaveValue('8月12日 夜9時ごろ');
+  });
+
   it('「登録済みの一覧」から、ボードに現れていないエンティティも編集・削除できるパネルを開く', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));

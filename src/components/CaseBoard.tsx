@@ -107,6 +107,7 @@ export function CaseBoard() {
           <TimelineView
             target={currentCase}
             onOpenEntity={(kind, id) => setPanel({ entity: { key: ENTRY_KEY_BY_MENTION_KIND[kind], id } })}
+            onOpenClaimDetails={(id) => setPanel({ entity: { key: 'claims', id } })}
           />
         )}
         {activeTab === 'speaker' && <SpeakerView target={currentCase} />}

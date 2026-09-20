@@ -1,9 +1,11 @@
 /**
  * ボード上の入力欄
  *
- * 時系列ボードの書き足したい位置に開く、主張の1欄入力です。入力の中身は ClaimForm で、
+ * 時系列ボードの書き足したい位置に開く、主張の1欄入力です。SNSに投稿する感覚で書けるよう、
+ * 本文の1欄と投稿ボタンだけを表示します（ClaimForm の compact）。日時・評価・ソース内の位置は、
+ * 投稿後に主張の「詳細」から編集します。
+ * 書いた位置から決まる初期値（出来事・日時）は defaults で受け取り、日時は入力させずに自動で付けます。
  * このコンポーネントは「やめる」と、編集中の主張の削除を加えます。
- * 書いた位置から決まる初期値（出来事・日時）は defaults で受け取ります。
  */
 'use client';
 
@@ -39,17 +41,26 @@ export function BoardComposer({ initial, defaults, onClose }: BoardComposerProps
 
   return (
     <div className="rounded border border-sky-300 bg-white p-3 shadow-sm">
-      <ClaimForm initial={initial} defaults={defaults} onDone={onClose} autoFocus />
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <button type="button" onClick={onClose} className="text-slate-600 hover:underline">
-          やめる
-        </button>
-        {initial && (
-          <button type="button" onClick={() => handleDelete(initial)} className="text-red-600 hover:underline">
-            この主張を削除
-          </button>
-        )}
-      </div>
+      {defaults?.when && <p className="mb-1 text-xs text-slate-500">日時: {defaults.when.text}</p>}
+      <ClaimForm
+        initial={initial}
+        defaults={defaults}
+        onDone={onClose}
+        autoFocus
+        compact
+        actions={
+          <>
+            {initial && (
+              <button type="button" onClick={() => handleDelete(initial)} className="mr-auto text-xs text-red-600 hover:underline">
+                この主張を削除
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="text-xs text-slate-600 hover:underline">
+              やめる
+            </button>
+          </>
+        }
+      />
       <div className="mt-2">
         <FormError message={deleteError} />
       </div>

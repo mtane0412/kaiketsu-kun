@@ -5,11 +5,12 @@
  * 入力欄を別の画面に分けず、ボード上の書き足したい位置に入力欄（BoardComposer）を開きます。
  * 書いた位置は、次の規則で主張の初期値になります。
  * - 出来事の束の中: その出来事に束ねた主張になります。
- * - 項目と項目の間: 前後の日時から求めた区間（timeRefBetween）が、主張が述べる日時の初期値になります。
+ * - 項目と項目の間: 前後の日時から求めた区間（timeRefBetween）を、主張が述べる日時として自動で付けます。
  * - 「ボードに書き足す」: 初期値を持ちません。日時を入れなければ「時期不明」の枠に並びます。
  *
  * 出来事の見出しには、束ねた主張から導出した日時・場所・言及されている人物を表示し、
  * 同じ出来事に束ねた他の主張と食い違う主張には食い違いの表示を付けます。
+ * 入力欄は本文の1欄だけです。日時・評価・ソース内の位置は、主張の「詳細」（onOpenClaimDetails）から編集します。
  * 本文のメンションと出来事の見出しは、エンティティの編集を開く導線（onOpenEntity）です。
  */
 'use client';
@@ -36,6 +37,8 @@ type TimelineViewProps = {
   target: Case;
   /** 本文のメンションや出来事の見出しが選ばれたときに呼び出します。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
+  /** 主張の「詳細」が選ばれたときに呼び出します。日時・評価・ソース内の位置を編集する導線です。 */
+  onOpenClaimDetails?: (claimId: Id) => void;
 };
 
 /** ボードの項目を一意に識別するキーを返します。 */
@@ -57,7 +60,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
   );
 }
 
-export function TimelineView({ target, onOpenEntity }: TimelineViewProps) {
+export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
   const closeComposer = () => setComposer(null);
@@ -76,6 +79,7 @@ export function TimelineView({ target, onOpenEntity }: TimelineViewProps) {
         showEvent={false}
         onOpenEntity={onOpenEntity}
         onEdit={() => setComposer({ type: 'edit', claimId: view.claim.id })}
+        onOpenDetails={onOpenClaimDetails && (() => onOpenClaimDetails(view.claim.id))}
       />
     );
 

@@ -6,6 +6,10 @@
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
  * 本文から導出できない項目（日時・評価・ソース内の位置）は「詳細」にまとめています。
  *
+ * compact を指定すると、ボード上の入力欄として本文の1欄と投稿ボタンだけを表示します（SNSに投稿する感覚で
+ * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持し、
+ * 新規登録時は defaults の値を保存します。
+ *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
@@ -13,7 +17,7 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { USER_SPEAKER_LABEL } from '@/domain/case-views';
 import { ASSESSMENT_LABELS, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
@@ -79,9 +83,13 @@ type ClaimFormProps = {
   onDone: () => void;
   /** 内容欄に初期フォーカスを置くかどうかです。ボード上で開いた入力欄にすぐ書き始められるようにします。 */
   autoFocus?: boolean;
+  /** 本文の1欄と投稿ボタンだけを表示するかどうかです。 */
+  compact?: boolean;
+  /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
+  actions?: ReactNode;
 };
 
-export function ClaimForm({ initial, defaults, onDone, autoFocus }: ClaimFormProps) {
+export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
 
@@ -191,44 +199,56 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus }: ClaimFormPro
         onCreate={handleCreate}
         required
         autoFocus={autoFocus}
-        placeholder="例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊"
+        hideLabel={compact}
+        placeholder={
+          compact
+            ? '分かったことを書く（「@」で人物・場所・出来事・ソース、先頭を「@人物:」にするとその人物の証言）'
+            : '例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊'
+        }
       />
-      <p className="text-xs text-slate-500">
-        「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
-      </p>
-      <dl
-        aria-label="本文から読み取った参照"
-        className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
-      >
-        {summaryItems
-          .filter((item) => item.description)
-          .map((item) => (
-            <div key={item.term} className="contents">
-              <dt className="font-medium">{item.term}</dt>
-              <dd>{item.description}</dd>
+      {!compact && (
+        <>
+        <p className="text-xs text-slate-500">
+          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
+        </p>
+        <dl
+          aria-label="本文から読み取った参照"
+          className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
+        >
+          {summaryItems
+            .filter((item) => item.description)
+            .map((item) => (
+              <div key={item.term} className="contents">
+                <dt className="font-medium">{item.term}</dt>
+                <dd>{item.description}</dd>
+              </div>
+            ))}
+        </dl>
+        <details open={hasDetails} className="rounded border border-slate-200 p-2">
+          <summary className="cursor-pointer text-xs font-medium text-slate-600">
+            詳細（日時・評価・ソース内の位置）
+          </summary>
+          <div className="mt-2 space-y-3">
+            <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
+            <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
+            <div className="grid grid-cols-2 gap-2">
+              <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
+              <SelectField
+                label="評価"
+                value={assessment}
+                onChange={(value) => setAssessment(value as Assessment)}
+                options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
+              />
             </div>
-          ))}
-      </dl>
-      <details open={hasDetails} className="rounded border border-slate-200 p-2">
-        <summary className="cursor-pointer text-xs font-medium text-slate-600">
-          詳細（日時・評価・ソース内の位置）
-        </summary>
-        <div className="mt-2 space-y-3">
-          <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
-          <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
-          <div className="grid grid-cols-2 gap-2">
-            <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
-            <SelectField
-              label="評価"
-              value={assessment}
-              onChange={(value) => setAssessment(value as Assessment)}
-              options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
-            />
           </div>
-        </div>
-      </details>
+        </details>
+        </>
+      )}
       <FormError message={error} />
-      <SubmitButton label="主張を保存" />
+      <div className="flex items-center justify-end gap-3">
+        {actions}
+        <SubmitButton label={compact && !initial ? '書き足す' : '主張を保存'} />
+      </div>
     </form>
   );
 }
