@@ -8,6 +8,8 @@
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
  *
  * キーボード操作: 上下の矢印キーで候補を移動、Enterキーで選択、Escapeキーで候補を閉じます。
+ * 先頭が登録済みのエンティティの場合は先頭が選択済みで、Enterキーだけで確定できます。
+ * 新規作成の選択肢しか無い場合は、矢印キーで選ぶまでEnterキーは改行として働きます。
  * 注意: 日本語入力の変換を確定するEnterキーでは、候補を選択しません。
  */
 'use client';
@@ -77,7 +79,8 @@ export function MentionTextarea({
   /** メンションの確定後に移動させるカーソルの位置です。確定後の描画で反映します。 */
   const caretAfterUpdate = useRef<number | null>(null);
   const [caret, setCaret] = useState(value.text.length);
-  const [activeIndex, setActiveIndex] = useState(0);
+  /** 矢印キーで明示的に選んだ候補の位置です。選んでいない場合は null です。 */
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   /** Escapeキーで候補を閉じた「@」の位置です。同じ「@」については候補を開き直しません。 */
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
 
@@ -96,6 +99,10 @@ export function MentionTextarea({
   const query = found !== null && found.start !== dismissedStart ? found : null;
   const options = query === null ? [] : buildOptions(query.query, candidates);
   const isOpen = query !== null && options.length > 0;
+  // 先頭が登録済みのエンティティの場合だけ、矢印キーで選ばなくても先頭を選択中とする。
+  // 新規作成の選択肢しか無い場合に既定で選択すると、メールアドレスの「@」の後のEnterキーなどで
+  // 意図しないエンティティを作ってしまうため、明示的な選択を必須にする。
+  const activeIndex = selectedIndex ?? (options[0]?.type === 'existing' ? 0 : null);
 
   /**
    * 候補を選ばずに、登録済みの名前を正確に入力して空白で区切った場合のメンションを返します。
@@ -124,7 +131,7 @@ export function MentionTextarea({
     const nextCaret = query.start + inserted.length;
     caretAfterUpdate.current = nextCaret;
     setCaret(nextCaret);
-    setActiveIndex(0);
+    setSelectedIndex(null);
     onChange({
       text: value.text.slice(0, query.start) + inserted + value.text.slice(caret),
       mentions: [
@@ -140,8 +147,10 @@ export function MentionTextarea({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
-      setActiveIndex((current) => (current + step + options.length) % options.length);
-    } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+      // 未選択の状態からは、下矢印キーで先頭、上矢印キーで末尾に移動する
+      const from = activeIndex ?? (step === 1 ? -1 : 0);
+      setSelectedIndex((from + step + options.length) % options.length);
+    } else if (event.key === 'Enter' && !event.nativeEvent.isComposing && activeIndex !== null) {
       event.preventDefault();
       const option = options[activeIndex];
       if (option) choose(option);
@@ -165,7 +174,7 @@ export function MentionTextarea({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-autocomplete="list"
-        aria-activedescendant={isOpen ? optionId(activeIndex) : undefined}
+        aria-activedescendant={isOpen && activeIndex !== null ? optionId(activeIndex) : undefined}
         className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
         rows={4}
         value={value.text}
@@ -175,7 +184,7 @@ export function MentionTextarea({
           const nextText = event.target.value;
           const nextCaret = event.target.selectionStart;
           setCaret(nextCaret);
-          setActiveIndex(0);
+          setSelectedIndex(null);
           setDismissedStart(null);
           onChange({
             text: nextText,

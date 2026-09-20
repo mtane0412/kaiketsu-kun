@@ -197,6 +197,30 @@ describe('ClaimForm のキーボード操作', () => {
     });
   });
 
+  it('新規作成の選択肢しか無いときのEnterキーは改行として扱い、意図しないエンティティを作らない', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    // メールアドレスの「@」でも候補は開くが、矢印キーで選んでいないためEnterキーでは確定しない
+    await user.type(screen.getByLabelText('内容'), '連絡先は info@example.co.jp{Enter}と書かれていた。');
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    expect(lastSavedClaim()?.content).toBe('連絡先は info@example.co.jp\nと書かれていた。');
+    expect(useCaseStore.getState().currentCase.persons).toEqual(sampleFictionalCase.persons);
+  });
+
+  it('新規作成の選択肢は、下矢印キーで選んでからEnterキーで確定する', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    // 「郵便配達員」に一致する登録済みのエンティティは無く、下矢印キーで先頭の「人物として新規作成」を選ぶ
+    await user.type(screen.getByLabelText('内容'), '@郵便配達員{ArrowDown}{Enter}が何かを見たのではないか。');
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    const 郵便配達員 = useCaseStore.getState().currentCase.persons.find((person) => person.name === '郵便配達員');
+    expect(lastSavedClaim()?.mentionedPersonIds).toEqual([郵便配達員?.id]);
+  });
+
   it('Escapeキーで候補を閉じ、入力した文字は残す', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
