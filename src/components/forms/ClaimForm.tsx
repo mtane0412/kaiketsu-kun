@@ -7,8 +7,8 @@
  * 本文から導出できない項目（日時・ソース内の位置）は「詳細」にまとめています。
  *
  * compact を指定すると、ボード上の入力欄として本文の1欄と投稿ボタンだけを表示します（SNSに投稿する感覚で
- * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持し、
- * 新規登録時は defaults の値を保存します。
+ * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
+ * 新規登録時は、ボード上の書いた位置（defaults）に従って、束ねる出来事と時系列の並び順の中での位置を決めます。
  *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
@@ -31,7 +31,8 @@ import {
   type MentionKind,
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import type { Case, Claim, Id, TimeRef } from '@/domain/types';
+import { resolveTimelineOrder, timelineKeyOf } from '@/domain/timeline-order';
+import type { Case, Claim, Id } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
@@ -73,8 +74,12 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
 export type ClaimDefaults = {
   /** 出来事の束の中で書いた場合の出来事です。本文に出来事のメンションが無いときに採用します。 */
   eventId?: Id;
-  /** 項目と項目の間で書いた場合の、前後から求めた日時です。「証言が述べる日時」の初期値にします。 */
-  when?: TimeRef;
+  /**
+   * 項目と項目の間で書いた場合の、時系列の並び順の中での位置（0始まり）です。
+   * 保存した主張（新しい出来事に束ねた場合はその出来事の束）を、この位置に並べます。
+   * 本文のメンションで既存の出来事に束ねた場合は、その束の位置に従うため使用しません。
+   */
+  insertIndex?: number;
 };
 
 type ClaimFormProps = {
@@ -92,6 +97,7 @@ type ClaimFormProps = {
 export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
+  const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
 
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
@@ -100,10 +106,10 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [locator, setLocator] = useState(initial?.locator ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
-  const [when, setWhen] = useState(timeRefToDraft(initial?.when ?? defaults?.when));
+  const [when, setWhen] = useState(timeRefToDraft(initial?.when));
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when || defaults?.when);
+  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
   const typedContent = draftToContent({ ...draft, text: draft.text.trim() });
@@ -169,8 +175,14 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     );
     const newEntries = pending.filter((item) => mentionedIds.has(item.mention.id)).map((item) => item.entry);
 
+    // 書いた位置に並べるのは、この保存でボードに新しく現れる項目だけ
+    const boardKey =
+      claim.eventId === undefined ? timelineKeyOf('claim', claim.id) : timelineKeyOf('event', claim.eventId);
+    const insertIndex = resolveTimelineOrder(currentCase).includes(boardKey) ? undefined : defaults?.insertIndex;
+
     try {
       upsertMany([...newEntries, { key: 'claims', entity: claim }]);
+      if (insertIndex !== undefined) moveTimelineItem(boardKey, insertIndex);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       return;

@@ -12,8 +12,8 @@ function nameOf(item: TimelineItem): string {
 }
 
 describe('buildTimeline', () => {
-  it('出来事の束と、出来事に束ねていない主張を、主張が述べる日時の早い順に並べる', () => {
-    // 前提: サンプルの出来事「持ち主が最後に目撃された」の主張は、8月12日の夜について述べている
+  it('出来事の束と、出来事に束ねていない主張を、案件の並び順（timelineOrder）のとおりに並べる', () => {
+    // 前提: ボード上の位置は日時ではなく並び順で決まる。並び順に載っていない項目（claim-user-guess）は末尾に並ぶ
     const 案件: Case = {
       ...sampleFictionalCase,
       claims: [
@@ -35,11 +35,12 @@ describe('buildTimeline', () => {
           when: { text: '8月10日', earliest: '1998-08-10' },
         },
       ],
+      timelineOrder: ['claim:claim-arrival', 'event:event-last-seen', 'claim:claim-police-search'],
     };
 
     const names = buildTimeline(案件).items.map(nameOf);
 
-    expect(names).toEqual(['claim-arrival', '持ち主が最後に目撃された', 'claim-police-search']);
+    expect(names).toEqual(['claim-arrival', '持ち主が最後に目撃された', 'claim-police-search', 'claim-user-guess']);
   });
 
   it('出来事の束は、束ねた主張から日時・場所・言及されている人物を導出する', () => {
@@ -101,16 +102,18 @@ describe('buildTimeline', () => {
     });
   });
 
-  it('日時を述べる主張が無い項目を、時期不明にまとめる', () => {
+  it('日時を述べる主張が無い項目も、他の項目と同じ時系列に並べる', () => {
     const 案件: Case = {
       ...sampleFictionalCase,
       events: [...sampleFictionalCase.events, { id: 'event-fire', title: '別荘でぼやがあった' }],
+      timelineOrder: ['event:event-fire', 'event:event-last-seen', 'claim:claim-user-guess'],
     };
 
-    const names = buildTimeline(案件).undatedItems.map(nameOf);
+    const items = buildTimeline(案件).items;
 
-    // 主張が1件も無い出来事も、書き足す先として時期不明に表示する
-    expect(names).toEqual(['別荘でぼやがあった', 'claim-user-guess']);
+    // 主張が1件も無い出来事も、書き足す先として表示する
+    expect(items.map(nameOf)).toEqual(['別荘でぼやがあった', '持ち主が最後に目撃された', 'claim-user-guess']);
+    expect(items.map((item) => item.key)).toEqual(['event:event-fire', 'event:event-last-seen', 'claim:claim-user-guess']);
   });
 
   it('主張が存在しない出来事を参照している場合はエラーにする', () => {

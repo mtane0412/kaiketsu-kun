@@ -15,6 +15,30 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(sampleFictionalCase))).toEqual(sampleFictionalCase);
   });
 
+  it('並び順を持たない頃に保存したデータは、当時の表示順（日時の早い順）を並び順として補って受け付ける', () => {
+    // 前提: 以前の版では、ボード上の位置を主張が述べる日時から決めており、timelineOrder を保存していなかった
+    const { timelineOrder: _並び順, ...並び順の無い案件 } = sampleFictionalCase;
+    const 並び順の無い旧データ = {
+      ...並び順の無い案件,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-arrival',
+          speaker: { kind: 'user' },
+          content: '持ち主は8月10日に別荘に到着したはずだ。',
+          mentionedPersonIds: [],
+          when: { text: '8月10日', earliest: '1998-08-10' },
+        },
+      ],
+    };
+
+    expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
+      'claim:claim-arrival',
+      'event:event-last-seen',
+      'claim:claim-user-guess',
+    ]);
+  });
+
   it('評価を廃止する前に保存したデータは、主張の評価を取り除いて受け付ける', () => {
     // 前提: 以前の版では、主張ごとに assessment（信頼できる・疑わしい・未検証）を保存していた
     const 評価付きの旧データ = {

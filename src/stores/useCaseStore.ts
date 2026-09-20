@@ -3,6 +3,7 @@
  *
  * 現在編集中の案件（Case）を1件だけ保持し、LocalStorageに自動保存します。
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げて案件を変更しません。
+ * 主張の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
  * - この段階はドメインモデルの検証が目的のため、スキーマのマイグレーションは実装していません。
@@ -15,7 +16,8 @@ import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
-import type { Case, Id } from '@/domain/types';
+import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
+import type { Case, Claim, Id } from '@/domain/types';
 
 /** 案件を保存するLocalStorageのキーです。 */
 export const STORAGE_KEY = 'testimony-board-case';
@@ -43,6 +45,11 @@ type CaseStore = {
   upsertMany: (entries: UpsertEntry[]) => void;
   /** 要素を削除します。他のデータから参照されている場合は例外を投げます。 */
   remove: (key: CollectionKey, id: Id) => void;
+  /**
+   * 時系列ボードの項目を動かします。toIndex は、動かした後の並び順の中での位置（0始まり）です。
+   * 日時と矛盾する位置を指定した場合は例外を投げ、案件を変更しません。
+   */
+  moveTimelineItem: (key: TimelineKey, toIndex: number) => void;
   /** 読み込んだデータを検証し、案件全体を置き換えます。検証に失敗した場合は例外を投げます。 */
   replaceCase: (data: unknown) => void;
   /** 空の案件に置き換えます。 */
@@ -60,7 +67,13 @@ function createEmptyCase(): Case {
     events: [],
     claims: [],
     relationships: [],
+    timelineOrder: [],
   };
+}
+
+/** 主張が属するボードの項目（束ねた出来事、束ねていなければ主張自身）のキーを返します。 */
+function boardKeyOf(claim: Claim): TimelineKey {
+  return claim.eventId === undefined ? timelineKeyOf('claim', claim.id) : timelineKeyOf('event', claim.eventId);
 }
 
 export const useCaseStore = create<CaseStore>()(
@@ -74,8 +87,16 @@ export const useCaseStore = create<CaseStore>()(
       upsert: (key, entity) => get().upsertMany([{ key, entity } as UpsertEntry]),
 
       upsertMany: (entries) => {
-        let nextCase = get().currentCase;
+        const { currentCase } = get();
+        let nextCase = currentCase;
+        /** 日時の区間が変わった可能性のあるボードの項目です。 */
+        const touchedKeys: TimelineKey[] = [];
         for (const { key, entity } of entries) {
+          if (key === 'claims') {
+            // 束から外れた主張は、外れた元の束の区間も変える
+            const previous = currentCase.claims.find((claim) => claim.id === entity.id);
+            touchedKeys.push(...(previous ? [boardKeyOf(previous)] : []), boardKeyOf(entity));
+          }
           const items = nextCase[key] as { id: Id }[];
           const exists = items.some((item) => item.id === entity.id);
           const nextItems = exists ? items.map((item) => (item.id === entity.id ? entity : item)) : [...items, entity];
@@ -86,19 +107,32 @@ export const useCaseStore = create<CaseStore>()(
         if (violations.length > 0) {
           throw new Error(violations.join('\n'));
         }
+        if (touchedKeys.length > 0) {
+          nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, touchedKeys) };
+        }
         set({ currentCase: nextCase });
       },
 
       remove: (key, id) => {
         const { currentCase } = get();
         const items = currentCase[key] as { id: Id }[];
-        const nextCase = { ...currentCase, [key]: items.filter((item) => item.id !== id) } as Case;
+        let nextCase = { ...currentCase, [key]: items.filter((item) => item.id !== id) } as Case;
 
         const violations = findCaseViolations(nextCase);
         if (violations.length > 0) {
           throw new Error(`他のデータから参照されているため削除できません\n${violations.join('\n')}`);
         }
+        // 束ねた主張を削除すると束の区間が狭まり、前後の項目と矛盾する場合がある
+        const removedClaim = key === 'claims' ? currentCase.claims.find((claim) => claim.id === id) : undefined;
+        if (removedClaim) {
+          nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, [boardKeyOf(removedClaim)]) };
+        }
         set({ currentCase: nextCase });
+      },
+
+      moveTimelineItem: (key, toIndex) => {
+        const { currentCase } = get();
+        set({ currentCase: { ...currentCase, timelineOrder: moveTimelineItem(currentCase, key, toIndex) } });
       },
 
       replaceCase: (data) => set({ currentCase: parseCase(data), loadError: null }),

@@ -59,7 +59,7 @@ describe('TimelineView', () => {
     expect(within(架空日報の記述!).queryByText('他の主張と時刻が食い違う')).not.toBeInTheDocument();
   });
 
-  it('出来事に束ねていない主張も、述べる日時があれば時系列に並べる', () => {
+  it('出来事に束ねていない主張も、時系列に並べる', () => {
     const 案件: Case = {
       ...sampleFictionalCase,
       claims: [
@@ -80,11 +80,20 @@ describe('TimelineView', () => {
     expect(within(時系列).getByText('警察が別荘を捜索した。')).toBeInTheDocument();
   });
 
-  it('日時を述べる主張が無い項目を、時期不明の枠に表示する', () => {
+  it('日時を述べる主張が無い項目も同じ時系列に並べ、「時期不明」の枠は表示しない', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const section = screen.getByRole('region', { name: '時期不明' });
-    expect(within(section).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();
+    const 時系列 = screen.getByRole('list', { name: '時系列' });
+    expect(within(時系列).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();
+    expect(screen.queryByText('時期不明')).not.toBeInTheDocument();
+  });
+
+  it('ボードの項目ごとに、ドラッグで動かすためのつまみを表示する', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    expect(screen.getByRole('button', { name: '「持ち主が最後に目撃された」を動かす' })).toBeInTheDocument();
+    // 出来事に束ねていない主張は、本文の冒頭20文字を名前にする
+    expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
   });
 
   it('主張も出来事も1件も無い場合は、書き始め方の案内を表示する', () => {
@@ -129,32 +138,41 @@ describe('TimelineView への書き足し', () => {
     expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
   });
 
-  it('項目と項目の間に書き足すと、前後から求めた日時を持つ主張として、その位置に現れる', async () => {
+  it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {
+    // 前提: 並びは 出来事「持ち主が最後に目撃された」→ ユーザーの推測 → 警察の捜索
     const user = userEvent.setup();
     render(<StoreBoard />);
 
-    await user.click(screen.getByRole('button', { name: '「8月12日 夜7時」と「8月15日」の間に書き足す' }));
-    // 日時は入力させず、書いた位置から自動で付けることを入力欄に示す
-    expect(screen.getByText('日時: 「8月12日 夜7時」から「8月15日」の間')).toBeInTheDocument();
-    expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」の前に書き足す' }));
     await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    expect(useCaseStore.getState().currentCase.claims.at(-1)).toMatchObject({
-      when: { text: '「8月12日 夜7時」から「8月15日」の間', earliest: '1998-08-12T19:00', latest: '1998-08-15' },
-    });
+    expect(useCaseStore.getState().currentCase.claims.at(-1)?.when).toBeUndefined();
     const 時系列 = screen.getByRole('list', { name: '時系列' });
     const 本文の並び = within(時系列)
-      .getAllByText(/夜7時に見回り|見慣れない車|警察が別荘を捜索した/)
+      .getAllByText(/夜7時に見回り|見慣れない車|金銭の問題があった可能性/)
       .map((element) => element.textContent);
     expect(本文の並び).toEqual([
       expect.stringContaining('夜7時に見回り'),
       expect.stringContaining('見慣れない車'),
-      expect.stringContaining('警察が別荘を捜索した'),
+      expect.stringContaining('金銭の問題があった可能性'),
     ]);
   });
 
-  it('位置を決めずに書き足した主張は、日時を入れなければ時期不明の枠に現れる', async () => {
+  it('先頭の項目の前にも書き足せる', async () => {
+    const user = userEvent.setup();
+    render(<StoreBoard />);
+
+    await user.click(screen.getByRole('button', { name: '「持ち主が最後に目撃された」の前に書き足す' }));
+    await user.type(screen.getByLabelText('内容'), '持ち主は8月の初めに別荘へ来たらしい。');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    expect(useCaseStore.getState().currentCase.timelineOrder[0]).toBe(
+      `claim:${useCaseStore.getState().currentCase.claims.at(-1)?.id}`
+    );
+  });
+
+  it('「ボードに書き足す」で書いた主張は、時系列の末尾に現れる', async () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
 
@@ -162,8 +180,9 @@ describe('TimelineView への書き足し', () => {
     await user.type(screen.getByLabelText('内容'), '持ち主の交友関係を調べたい。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    const 時期不明 = screen.getByRole('region', { name: '時期不明' });
-    expect(within(時期不明).getByText('持ち主の交友関係を調べたい。')).toBeInTheDocument();
+    const 時系列 = screen.getByRole('list', { name: '時系列' });
+    const 最後の項目 = within(時系列).getAllByRole('listitem').at(-1)!;
+    expect(最後の項目).toHaveTextContent('持ち主の交友関係を調べたい。');
   });
 
   it('「やめる」で、保存せずに入力欄を閉じる', async () => {
