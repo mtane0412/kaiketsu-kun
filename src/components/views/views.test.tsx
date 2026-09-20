@@ -9,11 +9,13 @@ import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
 
 describe('TimelineView', () => {
-  it('出来事の見立て（日時・場所・関与人物）と、その出来事についての主張を表示する', () => {
+  it('出来事の束に、束ねた主張から導出した日時・場所・人物と、束ねた主張を表示する', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
     const entry = screen.getByRole('article', { name: '持ち主が最後に目撃された' });
-    expect(within(entry).getByText('1998年8月12日の夜')).toBeInTheDocument();
+    // 見出しの日時は、束ねた主張が述べる日時のうち最も早いもの（管理人の「夜7時」）
+    expect(entry.querySelector('header')).toHaveTextContent('8月12日 夜7時');
+    expect(entry.querySelector('header')).toHaveTextContent('湖畔の別荘 ／ 別荘の持ち主');
     expect(within(entry).getByText(/夜9時ごろ、/)).toBeInTheDocument();
     expect(within(entry).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
   });
@@ -33,34 +35,52 @@ describe('TimelineView', () => {
     expect(隣家の証言).not.toHaveTextContent('person:person-owner');
   });
 
-  it('見立てと食い違う時刻を述べている主張に、食い違いの表示を付ける', () => {
-    const 案件: Case = {
-      ...sampleFictionalCase,
-      events: sampleFictionalCase.events.map((event) => ({
-        ...event,
-        when: { text: '夜8時以降', earliest: '1998-08-12T20:00', latest: '1998-08-12T23:59' },
-      })),
-    };
-    render(<TimelineView target={案件} />);
+  it('同じ出来事に束ねた他の主張と時刻が食い違う主張に、食い違いの表示を付ける', () => {
+    // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。架空日報の記述は日時を述べていない
+    render(<TimelineView target={sampleFictionalCase} />);
 
     const 管理人の証言 = screen.getByText(/夜7時に見回りをしたとき/).closest('li');
     const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+    const 架空日報の記述 = screen.getByText(/連絡が取れなくなっている/).closest('li');
 
-    expect(within(管理人の証言!).getByText('時刻が見立てと食い違う')).toBeInTheDocument();
-    expect(within(隣家の証言!).queryByText('時刻が見立てと食い違う')).not.toBeInTheDocument();
+    expect(within(管理人の証言!).getByText('他の主張と時刻が食い違う')).toBeInTheDocument();
+    expect(within(隣家の証言!).getByText('他の主張と時刻が食い違う')).toBeInTheDocument();
+    expect(within(架空日報の記述!).queryByText('他の主張と時刻が食い違う')).not.toBeInTheDocument();
   });
 
-  it('出来事に紐づかない主張を別枠に表示する', () => {
+  it('出来事に束ねていない主張も、述べる日時があれば時系列に並べる', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-police-search',
+          speaker: { kind: 'source' },
+          sourceId: 'source-newspaper',
+          content: '警察が別荘を捜索した。',
+          mentionedPersonIds: [],
+          when: { text: '8月15日', earliest: '1998-08-15' },
+          assessment: 'unverified',
+        },
+      ],
+    };
+    render(<TimelineView target={案件} />);
+
+    const 時系列 = screen.getByRole('list', { name: '時系列' });
+    expect(within(時系列).getByText('警察が別荘を捜索した。')).toBeInTheDocument();
+  });
+
+  it('日時を述べる主張が無い項目を、時期不明の枠に表示する', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const section = screen.getByRole('region', { name: '出来事に紐づかない主張' });
+    const section = screen.getByRole('region', { name: '時期不明' });
     expect(within(section).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();
   });
 
-  it('出来事が1件も無い場合は、案内を表示する', () => {
-    render(<TimelineView target={{ ...sampleFictionalCase, events: [], claims: [] }} />);
+  it('主張も出来事も1件も無い場合は、案内を表示する', () => {
+    render(<TimelineView target={{ ...sampleFictionalCase, events: [], claims: [], relationships: [] }} />);
 
-    expect(screen.getByText('出来事がまだ登録されていません。「入力」タブから登録してください。')).toBeInTheDocument();
+    expect(screen.getByText('主張がまだ登録されていません。「入力」タブから登録してください。')).toBeInTheDocument();
   });
 });
 

@@ -48,10 +48,10 @@ export function ClaimCard({ view, showSpeaker, showEvent }: ClaimCardProps) {
           {ASSESSMENT_LABELS[claim.assessment]}
         </span>
         {view.hasTimeConflict && (
-          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">時刻が見立てと食い違う</span>
+          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と時刻が食い違う</span>
         )}
         {view.hasPlaceConflict && (
-          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">場所が見立てと食い違う</span>
+          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と場所が食い違う</span>
         )}
       </div>
 

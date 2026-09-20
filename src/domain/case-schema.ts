@@ -83,9 +83,6 @@ const caseSchema = z.object({
       id: idSchema,
       title: z.string(),
       description: z.string().optional(),
-      when: timeRefSchema.optional(),
-      placeId: idSchema.optional(),
-      participantIds: z.array(idSchema),
     })
   ),
   claims: z.array(
@@ -141,10 +138,6 @@ export function findCaseViolations(target: Case): string[] {
     }
   };
 
-  for (const event of target.events) {
-    check(placeIds, event.placeId, '場所');
-    event.participantIds.forEach((id) => check(personIds, id, '人物'));
-  }
   for (const claim of target.claims) {
     if (claim.speaker.kind === 'person') check(personIds, claim.speaker.personId, '人物');
     if (claim.speaker.kind !== 'user' && claim.sourceId === undefined) {

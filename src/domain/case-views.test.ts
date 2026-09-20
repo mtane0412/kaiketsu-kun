@@ -2,53 +2,79 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildTimeline, groupClaimsBySpeaker } from './case-views';
+import { buildTimeline, groupClaimsBySpeaker, type TimelineItem } from './case-views';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
+/** ボードの項目を、見分けやすい名前（出来事のタイトル、または主張のID）に変換します。 */
+function nameOf(item: TimelineItem): string {
+  return item.kind === 'event' ? item.event.title : item.view.claim.id;
+}
+
 describe('buildTimeline', () => {
-  it('出来事を起きた時点の早い順に並べる', () => {
+  it('出来事の束と、出来事に束ねていない主張を、主張が述べる日時の早い順に並べる', () => {
+    // 前提: サンプルの出来事「持ち主が最後に目撃された」の主張は、8月12日の夜について述べている
     const 案件: Case = {
       ...sampleFictionalCase,
-      events: [
-        { id: 'event-search', title: '警察が別荘を捜索した', when: { text: '8月15日', earliest: '1998-08-15' }, participantIds: [] },
-        ...sampleFictionalCase.events,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-police-search',
+          speaker: { kind: 'source' },
+          sourceId: 'source-newspaper',
+          content: '警察が別荘を捜索した。',
+          mentionedPersonIds: [],
+          when: { text: '8月15日', earliest: '1998-08-15' },
+          assessment: 'unverified',
+        },
+        {
+          id: 'claim-arrival',
+          speaker: { kind: 'source' },
+          sourceId: 'source-newspaper',
+          content: '持ち主は8月10日に別荘に到着した。',
+          mentionedPersonIds: [],
+          when: { text: '8月10日', earliest: '1998-08-10' },
+          assessment: 'unverified',
+        },
       ],
     };
 
-    const titles = buildTimeline(案件).entries.map((entry) => entry.event.title);
+    const names = buildTimeline(案件).items.map(nameOf);
 
-    expect(titles).toEqual(['持ち主が最後に目撃された', '警察が別荘を捜索した']);
+    expect(names).toEqual(['claim-arrival', '持ち主が最後に目撃された', 'claim-police-search']);
   });
 
-  it('出来事ごとに、場所・関与人物・主張をまとめる', () => {
-    const [entry] = buildTimeline(sampleFictionalCase).entries;
+  it('出来事の束は、束ねた主張から日時・場所・言及されている人物を導出する', () => {
+    const [item] = buildTimeline(sampleFictionalCase).items;
+    if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
 
-    expect(entry?.place?.name).toBe('湖畔の別荘');
-    expect(entry?.participants.map((person) => person.name)).toEqual(['別荘の持ち主']);
-    expect(entry?.claims.map((item) => item.claim.id)).toEqual(['claim-neighbor', 'claim-report', 'claim-caretaker']);
+    // 束の日時は、束ねた主張が述べる日時のうち最も早いもの
+    expect(item.when?.text).toBe('8月12日 夜7時');
+    expect(item.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
+    expect(item.persons.map((person) => person.name)).toEqual(['別荘の持ち主']);
   });
 
-  it('証言が述べる時刻が出来事の見立てと重ならない場合に、時刻の食い違いを示す', () => {
-    const 案件: Case = {
-      ...sampleFictionalCase,
-      events: sampleFictionalCase.events.map((event) => ({
-        ...event,
-        when: { text: '夜8時以降', earliest: '1998-08-12T20:00', latest: '1998-08-12T23:59' },
-      })),
-    };
+  it('出来事の束の中では、主張を述べる日時の早い順に並べ、日時を述べない主張を最後に置く', () => {
+    const [item] = buildTimeline(sampleFictionalCase).items;
+    if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
 
-    const [entry] = buildTimeline(案件).entries;
-    const conflicts = Object.fromEntries(entry?.claims.map((item) => [item.claim.id, item.hasTimeConflict]) ?? []);
+    expect(item.claims.map((view) => view.claim.id)).toEqual(['claim-caretaker', 'claim-neighbor', 'claim-report']);
+  });
+
+  it('同じ出来事に束ねた主張同士で、述べる時刻が重ならない場合に、時刻の食い違いを示す', () => {
+    // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。架空日報の記述は日時を述べていない
+    const [item] = buildTimeline(sampleFictionalCase).items;
+    if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
+    const conflicts = Object.fromEntries(item.claims.map((view) => [view.claim.id, view.hasTimeConflict]));
 
     expect(conflicts).toEqual({
-      'claim-neighbor': false,
-      'claim-report': false,
       'claim-caretaker': true,
+      'claim-neighbor': true,
+      'claim-report': false,
     });
   });
 
-  it('証言が述べる場所が出来事の見立てと異なる場合に、場所の食い違いを示す', () => {
+  it('同じ出来事に束ねた主張同士で、述べる場所が異なる場合に、場所の食い違いを示す', () => {
     const 案件: Case = {
       ...sampleFictionalCase,
       places: [...sampleFictionalCase.places, { id: 'place-station', name: '最寄り駅' }],
@@ -57,17 +83,28 @@ describe('buildTimeline', () => {
       ),
     };
 
-    const [entry] = buildTimeline(案件).entries;
-    const 隣家の証言 = entry?.claims.find((item) => item.claim.id === 'claim-neighbor');
+    const [item] = buildTimeline(案件).items;
+    if (item?.kind !== 'event') throw new Error('先頭の項目が出来事の束ではありません');
+    const conflicts = Object.fromEntries(item.claims.map((view) => [view.claim.id, view.hasPlaceConflict]));
 
-    expect(隣家の証言?.hasPlaceConflict).toBe(true);
-    expect(隣家の証言?.place?.name).toBe('最寄り駅');
+    // 架空日報の記述は場所を述べていないため、食い違いの対象にならない
+    expect(conflicts).toEqual({
+      'claim-caretaker': true,
+      'claim-neighbor': true,
+      'claim-report': false,
+    });
   });
 
-  it('出来事に紐づかない主張を別枠にまとめる', () => {
-    const ids = buildTimeline(sampleFictionalCase).unlinkedClaims.map((item) => item.claim.id);
+  it('日時を述べる主張が無い項目を、時期不明にまとめる', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      events: [...sampleFictionalCase.events, { id: 'event-fire', title: '別荘でぼやがあった' }],
+    };
 
-    expect(ids).toEqual(['claim-user-guess']);
+    const names = buildTimeline(案件).undatedItems.map(nameOf);
+
+    // 主張が1件も無い出来事も、書き足す先として時期不明に表示する
+    expect(names).toEqual(['別荘でぼやがあった', 'claim-user-guess']);
   });
 
   it('主張が存在しない出来事を参照している場合はエラーにする', () => {

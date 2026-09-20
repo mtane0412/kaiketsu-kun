@@ -15,8 +15,6 @@ import type { Event, Person, Place, Source, SourceKind } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { FormError, SelectField, SubmitButton, TextField, TimeRefInput } from './fields';
 
-const NONE = '';
-
 type FormProps<T> = {
   initial?: T;
   onDone: () => void;
@@ -151,33 +149,16 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
 }
 
 export function EventForm({ initial, onDone }: FormProps<Event>) {
-  const { persons, places } = useCaseStore((state) => state.currentCase);
   const upsert = useCaseStore((state) => state.upsert);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [when, setWhen] = useState(timeRefToDraft(initial?.when));
-  const [placeId, setPlaceId] = useState(initial?.placeId ?? NONE);
-  const [participantIds, setParticipantIds] = useState(initial?.participantIds ?? []);
   const [error, setError] = useState<string | null>(null);
-
-  const toggleParticipant = (personId: string) => {
-    setParticipantIds((current) =>
-      current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId]
-    );
-  };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const whenResult = draftToTimeRef(when);
-    if (!whenResult.ok) {
-      setError(`起きた時点（見立て）: ${whenResult.error}`);
-      return;
-    }
 
-    const next: Event = { id: initial?.id ?? nanoid(), title: title.trim(), participantIds };
+    const next: Event = { id: initial?.id ?? nanoid(), title: title.trim() };
     if (description.trim()) next.description = description.trim();
-    if (whenResult.value) next.when = whenResult.value;
-    if (placeId !== NONE) next.placeId = placeId;
 
     try {
       upsert('events', next);
@@ -191,30 +172,10 @@ export function EventForm({ initial, onDone }: FormProps<Event>) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="タイトル" value={title} onChange={setTitle} required />
-      <TextField label="説明" value={description} onChange={setDescription} multiline />
-      <TimeRefInput legend="起きた時点（見立て）" value={when} onChange={setWhen} />
-      <SelectField
-        label="場所（見立て）"
-        value={placeId}
-        onChange={setPlaceId}
-        options={[{ value: NONE, label: '（なし）' }, ...places.map((place) => ({ value: place.id, label: place.name }))]}
-      />
-      <fieldset>
-        <legend className="mb-1 text-xs font-medium text-slate-600">関与人物（見立て）</legend>
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {persons.length === 0 && <span className="text-xs text-slate-400">人物が未登録です</span>}
-          {persons.map((person) => (
-            <label key={person.id} className="flex items-center gap-1 text-sm">
-              <input
-                type="checkbox"
-                checked={participantIds.includes(person.id)}
-                onChange={() => toggleParticipant(person.id)}
-              />
-              {person.name}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <TextField label="メモ" value={description} onChange={setDescription} multiline />
+      <p className="text-xs text-slate-500">
+        出来事は、同じ事柄についての主張を束ねるラベルです。日時・場所・人物は、束ねた主張から導出して表示します。
+      </p>
       <FormError message={error} />
       <SubmitButton label="出来事を保存" />
     </form>

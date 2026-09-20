@@ -33,23 +33,20 @@ describe('EntryPanel', () => {
     });
   });
 
-  it('出来事を、見立ての日時・場所・関与人物とともに登録する', async () => {
+  it('出来事を、タイトルとメモだけで登録する', async () => {
+    // 出来事は主張を束ねるラベルであり、日時・場所・人物は束ねた主張から導出するため、入力欄を持たない
     const user = userEvent.setup();
     render(<EntryPanel />);
 
     await user.click(screen.getByRole('tab', { name: /出来事/ }));
     await user.type(screen.getByLabelText('タイトル'), '警察が別荘を捜索した');
-    await user.type(screen.getByLabelText('起きた時点（見立て）：表記'), '8月15日');
-    await user.type(screen.getByLabelText('起きた時点（見立て）：最も早い時点'), '1998-08-15');
-    await user.selectOptions(screen.getByLabelText('場所（見立て）'), '湖畔の別荘');
-    await user.click(screen.getByRole('checkbox', { name: '管理人' }));
+    await user.type(screen.getByLabelText('メモ'), '捜索の範囲は資料によって異なる');
     await user.click(screen.getByRole('button', { name: '出来事を保存' }));
 
-    expect(useCaseStore.getState().currentCase.events.at(-1)).toMatchObject({
+    expect(useCaseStore.getState().currentCase.events.at(-1)).toEqual({
+      id: expect.any(String),
       title: '警察が別荘を捜索した',
-      when: { text: '8月15日', earliest: '1998-08-15' },
-      placeId: 'place-villa',
-      participantIds: ['person-caretaker'],
+      description: '捜索の範囲は資料によって異なる',
     });
   });
 
