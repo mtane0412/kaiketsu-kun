@@ -147,13 +147,15 @@ export function deriveClaimLinks(content: string): ClaimLinks {
 }
 
 /**
- * 下書きを本文に変換します。
- * text 中の「@表示名」のうち mentions に登録されたものをトークンに置き換え、それ以外の「@」は文字のまま残します。
+ * 下書きを、文字列とメンションの並びに分解します。
+ * text 中の「@表示名」のうち mentions に登録されたものだけをメンションとし、それ以外の「@」は文字列に含めます。
+ * 注意: メンションの要素は、text の中で「@表示名」（1 + 表示名の文字数）の長さを占めます。
  */
-export function draftToContent(draft: ClaimDraft): string {
+export function parseDraft(draft: ClaimDraft): ContentSegment[] {
   // 「山田」と「山田花子」のように前方一致で重なる表示名は、長いものを先に照合する
   const mentions = [...draft.mentions].sort((a, b) => b.label.length - a.label.length);
-  let content = '';
+  const segments: ContentSegment[] = [];
+  let textStart = 0;
   let index = 0;
   while (index < draft.text.length) {
     const matched =
@@ -161,14 +163,26 @@ export function draftToContent(draft: ClaimDraft): string {
         ? mentions.find((mention) => draft.text.startsWith(mention.label, index + 1))
         : undefined;
     if (matched) {
-      content += formatMention(matched);
+      if (index > textStart) segments.push({ type: 'text', text: draft.text.slice(textStart, index) });
+      segments.push({ type: 'mention', kind: matched.kind, id: matched.id, label: matched.label });
       index += 1 + matched.label.length;
+      textStart = index;
     } else {
-      content += draft.text[index];
       index += 1;
     }
   }
-  return content;
+  if (textStart < draft.text.length) segments.push({ type: 'text', text: draft.text.slice(textStart) });
+  return segments;
+}
+
+/**
+ * 下書きを本文に変換します。
+ * text 中の「@表示名」のうち mentions に登録されたものをトークンに置き換え、それ以外の「@」は文字のまま残します。
+ */
+export function draftToContent(draft: ClaimDraft): string {
+  return parseDraft(draft)
+    .map((segment) => (segment.type === 'mention' ? formatMention(segment) : segment.text))
+    .join('');
 }
 
 /**

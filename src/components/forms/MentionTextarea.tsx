@@ -7,10 +7,14 @@
  * 入力欄には `@表示名` の素の文字列を表示し、確定したメンションは value.mentions に保持します
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
  *
+ * 確定したメンションには、種類ごとの背景色をつけます。textarea は文字の一部だけを装飾できないため、
+ * 同じ文字組みの層（ハイライト層）を textarea の背面に重ね、メンションの位置にだけ背景色を描きます。
+ * 確定したメンションの直後（または途中）でBackspaceキーを押すと、1文字ずつではなくメンション全体を削除します。
+ *
  * キーボード操作: 上下の矢印キーで候補を移動、Enterキーで選択、Escapeキーで候補を閉じます。
  * 先頭が登録済みのエンティティの場合は先頭が選択済みで、Enterキーだけで確定できます。
  * 新規作成の選択肢しか無い場合は、矢印キーで選ぶまでEnterキーは改行として働きます。
- * 注意: 日本語入力の変換を確定するEnterキーでは、候補を選択しません。
+ * 注意: 日本語入力の変換を確定するEnterキーでは候補を選択せず、変換中のBackspaceキーではメンションを削除しません。
  */
 'use client';
 
@@ -19,7 +23,9 @@ import { MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   MENTION_KINDS,
   findMentionQuery,
+  parseDraft,
   type ClaimDraft,
+  type ContentSegment,
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
@@ -29,6 +35,25 @@ export type MentionCandidate = DraftMention & { keywords?: string[] };
 
 /** 一覧に表示する登録済みエンティティの最大件数です。 */
 const MAX_EXISTING_OPTIONS = 8;
+
+/**
+ * ハイライト層でメンションにつける背景色です。
+ * 注意: 文字の位置が textarea とずれるため、余白や文字の太さなど文字組みを変える指定は加えないでください。
+ */
+const MENTION_HIGHLIGHT_STYLES: Record<MentionKind, string> = {
+  person: 'bg-sky-100',
+  place: 'bg-emerald-100',
+  event: 'bg-amber-100',
+  source: 'bg-slate-200',
+};
+
+/** textarea とハイライト層で一致させる文字組み（枠線の幅・余白・文字の大きさ・折り返し）の指定です。 */
+const TEXT_LAYOUT_CLASSES = 'border px-2 py-1.5 text-sm whitespace-pre-wrap break-words [scrollbar-gutter:stable]';
+
+/** 下書きの要素が、入力欄の文字列の中で占める長さを返します。 */
+function segmentLength(segment: ContentSegment): number {
+  return segment.type === 'mention' ? 1 + segment.label.length : segment.text.length;
+}
 
 type MentionOption = { type: 'existing'; mention: DraftMention } | { type: 'create'; kind: MentionKind; name: string };
 
@@ -81,6 +106,7 @@ export function MentionTextarea({
   const id = useId();
   const listboxId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   /** メンションの確定後に移動させるカーソルの位置です。確定後の描画で反映します。 */
   const caretAfterUpdate = useRef<number | null>(null);
   const [caret, setCaret] = useState(value.text.length);
@@ -95,6 +121,8 @@ export function MentionTextarea({
     textareaRef.current?.setSelectionRange(caretAfterUpdate.current, caretAfterUpdate.current);
     caretAfterUpdate.current = null;
   });
+
+  const segments = parseDraft(value);
 
   const found = findMentionQuery(
     value.text,
@@ -147,7 +175,40 @@ export function MentionTextarea({
     textareaRef.current?.focus();
   };
 
+  /**
+   * カーソルが確定したメンションの直後または途中にある場合に、メンション全体を削除します。削除した場合は true を返します。
+   * 範囲を選択している場合は、ブラウザの既定の動作（選択範囲の削除）に任せます。
+   */
+  const deleteMentionBeforeCaret = (textarea: HTMLTextAreaElement): boolean => {
+    if (textarea.selectionStart !== textarea.selectionEnd) return false;
+    const position = textarea.selectionStart;
+    let start = 0;
+    for (const segment of segments) {
+      const end = start + segmentLength(segment);
+      if (segment.type === 'mention' && start < position && position <= end) {
+        const text = value.text.slice(0, start) + value.text.slice(end);
+        // 入力欄から消えたメンションは登録からも外す（同じ名前を打ち直したときに、意図せずメンションへ戻さないため）
+        const remaining = parseDraft({ text, mentions: value.mentions });
+        const mentions = value.mentions.filter((mention) =>
+          remaining.some((item) => item.type === 'mention' && item.kind === mention.kind && item.id === mention.id)
+        );
+        caretAfterUpdate.current = start;
+        setCaret(start);
+        setSelectedIndex(null);
+        setDismissedStart(null);
+        onChange({ text, mentions });
+        return true;
+      }
+      start = end;
+    }
+    return false;
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Backspace' && !event.nativeEvent.isComposing) {
+      if (deleteMentionBeforeCaret(event.currentTarget)) event.preventDefault();
+      return;
+    }
     if (!isOpen || query === null) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -172,35 +233,59 @@ export function MentionTextarea({
       <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1 block text-xs font-medium text-slate-600'}>
         {label}
       </label>
-      <textarea
-        ref={textareaRef}
-        id={id}
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listboxId}
-        aria-autocomplete="list"
-        aria-activedescendant={isOpen && activeIndex !== null ? optionId(activeIndex) : undefined}
-        className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none"
-        rows={4}
-        value={value.text}
-        required={required}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        onChange={(event) => {
-          const nextText = event.target.value;
-          const nextCaret = event.target.selectionStart;
-          setCaret(nextCaret);
-          setSelectedIndex(null);
-          setDismissedStart(null);
-          onChange({
-            text: nextText,
-            mentions: [...value.mentions, ...findTypedMention(nextText, nextCaret)],
-          });
-        }}
-        onKeyDown={handleKeyDown}
-        onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
-        onClick={(event) => setCaret(event.currentTarget.selectionStart)}
-      />
+      <div className="relative">
+        {/* ハイライト層。文字は透明にして背景色だけを見せ、文字そのものは前面の textarea が表示する */}
+        <div
+          ref={highlightRef}
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 overflow-hidden rounded border-transparent bg-white text-transparent ${TEXT_LAYOUT_CLASSES}`}
+        >
+          {segments.map((segment, index) =>
+            segment.type === 'mention' ? (
+              <span key={index} className={`rounded ${MENTION_HIGHLIGHT_STYLES[segment.kind]}`}>
+                @{segment.label}
+              </span>
+            ) : (
+              segment.text
+            )
+          )}
+          {/* 末尾が改行の場合も textarea と同じ高さにするため、最後に改行を補う */}
+          {'\n'}
+        </div>
+        <textarea
+          ref={textareaRef}
+          id={id}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={isOpen && activeIndex !== null ? optionId(activeIndex) : undefined}
+          className={`relative block w-full rounded border-slate-300 bg-transparent focus:border-sky-500 focus:outline-none ${TEXT_LAYOUT_CLASSES}`}
+          rows={4}
+          value={value.text}
+          required={required}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          onChange={(event) => {
+            const nextText = event.target.value;
+            const nextCaret = event.target.selectionStart;
+            setCaret(nextCaret);
+            setSelectedIndex(null);
+            setDismissedStart(null);
+            onChange({
+              text: nextText,
+              mentions: [...value.mentions, ...findTypedMention(nextText, nextCaret)],
+            });
+          }}
+          onKeyDown={handleKeyDown}
+          onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
+          onClick={(event) => setCaret(event.currentTarget.selectionStart)}
+          // textarea の中をスクロールしたときに、背景色の位置がずれないようハイライト層も同じだけ動かす
+          onScroll={(event) => {
+            if (highlightRef.current) highlightRef.current.scrollTop = event.currentTarget.scrollTop;
+          }}
+        />
+      </div>
       {isOpen && (
         <ul
           id={listboxId}
