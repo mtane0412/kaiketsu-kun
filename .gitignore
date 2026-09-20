@@ -8,3 +8,5 @@ coverage/
 # 実在の人物に関する推測を含む実データ置き場（公開リポジトリにコミットしない）
 src/domain/private/
 .DS_Store
+tsconfig.tsbuildinfo
+next-env.d.ts
