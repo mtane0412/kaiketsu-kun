@@ -14,8 +14,23 @@ describe('TimelineView', () => {
 
     const entry = screen.getByRole('article', { name: '持ち主が最後に目撃された' });
     expect(within(entry).getByText('1998年8月12日の夜')).toBeInTheDocument();
-    expect(within(entry).getByText(/夜9時ごろ、別荘の明かりがついていて/)).toBeInTheDocument();
+    expect(within(entry).getByText(/夜9時ごろ、/)).toBeInTheDocument();
     expect(within(entry).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
+  });
+
+  it('本文のメンションは、トークンの記法ではなくエンティティの現在の名前で表示する', () => {
+    // 前提: 本文のトークンが控えている表示名は「別荘の持ち主」だが、人物はその後「湖畔荘のオーナー」に改名されている
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner' ? { ...person, name: '湖畔荘のオーナー' } : person
+      ),
+    };
+    render(<TimelineView target={案件} />);
+
+    const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li')!;
+    expect(隣家の証言).toHaveTextContent('夜9時ごろ、@湖畔の別荘の明かりがついていて、庭に@湖畔荘のオーナーの姿が見えた。');
+    expect(隣家の証言).not.toHaveTextContent('person:person-owner');
   });
 
   it('見立てと食い違う時刻を述べている主張に、食い違いの表示を付ける', () => {
@@ -29,7 +44,7 @@ describe('TimelineView', () => {
     render(<TimelineView target={案件} />);
 
     const 管理人の証言 = screen.getByText(/夜7時に見回りをしたとき/).closest('li');
-    const 隣家の証言 = screen.getByText(/夜9時ごろ、別荘の明かりがついていて/).closest('li');
+    const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
 
     expect(within(管理人の証言!).getByText('時刻が見立てと食い違う')).toBeInTheDocument();
     expect(within(隣家の証言!).queryByText('時刻が見立てと食い違う')).not.toBeInTheDocument();
@@ -55,7 +70,8 @@ describe('SpeakerView', () => {
 
     const 管理人 = screen.getByRole('region', { name: '管理人' });
     expect(within(管理人).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
-    expect(within(管理人).getByText(/湖畔の夏 20年目の証言/)).toBeInTheDocument();
+    // 本文のメンション（「@」で始まる）ではなく、ソース欄の表示を検証する
+    expect(within(管理人).getByText(/^湖畔の夏 20年目の証言/)).toBeInTheDocument();
 
     const 推測 = screen.getByRole('region', { name: 'ユーザーの推測' });
     expect(within(推測).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();

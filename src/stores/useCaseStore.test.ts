@@ -44,6 +44,35 @@ describe('upsert', () => {
   });
 });
 
+describe('upsertMany', () => {
+  it('新しい人物と、その人物に言及する主張を、1回の検証でまとめて追加する', () => {
+    const 郵便配達員 = { id: 'person-postman', name: '郵便配達員' };
+    const 配達員への言及: Claim = { ...新しい証言, mentionedPersonIds: ['person-postman'] };
+
+    useCaseStore.getState().upsertMany([
+      { key: 'persons', entity: 郵便配達員 },
+      { key: 'claims', entity: 配達員への言及 },
+    ]);
+
+    const { persons, claims } = useCaseStore.getState().currentCase;
+    expect(persons).toContainEqual(郵便配達員);
+    expect(claims).toContainEqual(配達員への言及);
+  });
+
+  it('1件でも規則に違反する場合は、どの要素も追加しない', () => {
+    const 郵便配達員 = { id: 'person-postman', name: '郵便配達員' };
+    const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
+
+    expect(() =>
+      useCaseStore.getState().upsertMany([
+        { key: 'persons', entity: 郵便配達員 },
+        { key: 'claims', entity: 不正な証言 },
+      ])
+    ).toThrow('存在しない人物を参照しています: person-unknown');
+    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+  });
+});
+
 describe('remove', () => {
   it('どこからも参照されていない主張を削除する', () => {
     useCaseStore.getState().remove('claims', 'claim-report');

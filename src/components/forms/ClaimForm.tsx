@@ -1,6 +1,11 @@
 /**
  * 主張（証言・ソース自体の記述・ユーザーの推測）の入力フォーム
  *
+ * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事・ソースを書くと、発言者・ソース・
+ * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
+ * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
+ * 本文から導出できない項目（日時・評価・ソース内の位置）は「詳細」にまとめています。
+ *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
@@ -9,27 +14,52 @@
 
 import { nanoid } from 'nanoid';
 import { useState, type FormEvent } from 'react';
-import { ASSESSMENT_LABELS } from '@/domain/labels';
+import { USER_SPEAKER_LABEL } from '@/domain/case-views';
+import { ASSESSMENT_LABELS, MENTION_KIND_LABELS } from '@/domain/labels';
+import {
+  claimToDraft,
+  deriveClaimLinks,
+  draftToContent,
+  parseContent,
+  type ClaimDraft,
+  type DraftMention,
+  type MentionKind,
+} from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import type { Assessment, Claim, Speaker } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import type { Assessment, Case, Claim } from '@/domain/types';
+import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SelectField, SubmitButton, TextField, TimeRefInput } from './fields';
+import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
 
-const NONE = '';
-const SPEAKER_SOURCE = 'source';
-const SPEAKER_USER = 'user';
-const SPEAKER_PERSON_PREFIX = 'person:';
+const SOURCE_SPEAKER_LABEL = 'ソース自体の記述';
 
-/** 発言者を選択欄の値に変換します。 */
-function speakerToValue(speaker: Speaker): string {
-  return speaker.kind === 'person' ? `${SPEAKER_PERSON_PREFIX}${speaker.personId}` : speaker.kind;
+/** 案件に登録済みのエンティティを、メンションの候補に変換します。 */
+function caseToCandidates(target: Case): MentionCandidate[] {
+  return [
+    ...target.persons.map((person) => ({
+      kind: 'person' as const,
+      id: person.id,
+      label: person.name,
+      keywords: person.aliases,
+    })),
+    ...target.places.map((place) => ({ kind: 'place' as const, id: place.id, label: place.name })),
+    ...target.events.map((event) => ({ kind: 'event' as const, id: event.id, label: event.title })),
+    ...target.sources.map((source) => ({ kind: 'source' as const, id: source.id, label: source.title })),
+  ];
 }
 
-/** 選択欄の値を発言者に変換します。 */
-function valueToSpeaker(value: string): Speaker {
-  if (value === SPEAKER_SOURCE) return { kind: 'source' };
-  if (value === SPEAKER_USER) return { kind: 'user' };
-  return { kind: 'person', personId: value.slice(SPEAKER_PERSON_PREFIX.length) };
+/** 名前だけを持つ新しいエンティティを、保存用の形で作成します。詳細は各エンティティの編集画面で後から入力します。 */
+function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
+  switch (kind) {
+    case 'person':
+      return { key: 'persons', entity: { id, name } };
+    case 'place':
+      return { key: 'places', entity: { id, name } };
+    case 'event':
+      return { key: 'events', entity: { id, title: name, participantIds: [] } };
+    case 'source':
+      return { key: 'sources', entity: { id, title: name, kind: 'other' } };
+  }
 }
 
 type ClaimFormProps = {
@@ -38,33 +68,52 @@ type ClaimFormProps = {
 };
 
 export function ClaimForm({ initial, onDone }: ClaimFormProps) {
-  const { sources, persons, places, events } = useCaseStore((state) => state.currentCase);
-  const upsert = useCaseStore((state) => state.upsert);
+  const currentCase = useCaseStore((state) => state.currentCase);
+  const upsertMany = useCaseStore((state) => state.upsertMany);
 
-  const [speakerValue, setSpeakerValue] = useState(initial ? speakerToValue(initial.speaker) : SPEAKER_SOURCE);
-  const [sourceId, setSourceId] = useState(initial?.sourceId ?? NONE);
+  const [draft, setDraft] = useState<ClaimDraft>(() =>
+    initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
+  );
+  /** このフォームで新規作成した、まだ保存していないエンティティです。 */
+  const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [locator, setLocator] = useState(initial?.locator ?? '');
-  const [content, setContent] = useState(initial?.content ?? '');
   const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
-  const [eventId, setEventId] = useState(initial?.eventId ?? NONE);
-  const [mentionedPersonIds, setMentionedPersonIds] = useState(initial?.mentionedPersonIds ?? []);
   const [when, setWhen] = useState(timeRefToDraft(initial?.when));
-  const [placeId, setPlaceId] = useState(initial?.placeId ?? NONE);
   const [assessment, setAssessment] = useState<Assessment>(initial?.assessment ?? 'unverified');
   const [error, setError] = useState<string | null>(null);
 
-  const toggleMentionedPerson = (personId: string) => {
-    setMentionedPersonIds((current) =>
-      current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId]
-    );
+  const hasDetails = Boolean(initial?.locator || initial?.statedAt || initial?.when);
+  const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
+
+  const content = draftToContent({ ...draft, text: draft.text.trim() });
+  const links = deriveClaimLinks(content);
+  const labelOf = (kind: MentionKind, id: string | undefined) =>
+    candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
+  const speakerLabel =
+    links.speaker.kind === 'person'
+      ? labelOf('person', links.speaker.personId)
+      : links.speaker.kind === 'source'
+        ? SOURCE_SPEAKER_LABEL
+        : USER_SPEAKER_LABEL;
+  const summaryItems: { term: string; description: string | undefined }[] = [
+    { term: '発言者', description: speakerLabel },
+    { term: MENTION_KIND_LABELS.source, description: labelOf('source', links.sourceId) },
+    { term: MENTION_KIND_LABELS.event, description: labelOf('event', links.eventId) },
+    { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
+    { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
+  ];
+
+  const handleCreate = (kind: MentionKind, name: string): DraftMention => {
+    const mention = { kind, id: nanoid(), label: name };
+    setPending((current) => [...current, { mention, entry: createEntry(kind, mention.id, name) }]);
+    return mention;
   };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    const speaker = valueToSpeaker(speakerValue);
-    if (speaker.kind !== 'user' && sourceId === NONE) {
-      setError('ユーザーの推測以外の主張にはソースを選択してください');
+    if (links.speaker.kind === 'person' && links.sourceId === undefined) {
+      setError('人物の証言にはソースが必要です。本文に「@ソース名」を加えてください');
       return;
     }
     const statedAtResult = draftToTimeRef(statedAt);
@@ -79,22 +128,19 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
     }
 
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-    const claim: Claim = {
-      id: initial?.id ?? nanoid(),
-      speaker,
-      content: content.trim(),
-      mentionedPersonIds,
-      assessment,
-    };
-    if (sourceId !== NONE) claim.sourceId = sourceId;
+    const claim: Claim = { id: initial?.id ?? nanoid(), content, assessment, ...links };
     if (locator.trim()) claim.locator = locator.trim();
     if (statedAtResult.value) claim.statedAt = statedAtResult.value;
-    if (eventId !== NONE) claim.eventId = eventId;
     if (whenResult.value) claim.when = whenResult.value;
-    if (placeId !== NONE) claim.placeId = placeId;
+
+    // 新規作成した後に本文から消されたエンティティは保存しない
+    const mentionedIds = new Set(
+      parseContent(content).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : []))
+    );
+    const newEntries = pending.filter((item) => mentionedIds.has(item.mention.id)).map((item) => item.entry);
 
     try {
-      upsert('claims', claim);
+      upsertMany([...newEntries, { key: 'claims', entity: claim }]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       return;
@@ -104,64 +150,49 @@ export function ClaimForm({ initial, onDone }: ClaimFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <SelectField
-        label="発言者"
-        value={speakerValue}
-        onChange={setSpeakerValue}
-        options={[
-          { value: SPEAKER_SOURCE, label: 'ソース自体の記述' },
-          ...persons.map((person) => ({ value: `${SPEAKER_PERSON_PREFIX}${person.id}`, label: person.name })),
-          { value: SPEAKER_USER, label: 'ユーザーの推測' },
-        ]}
+      <MentionTextarea
+        label="内容"
+        value={draft}
+        onChange={setDraft}
+        candidates={candidates}
+        onCreate={handleCreate}
+        required
+        placeholder="例: @隣家の住人: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。 @架空日報 朝刊"
       />
-      <div className="grid grid-cols-2 gap-2">
-        <SelectField
-          label="ソース"
-          value={sourceId}
-          onChange={setSourceId}
-          options={[{ value: NONE, label: '（なし）' }, ...sources.map((source) => ({ value: source.id, label: source.title }))]}
-        />
-        <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
-      </div>
-      <TextField label="内容" value={content} onChange={setContent} required multiline />
-      <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
-      <SelectField
-        label="対象の出来事"
-        value={eventId}
-        onChange={setEventId}
-        options={[{ value: NONE, label: '（なし）' }, ...events.map((item) => ({ value: item.id, label: item.title }))]}
-      />
-      <fieldset>
-        <legend className="mb-1 text-xs font-medium text-slate-600">言及している人物</legend>
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {persons.length === 0 && <span className="text-xs text-slate-400">人物が未登録です</span>}
-          {persons.map((person) => (
-            <label key={person.id} className="flex items-center gap-1 text-sm">
-              <input
-                type="checkbox"
-                checked={mentionedPersonIds.includes(person.id)}
-                onChange={() => toggleMentionedPerson(person.id)}
-              />
-              {person.name}
-            </label>
+      <p className="text-xs text-slate-500">
+        「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
+      </p>
+      <dl
+        aria-label="本文から読み取った参照"
+        className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
+      >
+        {summaryItems
+          .filter((item) => item.description)
+          .map((item) => (
+            <div key={item.term} className="contents">
+              <dt className="font-medium">{item.term}</dt>
+              <dd>{item.description}</dd>
+            </div>
           ))}
+      </dl>
+      <details open={hasDetails} className="rounded border border-slate-200 p-2">
+        <summary className="cursor-pointer text-xs font-medium text-slate-600">
+          詳細（日時・評価・ソース内の位置）
+        </summary>
+        <div className="mt-2 space-y-3">
+          <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
+          <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
+          <div className="grid grid-cols-2 gap-2">
+            <TextField label="ソース内の位置" value={locator} onChange={setLocator} placeholder="ページ、話数など" />
+            <SelectField
+              label="評価"
+              value={assessment}
+              onChange={(value) => setAssessment(value as Assessment)}
+              options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+          </div>
         </div>
-      </fieldset>
-      <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
-      <div className="grid grid-cols-2 gap-2">
-        <SelectField
-          label="証言が述べる場所"
-          value={placeId}
-          onChange={setPlaceId}
-          options={[{ value: NONE, label: '（なし）' }, ...places.map((place) => ({ value: place.id, label: place.name }))]}
-        />
-        <SelectField
-          label="評価"
-          value={assessment}
-          onChange={(value) => setAssessment(value as Assessment)}
-          options={Object.entries(ASSESSMENT_LABELS).map(([value, label]) => ({ value, label }))}
-        />
-      </div>
+      </details>
       <FormError message={error} />
       <SubmitButton label="主張を保存" />
     </form>

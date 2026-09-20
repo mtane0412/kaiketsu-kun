@@ -57,6 +57,22 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
+  it('本文のメンションが存在しない場所を参照している主張を拒否する', () => {
+    // 2つ目以降の場所のメンションは placeId に現れないため、本文のトークン自体を検証する必要がある
+    const データ = {
+      ...sampleFictionalCase,
+      claims: [
+        {
+          ...sampleFictionalCase.claims[3],
+          content: '持ち主は@[湖畔の別荘](place:place-villa)から@[駅](place:place-unknown)へ向かったのではないか。',
+        },
+      ],
+      relationships: [],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
+  });
+
   it('存在しない主張を根拠にしている関係を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,

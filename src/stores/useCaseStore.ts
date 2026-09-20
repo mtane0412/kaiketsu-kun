@@ -25,6 +25,9 @@ export const BACKUP_STORAGE_KEY = 'testimony-board-case-backup';
 /** 案件が持つ一覧の名前です。 */
 export type CollectionKey = 'sources' | 'persons' | 'places' | 'events' | 'claims' | 'relationships';
 
+/** 一覧の名前と、その一覧に保存する要素の組です。 */
+export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
+
 type CaseStore = {
   currentCase: Case;
   /** 保存済みデータの復元に失敗した理由です。失敗していない場合は null です。 */
@@ -33,6 +36,11 @@ type CaseStore = {
   renameCase: (name: string) => void;
   /** 同じIDの要素があれば置き換え、無ければ追加します。参照の整合性に違反する場合は例外を投げます。 */
   upsert: <K extends CollectionKey>(key: K, entity: Case[K][number]) => void;
+  /**
+   * 複数の要素をまとめて保存します。すべてを反映した状態で参照の整合性を1回だけ検証するため、
+   * 新しい人物と、その人物に言及する主張を同時に保存できます。違反がある場合は例外を投げ、どの要素も保存しません。
+   */
+  upsertMany: (entries: UpsertEntry[]) => void;
   /** 要素を削除します。他のデータから参照されている場合は例外を投げます。 */
   remove: (key: CollectionKey, id: Id) => void;
   /** 読み込んだデータを検証し、案件全体を置き換えます。検証に失敗した場合は例外を投げます。 */
@@ -63,12 +71,16 @@ export const useCaseStore = create<CaseStore>()(
 
       renameCase: (name) => set({ currentCase: { ...get().currentCase, name } }),
 
-      upsert: (key, entity) => {
-        const { currentCase } = get();
-        const items = currentCase[key] as { id: Id }[];
-        const exists = items.some((item) => item.id === entity.id);
-        const nextItems = exists ? items.map((item) => (item.id === entity.id ? entity : item)) : [...items, entity];
-        const nextCase = { ...currentCase, [key]: nextItems } as Case;
+      upsert: (key, entity) => get().upsertMany([{ key, entity } as UpsertEntry]),
+
+      upsertMany: (entries) => {
+        let nextCase = get().currentCase;
+        for (const { key, entity } of entries) {
+          const items = nextCase[key] as { id: Id }[];
+          const exists = items.some((item) => item.id === entity.id);
+          const nextItems = exists ? items.map((item) => (item.id === entity.id ? entity : item)) : [...items, entity];
+          nextCase = { ...nextCase, [key]: nextItems } as Case;
+        }
 
         const violations = findCaseViolations(nextCase);
         if (violations.length > 0) {
