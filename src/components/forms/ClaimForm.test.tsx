@@ -323,4 +323,16 @@ describe('ClaimForm のキーボード操作', () => {
       });
     });
   });
+
+  it('メンションの候補が開いているときのCtrl+Enterは、候補の確定だけを行い、保存しない', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    render(<ClaimForm onDone={onDone} />);
+
+    // 前提: 「@湖畔」で登録済みの場所「湖畔の別荘」が候補の先頭に出ている
+    await user.type(screen.getByLabelText('内容'), '@湖畔{Control>}{Enter}{/Control}');
+
+    expect(screen.getByLabelText('内容')).toHaveValue('@湖畔の別荘');
+    expect(onDone).not.toHaveBeenCalled();
+  });
 });

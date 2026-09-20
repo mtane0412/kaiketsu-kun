@@ -183,6 +183,8 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     <form
       onSubmit={handleSubmit}
       onKeyDown={(event) => {
+        // 内容欄がメンションの候補の確定などで処理済みのキー操作では、保存しない
+        if (event.defaultPrevented) return;
         // Ctrl/Command+Enter はIMEの変換確定と競合しないため、isComposing の確認は不要
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
