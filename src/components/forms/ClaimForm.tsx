@@ -123,11 +123,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const links = deriveClaimLinks(content);
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
-  const summaryItems: { term: string; description: string | undefined }[] = [
+  /** 本文から読み取れた参照です。読み取れなかった項目は含めません。 */
+  const summaryItems = [
     { term: MENTION_KIND_LABELS.event, description: labelOf('event', links.eventId) },
     { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
-  ];
+  ].filter((item) => item.description);
 
   const handleCreate = (kind: MentionKind, name: string): DraftMention => {
     const mention = { kind, id: nanoid(), label: name };
@@ -222,19 +223,19 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         <p className="text-xs text-slate-500">
           「@」で人物・場所・出来事を参照します。未登録の名前はその場で作成できます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない主張は、ユーザーの推測です。
         </p>
-        <dl
-          aria-label="本文から読み取った参照"
-          className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
-        >
-          {summaryItems
-            .filter((item) => item.description)
-            .map((item) => (
+        {summaryItems.length > 0 && (
+          <dl
+            aria-label="本文から読み取った参照"
+            className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
+          >
+            {summaryItems.map((item) => (
               <div key={item.term} className="contents">
                 <dt className="font-medium">{item.term}</dt>
                 <dd>{item.description}</dd>
               </div>
             ))}
-        </dl>
+          </dl>
+        )}
         <details open={hasDetails} className="rounded border border-slate-200 p-2">
           <summary className="cursor-pointer text-xs font-medium text-slate-600">
             詳細（日時）

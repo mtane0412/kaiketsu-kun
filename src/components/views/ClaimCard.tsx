@@ -6,7 +6,7 @@
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
  * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと主張の編集・詳細ボタンを表示します。
  */
-import type { ClaimView } from '@/domain/case-views';
+import { formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 
@@ -44,7 +44,7 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
         {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
         {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
         {view.viaPersons.length > 0 && (
-          <span className="text-slate-500">{`（${view.viaPersons.map((person) => person.name).join(' → ')} による）`}</span>
+          <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
         )}
         {view.hasTimeConflict && (
           <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と時刻が食い違う</span>

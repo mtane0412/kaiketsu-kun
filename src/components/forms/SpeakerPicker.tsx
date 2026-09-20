@@ -14,7 +14,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { USER_SPEAKER_LABEL } from '@/domain/case-views';
+import { formatViaLabel, USER_SPEAKER_LABEL } from '@/domain/case-views';
 import type { Claim, Id, Speaker } from '@/domain/types';
 
 /** 入力中の発言者と経由です。どちらも選んだ順に並びます。 */
@@ -141,8 +141,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
 
   const namesOf = (ids: Id[]) => ids.flatMap((id) => persons.find((person) => person.id === id)?.label ?? []);
   const speakerNames = namesOf(value.personIds).join('、') || `なし（${USER_SPEAKER_LABEL}）`;
-  const viaNames = namesOf(value.viaPersonIds).join(' → ');
-  const currentLabel = viaNames ? `${speakerNames}（${viaNames} による）` : speakerNames;
+  const currentLabel = `${speakerNames}${formatViaLabel(namesOf(value.viaPersonIds))}`;
 
   const toggleOpen = () => {
     if (!isOpen && toggleRef.current) {

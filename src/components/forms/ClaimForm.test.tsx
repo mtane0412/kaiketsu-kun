@@ -148,6 +148,12 @@ describe('ClaimForm', () => {
     expect(summary).not.toHaveTextContent('発言者');
   });
 
+  it('本文から読み取った参照が1つも無い間は、参照の枠を表示しない', () => {
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    expect(screen.queryByLabelText('本文から読み取った参照')).not.toBeInTheDocument();
+  });
+
   it('発言者を選ばない主張は、ユーザーの推測として保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
