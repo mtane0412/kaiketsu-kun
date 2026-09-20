@@ -7,6 +7,8 @@
  *
  * 導出の規則:
  * - 本文の先頭が人物のメンションで、その直後がコロン（: または ：）の場合、その人物が発言者です。
+ *   人物のメンションを空白または読点（、）で区切って並べた場合は、全員が発言者です。
+ *   並びの途中に文章（「と」など）を挟んだ場合は、発言者として扱いません。
  * - 発言者の人物がいない場合、ソースのメンションがあれば「ソース自体の記述」、無ければ「ユーザーの推測」です。
  * - ソース・出来事・場所は、それぞれ最初のメンションを採用します。
  * - 発言者以外の人物のメンションは、言及している人物です。
@@ -37,6 +39,8 @@ export type ClaimLinks = Pick<Claim, 'speaker' | 'sourceId' | 'eventId' | 'place
 
 const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event|source):([^)\s]+)\)/g;
 const SPEAKER_DELIMITER_PATTERN = /^\s*[:：]/;
+/** 発言者の人物を並べるときの区切り（空白と読点）だけで構成された文字列です。 */
+const SPEAKER_SEPARATOR_PATTERN = /^[\s、,，]*$/;
 
 /**
  * メンションを本文用のトークンに変換します。
@@ -92,25 +96,39 @@ export function contentToPlainText(content: string, target: Case): string {
     .join('');
 }
 
+/**
+ * 本文の先頭に並んだ発言者の人物のIDを、書かれた順に（重複を含めて）返します。発言者がいない場合は空の配列を返します。
+ * 先頭から「人物のメンション」と「区切りだけの文字列」が交互に続き、最後の人物の直後がコロンで始まる場合に限り、発言者とみなします。
+ */
+function findSpeakerPersonIds(segments: ContentSegment[]): Id[] {
+  const personIds: Id[] = [];
+  for (const segment of segments) {
+    if (segment.type === 'mention') {
+      if (segment.kind !== 'person') return [];
+      personIds.push(segment.id);
+    } else if (SPEAKER_DELIMITER_PATTERN.test(segment.text)) {
+      return personIds;
+    } else if (personIds.length === 0 || !SPEAKER_SEPARATOR_PATTERN.test(segment.text)) {
+      return [];
+    }
+  }
+  return [];
+}
+
 /** 本文のトークンから、主張の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
 export function deriveClaimLinks(content: string): ClaimLinks {
   const segments = parseContent(content);
-  const [first, second] = segments;
-  const hasSpeaker =
-    first?.type === 'mention' &&
-    first.kind === 'person' &&
-    second?.type === 'text' &&
-    SPEAKER_DELIMITER_PATTERN.test(second.text);
+  const speakerPersonIds = findSpeakerPersonIds(segments);
 
-  const mentions = segments.filter((segment) => segment.type === 'mention').slice(hasSpeaker ? 1 : 0);
+  const mentions = segments.filter((segment) => segment.type === 'mention').slice(speakerPersonIds.length);
   const firstIdOf = (kind: MentionKind) => mentions.find((mention) => mention.kind === kind)?.id;
   const sourceId = firstIdOf('source');
   const eventId = firstIdOf('event');
   const placeId = firstIdOf('place');
 
   let speaker: Speaker;
-  if (hasSpeaker) {
-    speaker = { kind: 'person', personId: first.id };
+  if (speakerPersonIds.length > 0) {
+    speaker = { kind: 'person', personIds: [...new Set(speakerPersonIds)] };
   } else {
     speaker = sourceId === undefined ? { kind: 'user' } : { kind: 'source' };
   }
@@ -176,8 +194,13 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
     return mention;
   };
 
-  if (claim.speaker.kind === 'person' && derived.speaker.kind !== 'person') {
-    text = `@${supplement('person', claim.speaker.personId).label}: ${text}`;
+  if (claim.speaker.kind === 'person') {
+    // 本文の先頭に書かれていない発言者だけを補う。本文に発言者が1人もいない場合は、コロンも補う
+    const written = derived.speaker.kind === 'person' ? derived.speaker.personIds : [];
+    const speakers = claim.speaker.personIds
+      .filter((id) => !written.includes(id))
+      .map((id) => `@${supplement('person', id).label}`);
+    if (speakers.length > 0) text = `${speakers.join(' ')}${written.length > 0 ? ' ' : ': '}${text}`;
   }
   const missing: [MentionKind, Id | undefined][] = [
     ...claim.mentionedPersonIds

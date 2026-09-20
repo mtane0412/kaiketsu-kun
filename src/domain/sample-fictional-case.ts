@@ -55,7 +55,7 @@ export const sampleFictionalCase: Case = {
     },
     {
       id: 'claim-neighbor',
-      speaker: { kind: 'person', personId: 'person-neighbor' },
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
       sourceId: 'source-newspaper',
       locator: '社会面',
       content: 
@@ -68,7 +68,7 @@ export const sampleFictionalCase: Case = {
     },
     {
       id: 'claim-caretaker',
-      speaker: { kind: 'person', personId: 'person-caretaker' },
+      speaker: { kind: 'person', personIds: ['person-caretaker'] },
       sourceId: 'source-book',
       locator: '第3章 112ページ',
       content: 

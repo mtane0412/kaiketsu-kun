@@ -85,7 +85,7 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
 
   let speakerLabel: string;
   if (claim.speaker.kind === 'person') {
-    speakerLabel = findOrThrow(target.persons, claim.speaker.personId, '人物').name;
+    speakerLabel = claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、');
   } else if (claim.speaker.kind === 'source') {
     speakerLabel = source?.title ?? 'ソース不明の記述';
   } else {
@@ -172,7 +172,7 @@ export function buildTimeline(target: Case): Timeline {
 /**
  * 証言者別ビューを組み立てます。
  * 人物（案件への登録順）、ソース自体の記述（ソースの登録順）、ユーザーの推測の順にグループを並べます。
- * 主張が1件も無い発言者のグループは作りません。
+ * 主張が1件も無い発言者のグループは作りません。複数の人物が述べた主張は、それぞれの人物のグループに入れます。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   const claimViews = target.claims.map((claim) => toClaimView(target, claim));
@@ -182,7 +182,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     kind: 'person',
     label: person.name,
     claims: claimViews.filter(
-      (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personId === person.id
+      (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personIds.includes(person.id)
     ),
   }));
 

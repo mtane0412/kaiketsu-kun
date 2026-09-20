@@ -26,6 +26,40 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(評価付きの旧データ))).toEqual(sampleFictionalCase);
   });
 
+  it('発言者を1人しか持てなかった頃のデータは、発言者を1人の一覧に変換して受け付ける', () => {
+    // 前提: 以前の版では、人物の発言者を speaker.personId（1人）で保存していた
+    const 旧データ = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.speaker.kind === 'person'
+          ? { ...claim, speaker: { kind: 'person', personId: claim.speaker.personIds[0] } }
+          : claim
+      ),
+    };
+
+    expect(parseCase(toJsonData(旧データ))).toEqual(sampleFictionalCase);
+  });
+
+  it('人物の発言者が1人もいない主張を拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      claims: [{ ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: [] } }],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
+  });
+
+  it('発言者の1人が存在しない人物である主張を拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      claims: [
+        { ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: ['person-neighbor', 'person-unknown'] } },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+  });
+
   it('必須の項目が欠けているデータを拒否する', () => {
     const 主張一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
 

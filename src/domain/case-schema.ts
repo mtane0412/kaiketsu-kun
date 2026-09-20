@@ -41,11 +41,25 @@ const timeRefSchema = z
     }
   });
 
-const speakerSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('person'), personId: idSchema }),
-  z.object({ kind: z.literal('source') }),
-  z.object({ kind: z.literal('user') }),
-]);
+/**
+ * 発言者を1人しか持てなかった頃のデータ（speaker.personId）を、現在の形（speaker.personIds）に変換します。
+ * それ以外の値は、そのまま返して後段の検証に委ねます。
+ */
+function migrateLegacySpeaker(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  if (!('personId' in value) || 'personIds' in value) return value;
+  const { personId, ...rest } = value;
+  return { ...rest, personIds: [personId] };
+}
+
+const speakerSchema = z.preprocess(
+  migrateLegacySpeaker,
+  z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('person'), personIds: z.array(idSchema).min(1) }),
+    z.object({ kind: z.literal('source') }),
+    z.object({ kind: z.literal('user') }),
+  ])
+);
 
 const caseSchema = z.object({
   id: idSchema,
@@ -139,7 +153,7 @@ export function findCaseViolations(target: Case): string[] {
   };
 
   for (const claim of target.claims) {
-    if (claim.speaker.kind === 'person') check(personIds, claim.speaker.personId, '人物');
+    if (claim.speaker.kind === 'person') claim.speaker.personIds.forEach((id) => check(personIds, id, '人物'));
     if (claim.speaker.kind !== 'user' && claim.sourceId === undefined) {
       violations.push(`ユーザーの推測以外の主張にはソースが必要です: ${claim.id}`);
     }

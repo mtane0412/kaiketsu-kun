@@ -134,7 +134,7 @@ describe('groupClaimsBySpeaker', () => {
         ...sampleFictionalCase.claims,
         {
           id: 'claim-caretaker-early',
-          speaker: { kind: 'person', personId: 'person-caretaker' },
+          speaker: { kind: 'person', personIds: ['person-caretaker'] },
           sourceId: 'source-newspaper',
           content: '持ち主とは挨拶をする程度の付き合いだった。',
           statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
@@ -146,6 +146,31 @@ describe('groupClaimsBySpeaker', () => {
     const 管理人 = groupClaimsBySpeaker(案件).find((group) => group.label === '管理人');
 
     expect(管理人?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-early', 'claim-caretaker']);
+  });
+
+  it('複数の人物が述べた主張は、それぞれの人物のグループに入れ、発言者名を全員分つなげて示す', () => {
+    // 前提: 1つの記事が、隣家の住人と管理人の2人が同じことを述べたと伝えている
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-two-speakers',
+          speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
+          sourceId: 'source-newspaper',
+          content: '持ち主は几帳面な人だった。',
+          mentionedPersonIds: ['person-owner'],
+        },
+      ],
+    };
+
+    const groups = groupClaimsBySpeaker(案件);
+    const 隣家の住人 = groups.find((group) => group.label === '隣家の住人');
+    const 管理人 = groups.find((group) => group.label === '管理人');
+
+    expect(隣家の住人?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
+    expect(管理人?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
+    expect(管理人?.claims.find((item) => item.claim.id === 'claim-two-speakers')?.speakerLabel).toBe('隣家の住人、管理人');
   });
 
   it('主張にソース名を添える', () => {

@@ -40,7 +40,7 @@ describe('ClaimForm', () => {
     await user.click(screen.getByRole('button', { name: '主張を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
-      speaker: { kind: 'person', personId: 'person-neighbor' },
+      speaker: { kind: 'person', personIds: ['person-neighbor'] },
       sourceId: 'source-newspaper',
       content:
         '@[隣家の住人](person:person-neighbor): 翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。@[持ち主が最後に目撃された](event:event-last-seen) @[架空日報 朝刊](source:source-newspaper)',
@@ -50,6 +50,26 @@ describe('ClaimForm', () => {
       when: { text: '1998-08-13', earliest: '1998-08-13' },
     });
     expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  it('先頭に人物を並べてコロンを書くと、全員を発言者として保存し、読み取った発言者を全員分示す', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await typeAndChoose(user, '@隣家', '人物 隣家の住人');
+    await typeAndChoose(user, ' @管理', '人物 管理人');
+    await typeAndChoose(user, ': 持ち主は几帳面な人だった。 @架空日報', 'ソース 架空日報 朝刊');
+
+    const 読み取った参照 = screen.getByLabelText('本文から読み取った参照');
+    expect(読み取った参照).toHaveTextContent('発言者隣家の住人、管理人');
+
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    expect(lastSavedClaim()).toMatchObject({
+      speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
+      sourceId: 'source-newspaper',
+      mentionedPersonIds: [],
+    });
   });
 
   it('別名でも候補を絞り込める', async () => {
@@ -77,7 +97,7 @@ describe('ClaimForm', () => {
     const 手記 = sources.find((source) => source.title === '配達員の手記');
     expect(手記).toMatchObject({ kind: 'other' });
     expect(lastSavedClaim()).toMatchObject({
-      speaker: { kind: 'person', personId: 郵便配達員?.id },
+      speaker: { kind: 'person', personIds: [郵便配達員?.id] },
       placeId: 湖畔駅?.id,
       sourceId: 手記?.id,
     });

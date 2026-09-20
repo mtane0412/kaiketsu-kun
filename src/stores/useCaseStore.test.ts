@@ -8,7 +8,7 @@ import { BACKUP_STORAGE_KEY, STORAGE_KEY, useCaseStore } from './useCaseStore';
 
 const 新しい証言: Claim = {
   id: 'claim-postman',
-  speaker: { kind: 'person', personId: 'person-neighbor' },
+  speaker: { kind: 'person', personIds: ['person-neighbor'] },
   sourceId: 'source-newspaper',
   content: '翌朝、別荘の郵便受けに新聞が残ったままだった。',
   mentionedPersonIds: ['person-owner'],

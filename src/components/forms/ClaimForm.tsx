@@ -121,7 +121,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
   const speakerLabel =
     links.speaker.kind === 'person'
-      ? labelOf('person', links.speaker.personId)
+      ? links.speaker.personIds.map((id) => labelOf('person', id)).join('、')
       : links.speaker.kind === 'source'
         ? SOURCE_SPEAKER_LABEL
         : USER_SPEAKER_LABEL;
@@ -210,7 +210,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       {!compact && (
         <>
         <p className="text-xs text-slate-500">
-          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。
+          「@」で人物・場所・出来事・ソースを参照します。未登録の名前はその場で作成できます。先頭を「@人物:」にすると、その人物の証言になります。複数人が同じことを述べた場合は「@人物 @人物:」と並べます。
         </p>
         <dl
           aria-label="本文から読み取った参照"
