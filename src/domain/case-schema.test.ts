@@ -226,6 +226,28 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
   });
 
+  it('メモのメンションが存在しない人物を参照している場所を拒否する', () => {
+    // 前提: 人物・場所のメモも、証言の本文と同じ形式のメンションを含められる
+    const データ = {
+      ...sampleFictionalCase,
+      places: [{ id: 'place-villa', name: '湖畔の別荘', note: '@[前の持ち主](person:person-unknown)から買い取った。' }],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+  });
+
+  it('メモのメンションが存在しない場所を参照している人物を拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      persons: [
+        ...sampleFictionalCase.persons,
+        { id: 'person-gardener', name: '庭師', note: '@[隣町の造園店](place:place-unknown)に勤めている。' },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
+  });
+
   it('存在しない証言を根拠にしている関係を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,

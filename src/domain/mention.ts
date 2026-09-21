@@ -1,9 +1,10 @@
 /**
- * メンション（証言の本文中の @ によるエンティティ参照）
+ * メンション（文章中の @ によるエンティティ参照）
  *
- * 証言の本文（Claim.content）は、人物・場所への参照を
+ * 証言の本文（Claim.content）と、人物・場所のメモ（Person.note・Place.note）は、人物・場所への参照を
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
- * Claim の placeId・mentionedPersonIds は、このトークンから導出します。
+ * メモのメンションは、エンティティ同士の関連（case-views.ts の findRelatedEntities）の元になります。
+ * Claim の placeId・mentionedPersonIds は、本文のトークンから導出します。
  * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
  * 導出の規則:
@@ -15,6 +16,7 @@
  *
  * 入力欄（textarea）では、トークンの代わりに `@表示名` の素の文字列を表示します。
  * この入力欄の状態を「下書き（ClaimDraft）」と呼び、保存時に draftToContent で本文に変換します。
+ * 注意: 下書きの型は名前に Claim を含みますが、メモの入力欄でも同じ型を使用します。
  */
 import type { Case, Claim, Id, Speaker } from './types';
 
@@ -174,6 +176,17 @@ export function draftToContent(draft: ClaimDraft): string {
 }
 
 /**
+ * メンションを含む保存済みの文章（証言の本文、エンティティのメモ）を下書きに変換します。
+ * メンションの表示名は、エンティティの現在の名前に更新します。
+ */
+export function contentToDraft(content: string, target: Case): ClaimDraft {
+  const mentions: DraftMention[] = resolveContent(content, target)
+    .filter((segment) => segment.type === 'mention')
+    .map(({ kind, id, label }) => ({ kind, id, label }));
+  return { text: contentToPlainText(content, target), mentions };
+}
+
+/**
  * 保存済みの証言を下書きに変換します。
  *
  * メンション導入前に保存された証言は、参照を項目（placeId など）にだけ持ち、本文にトークンを持ちません。
@@ -181,11 +194,9 @@ export function draftToContent(draft: ClaimDraft): string {
  * 発言者と経由は入力欄の「発言者」で扱うため、本文には補いません。
  */
 export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
-  const segments = resolveContent(claim.content, target);
-  const mentions: DraftMention[] = segments
-    .filter((segment) => segment.type === 'mention')
-    .map(({ kind, id, label }) => ({ kind, id, label }));
-  let text = contentToPlainText(claim.content, target);
+  const draft = contentToDraft(claim.content, target);
+  const mentions = [...draft.mentions];
+  let text = draft.text;
 
   const derived = deriveClaimLinks(claim.content);
   const missing: [MentionKind, Id | undefined][] = [

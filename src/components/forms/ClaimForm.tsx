@@ -34,34 +34,12 @@ import {
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
 import { timelineKeyOf } from '@/domain/timeline-order';
-import type { Case, Claim } from '@/domain/types';
+import type { Claim } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
-import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
+import { caseToCandidates, createEntry } from './mention-entries';
+import { MentionTextarea } from './MentionTextarea';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
-
-/** 案件に登録済みのエンティティを、メンションの候補に変換します。 */
-function caseToCandidates(target: Case): MentionCandidate[] {
-  return [
-    ...target.persons.map((person) => ({
-      kind: 'person' as const,
-      id: person.id,
-      label: person.name,
-      keywords: person.aliases,
-    })),
-    ...target.places.map((place) => ({ kind: 'place' as const, id: place.id, label: place.name })),
-  ];
-}
-
-/** 名前だけを持つ新しいエンティティを、保存用の形で作成します。詳細は各エンティティの編集画面で後から入力します。 */
-function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
-  switch (kind) {
-    case 'person':
-      return { key: 'persons', entity: { id, name } };
-    case 'place':
-      return { key: 'places', entity: { id, name } };
-  }
-}
 
 /**
  * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。

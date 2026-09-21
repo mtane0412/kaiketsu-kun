@@ -2,7 +2,7 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildTimeline, groupClaimsBySpeaker } from './case-views';
+import { buildTimeline, findRelatedEntities, groupClaimsBySpeaker } from './case-views';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
@@ -147,5 +147,80 @@ describe('人物の画像', () => {
 
     expect(groups.find((group) => group.key === 'person:person-neighbor')?.imageDataUrl).toBe(住人の画像);
     expect(groups.find((group) => group.key === 'user')?.imageDataUrl).toBeUndefined();
+  });
+});
+
+describe('findRelatedEntities', () => {
+  /** 持ち主のメモが管理人と別荘に触れ、隣家の住人のメモが持ち主に触れている案件です。 */
+  const メモで関連付けた案件: Case = {
+    ...sampleFictionalCase,
+    persons: sampleFictionalCase.persons.map((person) => {
+      if (person.id === 'person-owner') {
+        return {
+          ...person,
+          note: '@[管理人](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。',
+        };
+      }
+      if (person.id === 'person-neighbor') {
+        return { ...person, note: '@[別荘の持ち主](person:person-owner)とは20年来の付き合い。' };
+      }
+      return person;
+    }),
+  };
+
+  it('メモで言及しているエンティティと、メモで言及されているエンティティを、人物・場所の登録順に返す', () => {
+    const related = findRelatedEntities(メモで関連付けた案件, 'person', 'person-owner');
+
+    expect(related).toEqual([
+      { kind: 'person', id: 'person-neighbor', name: '隣家の住人', mentions: false, mentionedBy: true },
+      { kind: 'person', id: 'person-caretaker', name: '管理人', mentions: true, mentionedBy: false },
+      { kind: 'place', id: 'place-villa', name: '湖畔の別荘', mentions: true, mentionedBy: false },
+    ]);
+  });
+
+  it('メモを持たないエンティティも、他のエンティティのメモで言及されていれば関連として返す', () => {
+    // 前提: 別荘（場所）にはメモが無いが、持ち主のメモが別荘に触れている
+    const related = findRelatedEntities(メモで関連付けた案件, 'place', 'place-villa');
+
+    expect(related).toEqual([
+      { kind: 'person', id: 'person-owner', name: '別荘の持ち主', mentions: false, mentionedBy: true },
+    ]);
+  });
+
+  it('互いのメモで言及し合っているエンティティは、1件にまとめる', () => {
+    const 案件: Case = {
+      ...メモで関連付けた案件,
+      persons: メモで関連付けた案件.persons.map((person) =>
+        person.id === 'person-caretaker' ? { ...person, note: '@[別荘の持ち主](person:person-owner)に雇われていた。' } : person
+      ),
+    };
+
+    const 管理人との関連 = findRelatedEntities(案件, 'person', 'person-owner').find((item) => item.id === 'person-caretaker');
+
+    expect(管理人との関連).toMatchObject({ mentions: true, mentionedBy: true });
+  });
+
+  it('画像が登録されているエンティティには、画像を載せる', () => {
+    const 画像 = 'data:image/png;base64,AAAA';
+    const 案件: Case = { ...メモで関連付けた案件, places: [{ id: 'place-villa', name: '湖畔の別荘', imageDataUrl: 画像 }] };
+
+    const 別荘との関連 = findRelatedEntities(案件, 'person', 'person-owner').find((item) => item.id === 'place-villa');
+
+    expect(別荘との関連?.imageDataUrl).toBe(画像);
+  });
+
+  it('自分自身へのメンションは、関連に含めない', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner' ? { ...person, note: '@[別荘の持ち主](person:person-owner)は本人である。' } : person
+      ),
+    };
+
+    expect(findRelatedEntities(案件, 'person', 'person-owner')).toEqual([]);
+  });
+
+  it('どのメモにも現れないエンティティは、関連が無い', () => {
+    expect(findRelatedEntities(メモで関連付けた案件, 'person', 'person-police')).toEqual([]);
   });
 });

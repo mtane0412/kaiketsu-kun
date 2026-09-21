@@ -12,11 +12,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { BACKUP_STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
 import { CaseToolbar } from './CaseToolbar';
-import { EntryPanel, type EntryKey } from './EntryPanel';
+import { ENTRY_KEY_BY_MENTION_KIND, EntryPanel, type EntryKey } from './EntryPanel';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
 
@@ -28,12 +27,6 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 const PANEL_LABEL = '登録済みの一覧';
-
-/** メンションの種類に対応する、登録済みの一覧の種類です。 */
-const ENTRY_KEY_BY_MENTION_KIND: Record<MentionKind, EntryKey> = {
-  person: 'persons',
-  place: 'places',
-};
 
 /** 右側のパネルの状態です。entity が null の場合は、編集対象を決めずに一覧を開いています。 */
 type PanelState = { entity: { key: EntryKey; id: Id } | null };

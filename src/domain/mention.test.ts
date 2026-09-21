@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   claimToDraft,
+  contentToDraft,
   contentToPlainText,
   deriveClaimLinks,
   draftToContent,
@@ -176,6 +177,24 @@ describe('claimToDraft', () => {
       placeId: 旧形式の証言.placeId,
       mentionedPersonIds: 旧形式の証言.mentionedPersonIds,
     });
+  });
+});
+
+describe('contentToDraft', () => {
+  it('メンションを含む文章（エンティティのメモなど）を、現在の名前の下書きに変換する', () => {
+    // 前提: トークンに控えた表示名「管理人さん」は古く、エンティティの現在の名前は「管理人」である
+    const メモ = '@[管理人さん](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。';
+
+    const draft = contentToDraft(メモ, sampleFictionalCase);
+
+    expect(draft).toEqual({
+      text: '@管理人を雇い、@湖畔の別荘の手入れを任せていた。',
+      mentions: [管理人, 別荘],
+    });
+  });
+
+  it('メンションを含まない文章は、そのままの文字列の下書きになる', () => {
+    expect(contentToDraft('組織です。', sampleFictionalCase)).toEqual({ text: '組織です。', mentions: [] });
   });
 });
 

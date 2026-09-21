@@ -333,3 +333,151 @@ describe('EntryPanel（エンティティの画像）', () => {
     expect(screen.queryByRole('img', { name: '登録する画像' })).not.toBeInTheDocument();
   });
 });
+
+describe('EntryPanel（メモのメンションと、関連するエンティティ）', () => {
+  /** メモ欄に文字列を入力し、表示された候補から名前が一致するものを選びます。 */
+  async function typeNoteAndChoose(user: ReturnType<typeof userEvent.setup>, text: string, optionName: string) {
+    await user.type(screen.getByLabelText('メモ'), text);
+    await user.click(screen.getByRole('option', { name: optionName }));
+  }
+
+  /** 持ち主のメモが管理人と別荘に触れている案件を読み込みます。 */
+  function loadCaseWithOwnerNote() {
+    useCaseStore.getState().replaceCase({
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner'
+          ? {
+              ...person,
+              note: '@[管理人さん](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。',
+            }
+          : person
+      ),
+    });
+  }
+
+  it('人物のメモで「@」から登録済みのエンティティを選ぶと、メンションとして保存する', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    await typeNoteAndChoose(user, '@湖畔', '場所 湖畔の別荘');
+    await user.type(screen.getByLabelText('メモ'), 'の鍵を預かっていた。');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    const 管理人 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-caretaker');
+    expect(管理人?.note).toBe('@[湖畔の別荘](place:place-villa)の鍵を預かっていた。');
+  });
+
+  it('場所のメモでも、メンションを保存できる', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
+
+    await typeNoteAndChoose(user, '@持ち主', '人物 別荘の持ち主');
+    await user.type(screen.getByLabelText('メモ'), 'が1990年に建てた。');
+    await user.click(screen.getByRole('button', { name: '場所を保存' }));
+
+    expect(useCaseStore.getState().currentCase.places[0]?.note).toBe(
+      '@[別荘の持ち主](person:person-owner)が1990年に建てた。'
+    );
+  });
+
+  it('メモで未登録の名前を新規作成すると、編集中のエンティティと同時に保存する', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    await typeNoteAndChoose(user, '@湖畔駅', '「湖畔駅」を場所として新規作成');
+    await user.type(screen.getByLabelText('メモ'), 'の近くに住んでいる。');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    const { persons, places } = useCaseStore.getState().currentCase;
+    const 湖畔駅 = places.find((place) => place.name === '湖畔駅');
+    expect(湖畔駅).toBeDefined();
+    expect(persons.find((person) => person.id === 'person-caretaker')?.note).toBe(
+      `@[湖畔駅](place:${湖畔駅?.id})の近くに住んでいる。`
+    );
+  });
+
+  it('新規作成した名前をメモから消した場合は、そのエンティティを保存しない', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    await typeNoteAndChoose(user, '@湖畔駅', '「湖畔駅」を場所として新規作成');
+    await user.clear(screen.getByLabelText('メモ'));
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(useCaseStore.getState().currentCase.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
+  });
+
+  it('編集を開くと、メモのメンションをエンティティの現在の名前で表示し、そのまま保存してもメンションを保つ', async () => {
+    // 前提: トークンに控えた表示名「管理人さん」は古く、エンティティの現在の名前は「管理人」である
+    loadCaseWithOwnerNote();
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-owner' }} />);
+
+    expect(screen.getByLabelText('メモ')).toHaveValue('@管理人を雇い、@湖畔の別荘の手入れを任せていた。');
+
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    const 持ち主 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-owner');
+    expect(持ち主?.note).toBe(
+      '@[管理人](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。'
+    );
+  });
+
+  it('メモの候補に、編集中のエンティティ自身は出さない', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    await user.type(screen.getByLabelText('メモ'), '@管理');
+
+    expect(screen.queryByRole('option', { name: '人物 管理人' })).not.toBeInTheDocument();
+  });
+
+  it('編集中のエンティティに関連するエンティティを、種類と関連の向きを添えて一覧に表示する', () => {
+    loadCaseWithOwnerNote();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-caretaker' }} />);
+
+    const 関連 = within(screen.getByRole('list', { name: '関連するエンティティ' })).getAllByRole('listitem');
+
+    // 管理人のメモには何も書かれていないが、持ち主のメモが管理人に触れている
+    expect(関連).toHaveLength(1);
+    expect(関連[0]).toHaveTextContent('人物');
+    expect(関連[0]).toHaveTextContent('別荘の持ち主');
+    expect(関連[0]).toHaveTextContent('メモで言及されています');
+  });
+
+  it('関連するエンティティを選ぶと、そのエンティティの編集に切り替える', async () => {
+    loadCaseWithOwnerNote();
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-owner' }} />);
+
+    await user.click(screen.getByRole('button', { name: /湖畔の別荘/ }));
+
+    expect(screen.getByRole('tab', { name: /場所/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '場所を編集' })).toBeInTheDocument();
+    expect(screen.getByLabelText('名前')).toHaveValue('湖畔の別荘');
+    // 別荘から見ると、持ち主が関連するエンティティになる
+    expect(
+      within(screen.getByRole('list', { name: '関連するエンティティ' })).getByRole('button', { name: /別荘の持ち主/ })
+    ).toBeInTheDocument();
+  });
+
+  it('関連するエンティティが無い場合は、メモの「@」で関連付けられることを案内する', () => {
+    render(<EntryPanel initial={{ key: 'persons', id: 'person-police' }} />);
+
+    expect(screen.getByRole('heading', { name: '関連するエンティティ' })).toBeInTheDocument();
+    expect(screen.getByText('メモで「@」を入力すると、他の人物・場所と関連付けられます。')).toBeInTheDocument();
+  });
+
+  it('新規登録と証言の編集では、関連するエンティティの領域を表示しない', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    expect(screen.queryByRole('heading', { name: '関連するエンティティ' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /証言/ }));
+    await user.click(screen.getAllByRole('button', { name: /を編集$/ })[0]!);
+
+    expect(screen.queryByRole('heading', { name: '関連するエンティティ' })).not.toBeInTheDocument();
+  });
+});
