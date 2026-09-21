@@ -9,6 +9,8 @@
  * 注意:
  * - 保存データの検証は parseCase が行います。検証に失敗したデータは、黙って捨てずに退避用のキーへ移し、呼び出し元へ例外で伝えます。
  * - LocalStorage はブラウザにしか無いため、この関数群はブラウザ側（クライアントコンポーネント・useEffect の中）からのみ呼び出してください。
+ * - キーの接頭辞 `testimony-board-` は、アプリ名を Caseboard に改めた後も変えていません。
+ *   キーを変えると、すでに保存済みのケースが読めなくなるためです。
  */
 import { nanoid } from 'nanoid';
 import { parseCase } from '@/domain/case-schema';
