@@ -104,6 +104,23 @@ describe('TimelineView', () => {
     expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
   });
 
+  it('つまみは、環境のフォントに左右される文字ではなく、アイコンで描く', () => {
+    // 前提: 以前のつまみは点字の記号（⠿ U+283F）1文字だったため、表示される形が環境のフォントに左右されていた
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const つまみ = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    expect(つまみ.querySelector('svg')).toBeInTheDocument();
+    expect(つまみ).not.toHaveTextContent('⠿');
+  });
+
+  it('つまみにカーソルを乗せると、マウスとキーボードの両方の動かし方が分かる', () => {
+    // 検証: 読み上げにしか届かない aria-label とは別に、マウスの利用者にも操作方法を示す
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const つまみ = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    expect(つまみ).toHaveAttribute('title', 'ドラッグ、またはスペースキーを押してから矢印キーで動かします');
+  });
+
   it('見出しのある証言は、見出しを表示し、本文は折りたたんで示す', () => {
     // 前提: 長い本文に、要約としての見出しを付けている
     const ケース: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };

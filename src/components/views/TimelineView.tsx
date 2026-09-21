@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus } from 'lucide-react';
+import { GripVertical, Plus } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import { formatTimeRef } from '@/domain/time-ref';
@@ -42,6 +42,12 @@ import { ClaimCard } from './ClaimCard';
 
 const DRAG_INSTRUCTIONS =
   '項目を動かすには、スペースキーで持ち上げ、上下の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
+
+/**
+ * つまみにカーソルを乗せたときに出る案内です。
+ * 読み上げには DRAG_INSTRUCTIONS が届きますが、マウスの利用者には届かないため、つまみの title で同じことを短く示します。
+ */
+const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから矢印キーで動かします';
 
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
@@ -68,7 +74,7 @@ function SortableItem({ id, label, dimmed, children }: { id: TimelineKey; label:
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`flex items-start gap-2 ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
+      className={`group flex items-start gap-2 ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
     >
       <button
         type="button"
@@ -76,9 +82,10 @@ function SortableItem({ id, label, dimmed, children }: { id: TimelineKey; label:
         {...attributes}
         {...listeners}
         aria-label={`「${label}」を動かす`}
-        className="mt-0.5 cursor-grab touch-none rounded px-0.5 text-muted-foreground/40 hover:bg-accent hover:text-foreground active:cursor-grabbing"
+        title={DRAG_HINT}
+        className="mt-0.5 cursor-grab touch-none rounded p-1 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
       >
-        <span aria-hidden="true">⠿</span>
+        <GripVertical className="size-4" aria-hidden="true" />
       </button>
       <div className="min-w-0 flex-1">{children}</div>
     </li>
