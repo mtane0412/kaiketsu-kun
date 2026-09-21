@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { buildMapTrail, groupStopsByPlace, type MapPin, type UnmappedReason } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
+import { claimHref } from '../routes';
 import { ClaimCard } from './ClaimCard';
 
 /** 地図の高さです。読み込み中の表示にも同じ高さを確保し、読み込みの前後で画面が動かないようにします。 */
@@ -84,7 +85,12 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
             </p>
           </div>
           <ul aria-label="選択中の証言">
-            <ClaimCard view={activeStop.view} showSpeaker onOpenEntity={onOpenEntity} />
+            <ClaimCard
+              view={activeStop.view}
+              showSpeaker
+              onOpenEntity={onOpenEntity}
+              href={claimHref(activeStop.view.claim.id, 'map')}
+            />
           </ul>
         </section>
       ) : (
@@ -106,7 +112,13 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
                 <h4 className="mb-1 text-xs font-medium text-slate-600">{label}</h4>
                 <ul aria-label={label} className="space-y-2">
                   {items.map((item) => (
-                    <ClaimCard key={item.view.claim.id} view={item.view} showSpeaker onOpenEntity={onOpenEntity} />
+                    <ClaimCard
+                      key={item.view.claim.id}
+                      view={item.view}
+                      showSpeaker
+                      onOpenEntity={onOpenEntity}
+                      href={claimHref(item.view.claim.id, 'map')}
+                    />
                   ))}
                 </ul>
               </div>

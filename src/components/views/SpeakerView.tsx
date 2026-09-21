@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { groupClaimsBySpeaker } from '@/domain/case-views';
 import type { Case } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
+import { claimHref } from '../routes';
 import { ClaimCard } from './ClaimCard';
 
 const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
@@ -32,7 +33,7 @@ export function SpeakerView({ target }: { target: Case }) {
           </h3>
           <ul className="space-y-2">
             {group.claims.map((view) => (
-              <ClaimCard key={view.claim.id} view={view} showSpeaker={false} />
+              <ClaimCard key={view.claim.id} view={view} showSpeaker={false} href={claimHref(view.claim.id, 'speaker')} />
             ))}
           </ul>
         </section>

@@ -1,8 +1,11 @@
 /**
  * ルートレイアウト
+ *
+ * 案件のデータはブラウザ内にのみ保存するため、すべてのページを、保存データの復元を待つ枠（CaseStoreGate）の中に描画します。
  */
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { CaseStoreGate } from '@/components/CaseStoreGate';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -13,7 +16,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">{children}</body>
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        <CaseStoreGate>{children}</CaseStoreGate>
+      </body>
     </html>
   );
 }

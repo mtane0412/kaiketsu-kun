@@ -1,34 +1,30 @@
 /**
  * ボード全体
  *
- * ブラウザに保存済みの案件を復元したうえで、ツールバーと、時系列のボード（ホワイトボード）を表示します。
+ * ツールバーと、時系列のボード（ホワイトボード）を表示します。
  * タブで、証言者別の表示と、時系列を地図上でたどる表示に切り替えられます。
+ * タブはURLのクエリ（?tab=）に持たせます（src/components/routes.ts を参照）。
  * 入力はボードへの書き足しに一本化しており、入力専用の画面は持ちません。
- * エンティティの編集は、ボード上のメンション、または「登録済みの一覧」から、
+ * 証言の編集は、証言のカードから開く詳細ページ（ClaimDetail）で行います。
+ * 人物・場所の編集は、ボード上のメンション、または「登録済みの一覧」から、
  * 画面の右側のパネル（EntryPanel）に開きます。
  *
- * 注意: ストアは skipHydration を有効にしているため、このコンポーネントがマウント時に復元を実行します。
- * 復元が終わるまでは、空の案件が一瞬表示されて保存データを上書きすることを避けるため、何も描画しません。
+ * 注意: 保存済みの案件の復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
+ * useSearchParams を使うため、ページでは Suspense の中に置いてください。
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
-import { BACKUP_STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
+import { useCaseStore } from '@/stores/useCaseStore';
 import { CaseToolbar } from './CaseToolbar';
 import { ENTRY_KEY_BY_MENTION_KIND, EntryPanel, type EntryKey } from './EntryPanel';
+import { boardHref, parseTab, TAB_SEARCH_PARAM, TABS } from './routes';
 import { MapView } from './views/MapView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
-
-const TABS = [
-  { key: 'timeline', label: '時系列' },
-  { key: 'speaker', label: '証言者別' },
-  { key: 'map', label: '地図' },
-] as const;
-
-type TabKey = (typeof TABS)[number]['key'];
 
 const PANEL_LABEL = '登録済みの一覧';
 
@@ -42,37 +38,13 @@ function panelStateOfMention(kind: MentionKind, id: Id): PanelState {
 
 export function CaseBoard() {
   const currentCase = useCaseStore((state) => state.currentCase);
-  const loadError = useCaseStore((state) => state.loadError);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('timeline');
+  const router = useRouter();
+  const activeTab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const [panel, setPanel] = useState<PanelState | null>(null);
-
-  useEffect(() => {
-    let isActive = true;
-    Promise.resolve(useCaseStore.persist.rehydrate()).then(() => {
-      if (isActive) setIsHydrated(true);
-    });
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  if (!isHydrated) return null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       <CaseToolbar />
-
-      {loadError && (
-        <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          <p className="font-semibold">保存済みの案件を復元できませんでした</p>
-          <p className="mt-1">
-            保存されていたデータは、ブラウザのLocalStorageのキー <code>{BACKUP_STORAGE_KEY}</code> に退避しました。
-            データモデルの変更が原因の場合は、退避したデータを変換して「JSONを読み込む」から読み込んでください。
-          </p>
-          <pre className="mt-2 whitespace-pre-wrap text-xs">{loadError}</pre>
-        </div>
-      )}
 
       <div className="flex items-end justify-between border-b border-slate-200">
         <div role="tablist" aria-label="表示の切り替え" className="flex gap-1">
@@ -82,7 +54,8 @@ export function CaseBoard() {
               type="button"
               role="tab"
               aria-selected={tab.key === activeTab}
-              onClick={() => setActiveTab(tab.key)}
+              // タブの切り替えは履歴に積まない（詳細ページから「戻る」で、最後に見ていたタブに戻るため）
+              onClick={() => router.replace(boardHref(tab.key), { scroll: false })}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                 tab.key === activeTab
                   ? 'border-sky-600 text-sky-700'
@@ -107,7 +80,6 @@ export function CaseBoard() {
           <TimelineView
             target={currentCase}
             onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))}
-            onOpenClaimDetails={(id) => setPanel({ entity: { key: 'claims', id } })}
           />
         )}
         {activeTab === 'speaker' && <SpeakerView target={currentCase} />}

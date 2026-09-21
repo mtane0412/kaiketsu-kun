@@ -543,6 +543,21 @@ describe('ClaimForm のキーボード操作', () => {
     expect(onDone).toHaveBeenCalledOnce();
   });
 
+  describe('日時の欄を開いた表示（expandDetails）', () => {
+    it('日時が未入力でも、「詳細（日時）」を開いた状態で表示する', () => {
+      // 前提: 証言の詳細ページでは、日時の欄を探さずに入力できるよう、最初から開いておく
+      render(<ClaimForm expandDetails onDone={vi.fn()} />);
+
+      expect(screen.getByText('詳細（日時）').closest('details')).toHaveAttribute('open');
+    });
+
+    it('指定しない場合、日時が未入力の証言では「詳細（日時）」を閉じておく', () => {
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      expect(screen.getByText('詳細（日時）').closest('details')).not.toHaveAttribute('open');
+    });
+  });
+
   describe('ボード上の簡易表示（compact）', () => {
     it('本文の1欄と投稿ボタンだけを表示し、日時・ソース内の位置の入力欄を表示しない', () => {
       render(<ClaimForm compact onDone={vi.fn()} />);

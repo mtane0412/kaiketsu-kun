@@ -2,7 +2,14 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildMapTrail, buildTimeline, findRelatedEntities, groupClaimsBySpeaker, groupStopsByPlace } from './case-views';
+import {
+  buildClaimDetail,
+  buildMapTrail,
+  buildTimeline,
+  findRelatedEntities,
+  groupClaimsBySpeaker,
+  groupStopsByPlace,
+} from './case-views';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
@@ -308,5 +315,49 @@ describe('groupStopsByPlace', () => {
       ['県道の交差点', [2]],
     ]);
     expect(pins[1]?.coordinates).toEqual({ latitude: 35.51, longitude: 138.76 });
+  });
+});
+
+describe('buildClaimDetail', () => {
+  // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
+
+  it('証言の参照先を解決し、時系列の並び順での前後の証言を返す', () => {
+    const detail = buildClaimDetail(sampleFictionalCase, 'claim-neighbor');
+
+    expect(detail?.view.speakerLabel).toBe('隣家の住人');
+    expect(detail?.previous?.claim.id).toBe('claim-police-camera');
+    expect(detail?.next?.claim.id).toBe('claim-report');
+  });
+
+  it('時系列の先頭の証言には前の証言が無く、末尾の証言には次の証言が無い', () => {
+    expect(buildClaimDetail(sampleFictionalCase, 'claim-caretaker')?.previous).toBeUndefined();
+    expect(buildClaimDetail(sampleFictionalCase, 'claim-user-guess')?.next).toBeUndefined();
+  });
+
+  it('この証言が触れている人物・場所ごとに、同じ人物・場所に触れている他の証言を、時系列の並び順でまとめる', () => {
+    // 前提: 隣家の住人の証言は、発言者が隣家の住人で、架空日報 朝刊を経由し、本文で別荘の持ち主と湖畔の別荘に触れている
+    const detail = buildClaimDetail(sampleFictionalCase, 'claim-neighbor');
+
+    // 検証: 発言者・経由した人物・言及している人物・場所の順に並び、この証言自身は含めない
+    expect(detail?.relatedClaimGroups.map((group) => [group.kind, group.label, group.claims.map((view) => view.claim.id)])).toEqual([
+      ['person', '隣家の住人', ['claim-user-guess']],
+      ['person', '架空日報 朝刊', ['claim-police-camera', 'claim-report']],
+      ['person', '別荘の持ち主', ['claim-caretaker', 'claim-police-camera', 'claim-report', 'claim-user-guess']],
+      ['place', '湖畔の別荘', ['claim-caretaker']],
+    ]);
+  });
+
+  it('経由した人物に触れている他の証言もまとめ、他の証言が無い人物・場所のグループは作らない', () => {
+    // 前提: 防犯カメラの記録は「県警 → 架空日報 朝刊」を経由している。架空日報 朝刊は別の証言の発言者でもあるが、県警に触れる証言は他に無い
+    const detail = buildClaimDetail(sampleFictionalCase, 'claim-police-camera');
+
+    const labels = detail?.relatedClaimGroups.map((group) => group.label);
+    expect(labels).toContain('架空日報 朝刊');
+    expect(labels).not.toContain('県警');
+    expect(labels).not.toContain('県道の防犯カメラ');
+  });
+
+  it('案件に無い証言のIDを渡すと undefined を返す（URLの直接入力で、削除済みの証言を開いた場合）', () => {
+    expect(buildClaimDetail(sampleFictionalCase, 'claim-deleted')).toBeUndefined();
   });
 });

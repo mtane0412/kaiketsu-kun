@@ -1,22 +1,38 @@
 /**
- * ボード全体（保存データの復元・タブ切り替え・復元失敗の表示）のテスト
+ * ボード全体（タブ切り替え・証言の詳細ページへの導線・エンティティのパネル）のテスト
+ *
+ * 保存データの復元は CaseStoreGate が担うため、実際の画面と同じく CaseStoreGate の中に描画します。
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
+import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { CaseBoard } from './CaseBoard';
+import { CaseStoreGate } from './CaseStoreGate';
+
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+/** サンプルの案件を保存済みの状態にして、ボードを描画します。 */
+function renderBoard() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
+  render(
+    <CaseStoreGate>
+      <CaseBoard />
+    </CaseStoreGate>
+  );
+}
 
 beforeEach(() => {
   useCaseStore.getState().resetCase();
+  resetMockNavigation();
 });
 
 describe('CaseBoard', () => {
   it('保存済みの案件を復元して時系列のボードを最初に表示し、証言者別に切り替えられる', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
-    render(<CaseBoard />);
+    renderBoard();
 
     expect(await screen.findByDisplayValue('湖畔の別荘失踪事件（架空）')).toBeInTheDocument();
     expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/夜9時ごろ、/)).toBeInTheDocument();
@@ -25,12 +41,21 @@ describe('CaseBoard', () => {
 
     await user.click(screen.getByRole('tab', { name: '証言者別' }));
     expect(screen.getByRole('region', { name: '隣家の住人' })).toBeInTheDocument();
+    // 検証: 詳細ページからブラウザの「戻る」で同じタブに戻れるよう、タブはURLに持たせる
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/?tab=speaker', { scroll: false });
+  });
+
+  it('URLに tab=map を指定して開くと、地図のタブを最初に表示する', async () => {
+    resetMockNavigation('/?tab=map');
+    renderBoard();
+
+    expect(await screen.findByRole('tab', { name: '地図' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
   });
 
   it('「地図」に切り替えると地図ビューを表示し、証言のメンションからエンティティの編集を開ける', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
-    render(<CaseBoard />);
+    renderBoard();
 
     await user.click(await screen.findByRole('tab', { name: '地図' }));
 
@@ -44,8 +69,7 @@ describe('CaseBoard', () => {
 
   it('ボード上のメンションを選ぶと、そのエンティティの編集をパネルに開き、閉じられる', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
-    render(<CaseBoard />);
+    renderBoard();
 
     const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
     await user.click(within(隣家の証言).getByRole('button', { name: '@湖畔の別荘' }));
@@ -58,36 +82,31 @@ describe('CaseBoard', () => {
     expect(screen.queryByRole('complementary', { name: '登録済みの一覧' })).not.toBeInTheDocument();
   });
 
-  it('証言の「詳細」を選ぶと、日時を編集できるフォームをパネルに開く', async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
-    render(<CaseBoard />);
+  it('証言のカードは、その証言の詳細ページへのリンクになる（編集の導線は詳細ページに一本化している）', async () => {
+    renderBoard();
 
     const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
-    await user.click(within(隣家の証言).getByRole('button', { name: 'この証言の詳細' }));
+    expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-neighbor');
+    expect(within(隣家の証言).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
+    expect(within(隣家の証言).queryByRole('button', { name: 'この証言の詳細' })).not.toBeInTheDocument();
+  });
 
-    const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
-    expect(within(panel).getByRole('heading', { name: '証言を編集' })).toBeInTheDocument();
-    expect(within(panel).getByLabelText('証言が述べる日時：表記')).toHaveValue('8月12日 夜9時ごろ');
+  it('地図のタブの証言のカードは、戻り先のタブを引き継いだURLへのリンクになる', async () => {
+    resetMockNavigation('/?tab=map');
+    renderBoard();
+
+    const 一覧 = await screen.findByRole('region', { name: '地図に表示できない証言' });
+    const 隣家の証言 = within(一覧).getByText(/夜9時ごろ、/).closest('li')!;
+    expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-neighbor?tab=map');
   });
 
   it('「登録済みの一覧」から、ボードに現れていないエンティティも編集・削除できるパネルを開く', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
-    render(<CaseBoard />);
+    renderBoard();
 
     await user.click(await screen.findByRole('button', { name: '登録済みの一覧' }));
 
     const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
     expect(within(panel).getByRole('tablist', { name: '入力する種類' })).toBeInTheDocument();
-  });
-
-  it('保存済みのデータを復元できなかった場合は、理由と退避先を表示する', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: { name: '古い形式の案件' } }, version: 0 }));
-    render(<CaseBoard />);
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('保存済みの案件を復元できませんでした');
-    expect(alert).toHaveTextContent('testimony-board-case-backup');
   });
 });
