@@ -4,6 +4,7 @@
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
  * 時系列ボードには証言だけを並べます。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 地図ビューは、時系列の並び順のうち、座標のある場所を述べる証言だけをたどります（buildMapTrail）。
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
@@ -11,7 +12,7 @@
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
-import type { Case, Claim, Id, Person, Place } from './types';
+import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
 
 /** 表示用に参照先を解決した証言です。 */
 export type ClaimView = {
@@ -145,6 +146,73 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
     .map((group) => ({ ...group, claims: sortByStatedAt(group.claims) }));
+}
+
+/** 地図ビューでたどる1地点（座標のある場所を述べる証言）です。 */
+export type MapStop = {
+  /** 地図に表示できる証言の中での順番（1始まり）です。時系列の並び順に従います。 */
+  order: number;
+  view: ClaimView;
+  place: Place;
+  coordinates: Coordinates;
+};
+
+/** 証言を地図に表示できない理由です。no-place は証言が場所を述べていないこと、no-coordinates は場所に座標が無いことを表します。 */
+export type UnmappedReason = 'no-place' | 'no-coordinates';
+
+/** 地図ビュー全体です。 */
+export type MapTrail = {
+  /** 時系列の並び順のとおりに並べた地点です。 */
+  stops: MapStop[];
+  /** 地図に表示できない証言です。時系列の並び順のとおりに並びます。 */
+  unmapped: { view: ClaimView; reason: UnmappedReason }[];
+};
+
+/** 地図上の1つのピン（同じ場所を述べる証言のまとまり）です。 */
+export type MapPin = {
+  place: Place;
+  coordinates: Coordinates;
+  /** この場所を述べる証言の順番（MapStop.order）です。小さい順に並びます。 */
+  orders: number[];
+};
+
+/** 場所の座標を返します。緯度と経度が揃っていない場合は undefined を返します。 */
+function coordinatesOf(place: Place): Coordinates | undefined {
+  return place.latitude === undefined || place.longitude === undefined
+    ? undefined
+    : { latitude: place.latitude, longitude: place.longitude };
+}
+
+/**
+ * 地図ビューを組み立てます。
+ * 時系列の並び順（buildTimeline）のうち、座標のある場所を述べる証言だけを地点として取り出します。
+ * 注意: 地図に表示できない証言は捨てずに、理由と共に unmapped に入れます（表示されない証言があることを読み手が見落とさないようにするためです）。
+ */
+export function buildMapTrail(target: Case): MapTrail {
+  const trail: MapTrail = { stops: [], unmapped: [] };
+  for (const { view } of buildTimeline(target).items) {
+    const coordinates = view.place && coordinatesOf(view.place);
+    if (view.place && coordinates) {
+      trail.stops.push({ order: trail.stops.length + 1, view, place: view.place, coordinates });
+    } else {
+      trail.unmapped.push({ view, reason: view.place ? 'no-coordinates' : 'no-place' });
+    }
+  }
+  return trail;
+}
+
+/** 地点を場所ごとのピンにまとめます。同じ場所のピンが重なって番号が隠れることを避けるためです。ピンは最初に登場する順に並びます。 */
+export function groupStopsByPlace(stops: MapStop[]): MapPin[] {
+  const pinByPlaceId = new Map<Id, MapPin>();
+  for (const stop of stops) {
+    const pin = pinByPlaceId.get(stop.place.id);
+    if (pin) {
+      pin.orders.push(stop.order);
+    } else {
+      pinByPlaceId.set(stop.place.id, { place: stop.place, coordinates: stop.coordinates, orders: [stop.order] });
+    }
+  }
+  return [...pinByPlaceId.values()];
 }
 
 /** あるエンティティに関連するエンティティです。 */

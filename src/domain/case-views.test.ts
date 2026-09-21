@@ -2,7 +2,7 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildTimeline, findRelatedEntities, groupClaimsBySpeaker } from './case-views';
+import { buildMapTrail, buildTimeline, findRelatedEntities, groupClaimsBySpeaker, groupStopsByPlace } from './case-views';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
@@ -222,5 +222,77 @@ describe('findRelatedEntities', () => {
 
   it('どのメモにも現れないエンティティは、関連が無い', () => {
     expect(findRelatedEntities(メモで関連付けた案件, 'person', 'person-police')).toEqual([]);
+  });
+});
+
+describe('buildMapTrail', () => {
+  /** 湖畔の別荘に座標を登録し、座標の無い場所（県道の交差点）で述べられた証言を加えた案件です。 */
+  const 座標を登録した案件: Case = {
+    ...sampleFictionalCase,
+    places: [
+      { id: 'place-villa', name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 },
+      { id: 'place-crossing', name: '県道の交差点' },
+    ],
+    claims: sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-police-camera' ? { ...claim, placeId: 'place-crossing' } : claim
+    ),
+  };
+
+  it('座標のある場所で述べられた証言を、時系列の並び順のとおりに、1から始まる番号を付けて並べる', () => {
+    // 前提: 並び順は 管理人 → 防犯カメラ → 隣家 → 架空日報 → 推測。このうち座標のある場所を述べるのは管理人と隣家の証言だけ
+    const trail = buildMapTrail(座標を登録した案件);
+
+    expect(trail.stops.map((stop) => [stop.order, stop.view.claim.id])).toEqual([
+      [1, 'claim-caretaker'],
+      [2, 'claim-neighbor'],
+    ]);
+    expect(trail.stops[0]?.place.name).toBe('湖畔の別荘');
+    expect(trail.stops[0]?.coordinates).toEqual({ latitude: 35.5, longitude: 138.75 });
+  });
+
+  it('地図に表示できない証言を、理由（場所が無い・場所に座標が無い）と共に、時系列の並び順のとおりに返す', () => {
+    const trail = buildMapTrail(座標を登録した案件);
+
+    expect(trail.unmapped.map((item) => [item.view.claim.id, item.reason])).toEqual([
+      ['claim-police-camera', 'no-coordinates'],
+      ['claim-report', 'no-place'],
+      ['claim-user-guess', 'no-place'],
+    ]);
+  });
+
+  it('緯度と経度の片方しか無い場所は、座標が無い場所として扱う', () => {
+    const 緯度だけの案件: Case = { ...sampleFictionalCase, places: [{ id: 'place-villa', name: '湖畔の別荘', latitude: 35.5 }] };
+
+    const trail = buildMapTrail(緯度だけの案件);
+
+    expect(trail.stops).toEqual([]);
+    expect(trail.unmapped.filter((item) => item.reason === 'no-coordinates').map((item) => item.view.claim.id)).toEqual([
+      'claim-caretaker',
+      'claim-neighbor',
+    ]);
+  });
+});
+
+describe('groupStopsByPlace', () => {
+  it('同じ場所の証言を1つのピンにまとめ、ピンを最初に登場する順に並べる', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      places: [
+        { id: 'place-villa', name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 },
+        { id: 'place-crossing', name: '県道の交差点', latitude: 35.51, longitude: 138.76 },
+      ],
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-police-camera' ? { ...claim, placeId: 'place-crossing' } : claim
+      ),
+    };
+
+    const pins = groupStopsByPlace(buildMapTrail(案件).stops);
+
+    // 並び順は 管理人（別荘）→ 防犯カメラ（交差点）→ 隣家（別荘）
+    expect(pins.map((pin) => [pin.place.name, pin.orders])).toEqual([
+      ['湖畔の別荘', [1, 3]],
+      ['県道の交差点', [2]],
+    ]);
+    expect(pins[1]?.coordinates).toEqual({ latitude: 35.51, longitude: 138.76 });
   });
 });

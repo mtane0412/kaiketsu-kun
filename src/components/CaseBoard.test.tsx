@@ -27,6 +27,21 @@ describe('CaseBoard', () => {
     expect(screen.getByRole('region', { name: '隣家の住人' })).toBeInTheDocument();
   });
 
+  it('「地図」に切り替えると地図ビューを表示し、証言のメンションからエンティティの編集を開ける', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
+    render(<CaseBoard />);
+
+    await user.click(await screen.findByRole('tab', { name: '地図' }));
+
+    // 前提: サンプルの案件の場所には座標が無いため、湖畔の別荘に言及する証言（2件）は「地図に表示できない証言」に並ぶ
+    const 一覧 = screen.getByRole('region', { name: '地図に表示できない証言' });
+    await user.click(within(一覧).getAllByRole('button', { name: '@湖畔の別荘' })[0]!);
+
+    const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
+    expect(within(panel).getByRole('heading', { name: '場所を編集' })).toBeInTheDocument();
+  });
+
   it('ボード上のメンションを選ぶと、そのエンティティの編集をパネルに開き、閉じられる', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));

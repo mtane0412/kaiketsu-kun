@@ -2,6 +2,7 @@
  * ボード全体
  *
  * ブラウザに保存済みの案件を復元したうえで、ツールバーと、時系列のボード（ホワイトボード）を表示します。
+ * タブで、証言者別の表示と、時系列を地図上でたどる表示に切り替えられます。
  * 入力はボードへの書き足しに一本化しており、入力専用の画面は持ちません。
  * エンティティの編集は、ボード上のメンション、または「登録済みの一覧」から、
  * 画面の右側のパネル（EntryPanel）に開きます。
@@ -12,16 +13,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { BACKUP_STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
 import { CaseToolbar } from './CaseToolbar';
 import { ENTRY_KEY_BY_MENTION_KIND, EntryPanel, type EntryKey } from './EntryPanel';
+import { MapView } from './views/MapView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
 
 const TABS = [
   { key: 'timeline', label: '時系列' },
   { key: 'speaker', label: '証言者別' },
+  { key: 'map', label: '地図' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -30,6 +34,11 @@ const PANEL_LABEL = '登録済みの一覧';
 
 /** 右側のパネルの状態です。entity が null の場合は、編集対象を決めずに一覧を開いています。 */
 type PanelState = { entity: { key: EntryKey; id: Id } | null };
+
+/** ボード上で選ばれたメンションを、右側のパネルの編集対象に変換します。 */
+function panelStateOfMention(kind: MentionKind, id: Id): PanelState {
+  return { entity: { key: ENTRY_KEY_BY_MENTION_KIND[kind], id } };
+}
 
 export function CaseBoard() {
   const currentCase = useCaseStore((state) => state.currentCase);
@@ -97,11 +106,14 @@ export function CaseBoard() {
         {activeTab === 'timeline' && (
           <TimelineView
             target={currentCase}
-            onOpenEntity={(kind, id) => setPanel({ entity: { key: ENTRY_KEY_BY_MENTION_KIND[kind], id } })}
+            onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))}
             onOpenClaimDetails={(id) => setPanel({ entity: { key: 'claims', id } })}
           />
         )}
         {activeTab === 'speaker' && <SpeakerView target={currentCase} />}
+        {activeTab === 'map' && (
+          <MapView target={currentCase} onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))} />
+        )}
       </main>
 
       {panel && (
