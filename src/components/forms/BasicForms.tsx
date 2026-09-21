@@ -11,7 +11,8 @@ import { nanoid } from 'nanoid';
 import { useState, type FormEvent } from 'react';
 import type { Person, Place } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
-import { FormError, ImageField, SubmitButton, TextField } from './fields';
+import { FormError, SubmitButton, TextField } from './fields';
+import { ImageField } from './ImageField';
 
 type FormProps<T> = {
   initial?: T;

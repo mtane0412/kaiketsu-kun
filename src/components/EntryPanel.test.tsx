@@ -1,8 +1,10 @@
 /**
  * 入力パネル（種類の切り替え・新規登録・編集・削除）のテスト
  */
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
+import type { CropperProps } from 'react-easy-crop';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { fileToResizedDataUrl } from '@/lib/image-utils';
@@ -10,7 +12,24 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { EntryPanel } from './EntryPanel';
 
 // jsdom は画像のデコードと canvas の描画を持たないため、画像の縮小は差し替える（縮小そのものは image-utils.test.ts で検証する）
-vi.mock('@/lib/image-utils', () => ({ fileToResizedDataUrl: vi.fn() }));
+vi.mock('@/lib/image-utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/image-utils')>()),
+  fileToResizedDataUrl: vi.fn(),
+}));
+
+/** 切り抜きの画面（差し替え）が決める、切り抜き範囲です（単位は元の画像のピクセル）。 */
+const 顔の周り = { x: 100, y: 50, width: 512, height: 512 };
+
+// jsdom は要素の大きさを持たず、切り抜きのライブラリは範囲を計算できないため、
+// 表示した時点で「顔の周り」を切り抜き範囲として通知する部品に差し替える
+vi.mock('react-easy-crop', () => ({
+  default: function CropperStub({ image, mediaProps, onCropAreaChange }: Partial<CropperProps>) {
+    useEffect(() => {
+      onCropAreaChange?.({ x: 10, y: 5, width: 50, height: 50 }, 顔の周り);
+    }, [onCropAreaChange]);
+    return <img src={image} alt="切り抜く画像" onError={mediaProps?.onError} />;
+  },
+}));
 
 beforeEach(() => {
   useCaseStore.getState().replaceCase(sampleFictionalCase);
@@ -18,6 +37,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('EntryPanel', () => {
@@ -125,21 +145,31 @@ describe('EntryPanel（エンティティの画像）', () => {
   const 縮小済みの画像 = 'data:image/jpeg;base64,AAAA';
   const 顔写真 = new File(['画像の中身'], '顔写真.png', { type: 'image/png' });
 
+  /** 画像を選んでから「この範囲で登録」を押すまでの操作です。 */
+  const 切り抜いて登録する = async (user: ReturnType<typeof userEvent.setup>) => {
+    await screen.findByRole('img', { name: '切り抜く画像' });
+    await user.click(screen.getByRole('button', { name: 'この範囲で登録' }));
+  };
+
   beforeEach(() => {
     vi.mocked(fileToResizedDataUrl).mockReset();
     vi.mocked(fileToResizedDataUrl).mockResolvedValue(縮小済みの画像);
+    // jsdom は Blob の URL を発行できないため、差し替える
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:顔写真'), revokeObjectURL: vi.fn() }));
   });
 
-  it('人物に画像を登録すると、縮小した画像を保存し、登録済みの一覧に表示する', async () => {
+  it('人物に画像を登録すると、切り抜いて縮小した画像を保存し、登録済みの一覧に表示する', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);
 
     await user.type(screen.getByLabelText('名前'), '郵便配達員');
     await user.upload(screen.getByLabelText('画像'), 顔写真);
+    await 切り抜いて登録する(user);
     expect(await screen.findByRole('img', { name: '登録する画像' })).toHaveAttribute('src', 縮小済みの画像);
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    expect(fileToResizedDataUrl).toHaveBeenCalledWith(顔写真);
+    // 検証: 切り抜きの画面で決めた範囲を、縮小の処理に渡している
+    expect(fileToResizedDataUrl).toHaveBeenCalledWith(顔写真, 顔の周り);
     expect(useCaseStore.getState().currentCase.persons.at(-1)).toMatchObject({ name: '郵便配達員', imageDataUrl: 縮小済みの画像 });
     const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
     expect(配達員の行?.querySelector('img')).toHaveAttribute('src', 縮小済みの画像);
@@ -150,6 +180,7 @@ describe('EntryPanel（エンティティの画像）', () => {
     render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
 
     await user.upload(screen.getByLabelText('画像'), 顔写真);
+    await 切り抜いて登録する(user);
     await screen.findByRole('img', { name: '登録する画像' });
     await user.click(screen.getByRole('button', { name: '場所を保存' }));
 
@@ -157,6 +188,88 @@ describe('EntryPanel（エンティティの画像）', () => {
       name: '湖畔の別荘',
       imageDataUrl: 縮小済みの画像,
     });
+  });
+
+  it('「画像を選ぶ」を押すと、ファイルの選択を開く', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+    const click = vi.spyOn(screen.getByLabelText<HTMLInputElement>('画像'), 'click');
+
+    await user.click(screen.getByRole('button', { name: '画像を選ぶ' }));
+
+    expect(click).toHaveBeenCalled();
+  });
+
+  it('切り抜きをキャンセルすると、画像を登録しない', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.upload(screen.getByLabelText('画像'), 顔写真);
+    await screen.findByRole('img', { name: '切り抜く画像' });
+    await user.click(screen.getByRole('button', { name: 'キャンセル' }));
+
+    expect(screen.queryByRole('img', { name: '切り抜く画像' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '登録する画像' })).not.toBeInTheDocument();
+    expect(fileToResizedDataUrl).not.toHaveBeenCalled();
+  });
+
+  it('画像をキーボードで貼り付けると、その画像の切り抜きを始める', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    // スクリーンショットをコピーして、Ctrl+V / ⌘+V で貼り付けた場合
+    fireEvent.paste(document, { clipboardData: { files: [顔写真] } });
+    await 切り抜いて登録する(user);
+
+    expect(fileToResizedDataUrl).toHaveBeenCalledWith(顔写真, 顔の周り);
+    expect(await screen.findByRole('img', { name: '登録する画像' })).toHaveAttribute('src', 縮小済みの画像);
+  });
+
+  it('文字だけの貼り付けでは、切り抜きを始めない', () => {
+    render(<EntryPanel />);
+
+    fireEvent.paste(document, { clipboardData: { files: [] } });
+
+    expect(screen.queryByRole('img', { name: '切り抜く画像' })).not.toBeInTheDocument();
+  });
+
+  it('「クリップボードから貼り付け」を押すと、クリップボードの画像の切り抜きを始める', async () => {
+    const user = userEvent.setup();
+    // 前提: クリップボードにはPNGの画像が入っている（user-event が用意する navigator.clipboard を差し替える）
+    const コピーした画像 = new Blob(['画像の中身'], { type: 'image/png' });
+    vi.spyOn(navigator.clipboard, 'read').mockResolvedValue([
+      { types: ['text/html', 'image/png'], getType: vi.fn().mockResolvedValue(コピーした画像) } as unknown as ClipboardItem,
+    ]);
+    render(<EntryPanel />);
+
+    await user.click(screen.getByRole('button', { name: 'クリップボードから貼り付け' }));
+    await 切り抜いて登録する(user);
+
+    expect(fileToResizedDataUrl).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png' }), 顔の周り);
+    expect(await screen.findByRole('img', { name: '登録する画像' })).toHaveAttribute('src', 縮小済みの画像);
+  });
+
+  it('クリップボードに画像が無い場合は、理由を表示する', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, 'read').mockResolvedValue([
+      { types: ['text/plain'], getType: vi.fn() } as unknown as ClipboardItem,
+    ]);
+    render(<EntryPanel />);
+
+    await user.click(screen.getByRole('button', { name: 'クリップボードから貼り付け' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('クリップボードに画像がありません');
+  });
+
+  it('クリップボードを読み取れない場合は、理由を表示する', async () => {
+    const user = userEvent.setup();
+    // ブラウザの設定で、クリップボードの読み取りを拒否した場合
+    vi.spyOn(navigator.clipboard, 'read').mockRejectedValue(new Error('Read permission denied.'));
+    render(<EntryPanel />);
+
+    await user.click(screen.getByRole('button', { name: 'クリップボードから貼り付け' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('クリップボードを読み取れませんでした');
   });
 
   it('編集で「画像を削除」を選んで保存すると、登録済みの画像を取り除く', async () => {
@@ -185,12 +298,36 @@ describe('EntryPanel（エンティティの画像）', () => {
     expect(管理人?.imageDataUrl).toBe(縮小済みの画像);
   });
 
-  it('画像を読み込めない場合は、理由を表示し、画像を登録しない', async () => {
+  it('画像でないファイルを選んだ場合は、理由を表示し、切り抜きを始めない', async () => {
+    // accept 属性による絞り込みを外し、画像でないファイルを選べた場合を再現する
+    const user = userEvent.setup({ applyAccept: false });
+    render(<EntryPanel />);
+
+    await user.upload(screen.getByLabelText('画像'), new File(['本文'], 'メモ.txt', { type: 'text/plain' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('画像ファイルを選んでください');
+    expect(screen.queryByRole('img', { name: '切り抜く画像' })).not.toBeInTheDocument();
+  });
+
+  it('切り抜きの画面で画像を表示できない場合は、理由を表示し、切り抜きをやめる', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.upload(screen.getByLabelText('画像'), 顔写真);
+    // 拡張子は画像でも中身が壊れているファイルは、ブラウザが表示に失敗する
+    fireEvent.error(await screen.findByRole('img', { name: '切り抜く画像' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('画像を読み込めませんでした');
+    expect(screen.queryByRole('img', { name: '切り抜く画像' })).not.toBeInTheDocument();
+  });
+
+  it('縮小に失敗した場合は、理由を表示し、画像を登録しない', async () => {
     vi.mocked(fileToResizedDataUrl).mockRejectedValue(new Error('画像を読み込めませんでした。別の画像ファイルを選んでください'));
     const user = userEvent.setup();
     render(<EntryPanel />);
 
     await user.upload(screen.getByLabelText('画像'), 顔写真);
+    await 切り抜いて登録する(user);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('画像を読み込めませんでした');
     expect(screen.queryByRole('img', { name: '登録する画像' })).not.toBeInTheDocument();
