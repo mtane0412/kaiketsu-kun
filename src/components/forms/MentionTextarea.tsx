@@ -5,6 +5,8 @@
  * 一致する名前が無い種類については「新規作成」の選択肢を示します。
  * withDate を指定した入力欄（証言の本文）では、「@」に続けて日時を書くと、日時のメンションの候補も示します
  * （受け付ける表記は src/domain/date-input.ts を参照してください）。
+ * 「@date」「@datetime」（日本語では「@日付」「@日時」）と書くと、候補から日時のピッカーを開けます。
+ * ピッカーで選んだ値はそのまま時刻参照の形式のため、日時のメンションに変換して本文に差し込みます。
  * 登録済みの名前を正確に入力して空白で区切った場合は、候補を選ばなくてもメンションとして確定します。
  * 入力欄には `@表示名` の素の文字列を表示し、確定したメンションは value.mentions に保持します
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
@@ -21,7 +23,8 @@
 'use client';
 
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { parseDateInput } from '@/domain/date-input';
+import { matchDatePickerTriggers, parseDateInput, type DatePickerKind } from '@/domain/date-input';
+import { INPUT_CLASS } from './fields';
 import { DATE_MENTION_LABEL, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   MENTION_KINDS,
@@ -59,7 +62,16 @@ function segmentLength(segment: ContentSegment): number {
   return segment.type === 'mention' ? 1 + segment.label.length : segment.text.length;
 }
 
-type MentionOption = { type: 'existing'; mention: DraftMention } | { type: 'create'; kind: MentionKind; name: string };
+type MentionOption =
+  | { type: 'existing'; mention: DraftMention }
+  | { type: 'create'; kind: MentionKind; name: string }
+  | { type: 'picker'; picker: DatePickerKind };
+
+/** 日時のピッカーの表示名と、対応する入力欄の型です。 */
+const DATE_PICKERS: Record<DatePickerKind, { label: string; inputType: string }> = {
+  date: { label: '日付を選ぶ', inputType: 'date' },
+  datetime: { label: '日時を選ぶ', inputType: 'datetime-local' },
+};
 
 /**
  * 検索語に対する選択肢を、日時、登録済みのエンティティ、新規作成の順に並べて返します。
@@ -68,6 +80,9 @@ type MentionOption = { type: 'existing'; mention: DraftMention } | { type: 'crea
 function buildOptions(query: string, candidates: MentionCandidate[], withDate: boolean): MentionOption[] {
   const when = withDate ? parseDateInput(query) : null;
   const date: MentionOption[] = when === null ? [] : [{ type: 'existing', mention: dateMentionOf(when) }];
+  const pickers: MentionOption[] = withDate
+    ? matchDatePickerTriggers(query).map((picker): MentionOption => ({ type: 'picker', picker }))
+    : [];
   const normalizedQuery = query.toLowerCase();
   const existing = candidates
     .filter((candidate) =>
@@ -79,6 +94,7 @@ function buildOptions(query: string, candidates: MentionCandidate[], withDate: b
       mention: candidate,
     }));
   if (query === '') return existing;
+  if (pickers.length > 0) return [...pickers, ...existing];
 
   // 同じ種類に同じ名前のエンティティがある場合は、重複を作らないよう新規作成の選択肢を出さない
   const creatable = MENTION_KINDS.filter(
@@ -126,6 +142,9 @@ export function MentionTextarea({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   /** Escapeキーで候補を閉じた「@」の位置です。同じ「@」については候補を開き直しません。 */
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
+  /** 開いている日時のピッカーです。開いていない場合は null です。 */
+  const [openPicker, setOpenPicker] = useState<{ kind: DatePickerKind; start: number } | null>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
 
   // 新規作成では入力済みの文字列と確定後の文字列が同じになり得るため、文字列の変化を条件にせず描画のたびに確認する
   useLayoutEffect(() => {
@@ -133,6 +152,15 @@ export function MentionTextarea({
     textareaRef.current?.setSelectionRange(caretAfterUpdate.current, caretAfterUpdate.current);
     caretAfterUpdate.current = null;
   });
+
+  // ピッカーは、開いた直後にフォーカスを移してカレンダーを開く（候補を選んでからの操作を1回減らすため）
+  useLayoutEffect(() => {
+    const input = pickerRef.current;
+    if (openPicker === null || input === null || document.activeElement === input) return;
+    input.focus();
+    // showPicker はカレンダーを開くブラウザの機能で、未対応の環境では入力欄へのフォーカスだけを行う
+    if (typeof input.showPicker === 'function') input.showPicker();
+  }, [openPicker]);
 
   const segments = parseDraft(value);
 
@@ -143,11 +171,12 @@ export function MentionTextarea({
   );
   const query = found !== null && found.start !== dismissedStart ? found : null;
   const options = query === null ? [] : buildOptions(query.query, candidates, withDate);
-  const isOpen = query !== null && options.length > 0;
-  // 先頭が登録済みのエンティティの場合だけ、矢印キーで選ばなくても先頭を選択中とする。
+  const isOpen = query !== null && options.length > 0 && openPicker === null;
+  // 先頭が登録済みのエンティティか日時のピッカーの場合だけ、矢印キーで選ばなくても先頭を選択中とする。
   // 新規作成の選択肢しか無い場合に既定で選択すると、メールアドレスの「@」の後のEnterキーなどで
   // 意図しないエンティティを作ってしまうため、明示的な選択を必須にする。
-  const activeIndex = selectedIndex ?? (options[0]?.type === 'existing' ? 0 : null);
+  // ピッカーは開くだけで本文を変えないため、既定で選択していても書き損じにならない。
+  const activeIndex = selectedIndex ?? (options[0]?.type === 'create' ? null : 0);
 
   /**
    * 候補を選ばずに、登録済みの名前を正確に入力して空白で区切った場合のメンションを返します。
@@ -168,8 +197,27 @@ export function MentionTextarea({
       : [];
   };
 
+  /** 日時のメンションを、検索語の「@」の位置に差し込みます。ピッカーで値を選んだときに呼び出します。 */
+  const insertDateMention = (start: number, when: string) => {
+    const mention = dateMentionOf(when);
+    const inserted = `@${mention.label}`;
+    caretAfterUpdate.current = start + inserted.length;
+    setCaret(start + inserted.length);
+    setOpenPicker(null);
+    setSelectedIndex(null);
+    onChange({
+      text: value.text.slice(0, start) + inserted + value.text.slice(caret),
+      mentions: [...value.mentions.filter((item) => item.label !== mention.label), mention],
+    });
+    textareaRef.current?.focus();
+  };
+
   const choose = (option: MentionOption) => {
     if (query === null) return;
+    if (option.type === 'picker') {
+      setOpenPicker({ kind: option.picker, start: query.start });
+      return;
+    }
     const mention = option.type === 'existing' ? option.mention : onCreate(option.kind, option.name);
     const { kind, id: mentionId, label: mentionLabel } = mention;
     const inserted = `@${mentionLabel}`;
@@ -298,6 +346,27 @@ export function MentionTextarea({
           }}
         />
       </div>
+      {openPicker !== null && (
+        <div className="absolute z-10 mt-1 rounded border border-slate-300 bg-white p-2 shadow-lg">
+          <input
+            ref={pickerRef}
+            type={DATE_PICKERS[openPicker.kind].inputType}
+            aria-label={DATE_PICKERS[openPicker.kind].label}
+            className={INPUT_CLASS}
+            onChange={(event) => {
+              if (event.target.value) insertDateMention(openPicker.start, event.target.value);
+            }}
+            onKeyDown={(event) => {
+              // 日時を選ばずに書き続けられるよう、Escapeキーでピッカーを閉じて本文に戻る
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              setOpenPicker(null);
+              setDismissedStart(openPicker.start);
+              textareaRef.current?.focus();
+            }}
+          />
+        </div>
+      )}
       {isOpen && (
         <ul
           id={listboxId}
@@ -307,7 +376,13 @@ export function MentionTextarea({
         >
           {options.map((option, index) => (
             <li
-              key={option.type === 'existing' ? `${option.mention.kind}:${option.mention.id}` : `create:${option.kind}`}
+              key={
+                option.type === 'picker'
+                  ? `picker:${option.picker}`
+                  : option.type === 'existing'
+                    ? `${option.mention.kind}:${option.mention.id}`
+                    : `create:${option.kind}`
+              }
               id={optionId(index)}
               role="option"
               aria-selected={index === activeIndex}
@@ -316,7 +391,9 @@ export function MentionTextarea({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(option)}
             >
-              {option.type === 'existing' ? (
+              {option.type === 'picker' ? (
+                <span className="text-sky-700">{DATE_PICKERS[option.picker].label}</span>
+              ) : option.type === 'existing' ? (
                 <>
                   <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-600">
                     {option.mention.kind === 'date' ? DATE_MENTION_LABEL : MENTION_KIND_LABELS[option.mention.kind]}

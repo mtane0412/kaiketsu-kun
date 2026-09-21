@@ -191,6 +191,76 @@ describe('ClaimForm', () => {
       });
     });
 
+    it('「@date」で日付のピッカーを開き、選んだ日付を本文のメンションにする', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '@date', '日付を選ぶ');
+      fireEvent.change(screen.getByLabelText('日付を選ぶ'), { target: { value: '1998-08-12' } });
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({
+        content: '@[1998年8月12日](date:1998-08-12)',
+        when: '1998-08-12',
+      });
+    });
+
+    it('「@datetime」で日時のピッカーを開き、選んだ日時を本文のメンションにする', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '@datetime', '日時を選ぶ');
+      fireEvent.change(screen.getByLabelText('日時を選ぶ'), { target: { value: '1998-08-12T19:00' } });
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(lastSavedClaim()).toMatchObject({
+        content: '@[1998年8月12日 19:00](date:1998-08-12T19:00)',
+        when: '1998-08-12T19:00',
+      });
+    });
+
+    it('「@date」に続けてEnterキーを押すだけで、日付のピッカーを開ける', async () => {
+      // 前提: ピッカーは「@date」と明示的に書いた結果の候補のため、矢印キーで選ばなくても先頭が選択済みになる
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '@date{Enter}');
+
+      expect(screen.getByLabelText('日付を選ぶ')).toBeInTheDocument();
+      expect(screen.getByLabelText('内容')).toHaveValue('@date');
+    });
+
+    it('日本語の「@日付」でもピッカーを開ける（日本語入力のまま書けるようにするため）', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '@日付');
+
+      expect(screen.getByRole('option', { name: '日付を選ぶ' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: '日時を選ぶ' })).not.toBeInTheDocument();
+    });
+
+    it('入力の途中の「@dat」では、日付と日時の両方のピッカーを候補に示す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '@dat');
+
+      expect(screen.getByRole('option', { name: '日付を選ぶ' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: '日時を選ぶ' })).toBeInTheDocument();
+    });
+
+    it('ピッカーを開いたまま日付を選ばずにEscapeキーを押すと、ピッカーを閉じて本文を変えない', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '@date', '日付を選ぶ');
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByLabelText('日付を選ぶ')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('内容')).toHaveValue('@date');
+    });
+
     it('日時として解釈できない語では、日時の候補を示さない', async () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);

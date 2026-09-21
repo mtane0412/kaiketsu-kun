@@ -4,6 +4,9 @@
  * 証言の本文で「@」に続けて日時を書くと、日時のメンション（src/domain/mention.ts）の候補を示します。
  * このファイルは、その入力を時刻参照（TimeRef、ISO 8601の部分表記）に整えます。
  *
+ * 「@」に続けて「date」「datetime」（日本語では「日付」「日時」）と書いた場合は、日時のピッカーの候補を示します。
+ * ピッカーは日（date）または分（datetime）の精度でしか選べないため、年だけ・月までの粗い日時は、下記の表記を直接書きます。
+ *
  * 受け付ける表記:
  * - ISO 8601の部分表記: 1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00
  * - スラッシュ区切り: 1998/8 / 1998/8/12 / 1998/8/12T19:05
@@ -17,6 +20,32 @@
  * - メンションの検索語は空白を含めないため（findMentionQuery）、時刻は「T」または「時」で日付につなげて書きます。
  */
 import { isValidTimeRef } from './time-ref';
+
+/**
+ * 日時のピッカーの種類です。
+ * - date: 日までを選ぶピッカー（input[type=date]）
+ * - datetime: 分までを選ぶピッカー（input[type=datetime-local]）
+ */
+export type DatePickerKind = 'date' | 'datetime';
+
+/** ピッカーを呼び出すトリガー語です。日本語入力のままでも書けるよう、日本語の別名も受け付けます。 */
+const PICKER_TRIGGERS: { kind: DatePickerKind; words: string[] }[] = [
+  { kind: 'date', words: ['date', '日付'] },
+  { kind: 'datetime', words: ['datetime', '日時'] },
+];
+
+/**
+ * 検索語に前方一致するトリガー語のピッカーを、date・datetime の順に返します。
+ * 入力の途中でも候補を示すため、前方一致で照合します（「dat」は date と datetime の両方に一致します）。
+ * 大文字と小文字は区別しません。検索語が空の場合は、何も返しません。
+ */
+export function matchDatePickerTriggers(query: string): DatePickerKind[] {
+  const normalized = query.trim().toLowerCase();
+  if (normalized === '') return [];
+  return PICKER_TRIGGERS.filter((trigger) => trigger.words.some((word) => word.startsWith(normalized))).map(
+    (trigger) => trigger.kind
+  );
+}
 
 /** 年・月・日・時・分を取り出す表記の一覧です。上から順に照合します。 */
 const INPUT_PATTERNS = [

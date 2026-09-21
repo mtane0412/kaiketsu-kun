@@ -2,7 +2,7 @@
  * 入力欄に書かれた日時の表記の解釈のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { parseDateInput } from './date-input';
+import { matchDatePickerTriggers, parseDateInput } from './date-input';
 
 describe('parseDateInput', () => {
   it.each([
@@ -42,4 +42,29 @@ describe('parseDateInput', () => {
       expect(parseDateInput(input)).toBeNull();
     }
   );
+});
+
+describe('matchDatePickerTriggers', () => {
+  it.each([
+    ['datetime', ['datetime']],
+    ['日付', ['date']],
+    ['日時', ['datetime']],
+  ])('トリガー語「%s」に対応するピッカーを返す', (query, expected) => {
+    expect(matchDatePickerTriggers(query)).toEqual(expected);
+  });
+
+  it('入力の途中でも、前方一致するピッカーをすべて返す', () => {
+    // 前提: 「date」は「datetime」の前方一致でもあるため、両方の候補を出す
+    expect(matchDatePickerTriggers('dat')).toEqual(['date', 'datetime']);
+    expect(matchDatePickerTriggers('date')).toEqual(['date', 'datetime']);
+    expect(matchDatePickerTriggers('日')).toEqual(['date', 'datetime']);
+  });
+
+  it('大文字で書いてもトリガー語として扱う', () => {
+    expect(matchDatePickerTriggers('Date')).toEqual(['date', 'datetime']);
+  });
+
+  it.each(['', '湖畔の別荘', '1998-08-12'])('トリガー語でない「%s」には、ピッカーを返さない', (query) => {
+    expect(matchDatePickerTriggers(query)).toEqual([]);
+  });
 });
