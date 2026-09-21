@@ -16,6 +16,7 @@ import { describeClaimAttribution } from '@/domain/case-views';
 import { contentToPlainText } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
+import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { ClaimForm } from './forms/ClaimForm';
 
@@ -33,8 +34,11 @@ function truncate(text: string): string {
 type Section = {
   key: EntryKey;
   label: string;
-  /** 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（証言の発言者と経由）。 */
-  listItems: (target: Case) => { id: Id; label: string; caption?: string }[];
+  /**
+   * 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（証言の発言者と経由）。
+   * imageDataUrl は、表示名の前に添える画像です（人物・場所）。
+   */
+  listItems: (target: Case) => { id: Id; label: string; caption?: string; imageDataUrl?: string }[];
   /** 入力フォームを描画します。editingId が null の場合は新規登録です。 */
   renderForm: (target: Case, editingId: Id | null, onDone: () => void) => ReactNode;
 };
@@ -43,7 +47,8 @@ const SECTIONS: Section[] = [
   {
     key: 'persons',
     label: '人物',
-    listItems: (target) => target.persons.map((person) => ({ id: person.id, label: person.name })),
+    listItems: (target) =>
+      target.persons.map((person) => ({ id: person.id, label: person.name, imageDataUrl: person.imageDataUrl })),
     renderForm: (target, editingId, onDone) => (
       <PersonForm initial={target.persons.find((person) => person.id === editingId)} onDone={onDone} />
     ),
@@ -51,7 +56,8 @@ const SECTIONS: Section[] = [
   {
     key: 'places',
     label: '場所',
-    listItems: (target) => target.places.map((place) => ({ id: place.id, label: place.name })),
+    listItems: (target) =>
+      target.places.map((place) => ({ id: place.id, label: place.name, imageDataUrl: place.imageDataUrl })),
     renderForm: (target, editingId, onDone) => (
       <PlaceForm initial={target.places.find((place) => place.id === editingId)} onDone={onDone} />
     ),
@@ -167,9 +173,12 @@ export function EntryPanel({ initial }: EntryPanelProps) {
                   item.id === editingId ? 'border-sky-400 bg-sky-50' : 'border-slate-200 bg-white'
                 }`}
               >
-                <span className="min-w-0">
-                  {item.caption && <span className="block truncate text-xs font-semibold text-slate-600">{item.caption}</span>}
-                  <span className="block truncate">{item.label}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <EntityAvatar imageDataUrl={item.imageDataUrl} size="sm" />
+                  <span className="min-w-0">
+                    {item.caption && <span className="block truncate text-xs font-semibold text-slate-600">{item.caption}</span>}
+                    <span className="block truncate">{item.label}</span>
+                  </span>
                 </span>
                 <span className="flex shrink-0 gap-2 text-xs">
                   <button

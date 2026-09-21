@@ -4,12 +4,14 @@
  * 時系列ビューと証言者別ビューで共有します。
  * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
+ * 発言者と本文のメンションには、エンティティに登録した画像を添えます。
  * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
  * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
  */
 import { formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
+import { EntityAvatar } from '../EntityAvatar';
 
 const MENTION_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100 text-sky-800',
@@ -43,11 +45,11 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
             onClick={() => onOpenEntity(segment.kind, segment.id)}
             className={`rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
           >
-            @{segment.label}
+            <EntityAvatar imageDataUrl={segment.imageDataUrl} size="sm" />@{segment.label}
           </button>
         ) : (
           <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
-            @{segment.label}
+            <EntityAvatar imageDataUrl={segment.imageDataUrl} size="sm" />@{segment.label}
           </span>
         )
       )}
@@ -62,6 +64,8 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
     >
       <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
+        {showSpeaker &&
+          view.speakerPersons.map((person) => <EntityAvatar key={person.id} imageDataUrl={person.imageDataUrl} size="sm" />)}
         {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
         {view.viaPersons.length > 0 && (
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>

@@ -363,3 +363,31 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
     expect(parseCase(toJsonData(一度目))).toEqual(一度目);
   });
 });
+
+describe('parseCase（人物・場所の画像）', () => {
+  const 縮小済みの画像 = 'data:image/jpeg;base64,AAAA';
+
+  it('人物と場所の画像（data URL）を保持して受け付ける', () => {
+    const 案件 = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner' ? { ...person, imageDataUrl: 縮小済みの画像 } : person
+      ),
+      places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 縮小済みの画像 })),
+    };
+
+    const 読み込み後 = parseCase(toJsonData(案件));
+
+    expect(読み込み後.persons.find((person) => person.id === 'person-owner')?.imageDataUrl).toBe(縮小済みの画像);
+    expect(読み込み後.places[0]?.imageDataUrl).toBe(縮小済みの画像);
+  });
+
+  it('画像が data URL でない場合は拒否する（読み込んだファイルから外部のURLを表示しないため）', () => {
+    const 案件 = {
+      ...sampleFictionalCase,
+      places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 'https://example.com/villa.png' })),
+    };
+
+    expect(() => parseCase(toJsonData(案件))).toThrow(/places\.0\.imageDataUrl/);
+  });
+});

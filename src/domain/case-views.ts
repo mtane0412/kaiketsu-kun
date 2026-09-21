@@ -18,6 +18,8 @@ export type ClaimView = {
   /** 本文を文字列とメンションに分解したものです。メンションの表示名はエンティティの現在の名前です。 */
   contentSegments: ContentSegment[];
   speakerLabel: string;
+  /** 発言者の人物です。ユーザーの推測の場合は空です。 */
+  speakerPersons: Person[];
   /** 発言者の発言をユーザーに伝えた人物です。伝えた順に並びます。 */
   viaPersons: Person[];
   /** この証言が述べる場所です。 */
@@ -43,6 +45,8 @@ export type SpeakerGroup = {
   key: string;
   kind: 'person' | 'user';
   label: string;
+  /** 発言者の人物に登録された画像です。 */
+  imageDataUrl?: string;
   claims: ClaimView[];
 };
 
@@ -87,6 +91,8 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     claim,
     contentSegments: resolveContent(claim.content, target),
     speakerLabel: speakerLabelOf(target, claim),
+    speakerPersons:
+      claim.speaker.kind === 'person' ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物')) : [],
     viaPersons: claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
@@ -122,6 +128,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     key: `person:${person.id}`,
     kind: 'person',
     label: person.name,
+    imageDataUrl: person.imageDataUrl,
     claims: claimViews.filter(
       (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personIds.includes(person.id)
     ),

@@ -124,3 +124,28 @@ describe('groupClaimsBySpeaker', () => {
     expect(防犯カメラ?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
   });
 });
+
+describe('人物の画像', () => {
+  const 住人の画像 = 'data:image/jpeg;base64,AAAA';
+  const 案件: Case = {
+    ...sampleFictionalCase,
+    persons: sampleFictionalCase.persons.map((person) =>
+      person.id === 'person-neighbor' ? { ...person, imageDataUrl: 住人の画像 } : person
+    ),
+  };
+
+  it('証言のビューに、発言者の人物を載せる（カードに発言者の画像を表示するため）', () => {
+    const 住人の証言 = buildTimeline(案件).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
+    const 推測 = buildTimeline(案件).items.find((item) => item.view.claim.id === 'claim-user-guess')?.view;
+
+    expect(住人の証言?.speakerPersons.map((person) => person.imageDataUrl)).toEqual([住人の画像]);
+    expect(推測?.speakerPersons).toEqual([]);
+  });
+
+  it('証言者別ビューのグループに、その人物の画像を載せる', () => {
+    const groups = groupClaimsBySpeaker(案件);
+
+    expect(groups.find((group) => group.key === 'person:person-neighbor')?.imageDataUrl).toBe(住人の画像);
+    expect(groups.find((group) => group.key === 'user')?.imageDataUrl).toBeUndefined();
+  });
+});

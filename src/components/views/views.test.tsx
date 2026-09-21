@@ -330,3 +330,44 @@ describe('SpeakerView', () => {
     expect(screen.getByText('証言がまだ登録されていません。時系列のボードから書き足してください。')).toBeInTheDocument();
   });
 });
+
+describe('エンティティの画像の表示', () => {
+  const 住人の画像 = 'data:image/jpeg;base64,住人';
+  const 別荘の画像 = 'data:image/jpeg;base64,別荘';
+  /** 隣家の住人と湖畔の別荘に画像を登録した案件です。 */
+  const 画像付きの案件: Case = {
+    ...sampleFictionalCase,
+    persons: sampleFictionalCase.persons.map((person) =>
+      person.id === 'person-neighbor' ? { ...person, imageDataUrl: 住人の画像 } : person
+    ),
+    places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 別荘の画像 })),
+  };
+
+  /** 要素の中にある画像の src を、表示順に返します。名前の隣に添える画像は装飾（alt が空）のため、role では探せません。 */
+  function imageSources(element: HTMLElement | null): (string | null)[] {
+    return [...(element?.querySelectorAll('img') ?? [])].map((image) => image.getAttribute('src'));
+  }
+
+  it('時系列の証言カードに、発言者の画像と、本文のメンションの画像を表示する', () => {
+    render(<TimelineView target={画像付きの案件} />);
+
+    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+
+    // 発言者（隣家の住人）、本文のメンション（湖畔の別荘）の順。画像の無い別荘の持ち主には何も表示しない
+    expect(imageSources(住人の証言)).toEqual([住人の画像, 別荘の画像]);
+  });
+
+  it('画像を登録していない案件では、画像を表示しない', () => {
+    const { container } = render(<TimelineView target={sampleFictionalCase} />);
+
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('証言者別ビューの見出しに、発言者の画像を表示する', () => {
+    render(<SpeakerView target={画像付きの案件} />);
+
+    const 見出し = within(screen.getByRole('region', { name: '隣家の住人' })).getByRole('heading', { name: /隣家の住人/ });
+
+    expect(imageSources(見出し)).toEqual([住人の画像]);
+  });
+});

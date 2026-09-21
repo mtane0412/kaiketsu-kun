@@ -11,6 +11,7 @@ import {
   formatMention,
   parseContent,
   parseDraft,
+  resolveContent,
   stripLegacySpeakerPrefix,
   type DraftMention,
 } from './mention';
@@ -198,5 +199,23 @@ describe('findMentionQuery', () => {
     const text = '@別荘の持ち主の姿が';
 
     expect(findMentionQuery(text, text.length, ['別荘の持ち主'])).toBeNull();
+  });
+});
+
+describe('resolveContent', () => {
+  it('メンションに、エンティティの現在の名前と画像を載せる', () => {
+    // 前提: 別荘の持ち主には画像を登録してあり、湖畔の別荘には画像が無い
+    const 持ち主の画像 = 'data:image/jpeg;base64,AAAA';
+    const 案件 = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner' ? { ...person, imageDataUrl: 持ち主の画像 } : person
+      ),
+    };
+
+    const segments = resolveContent(`${formatMention(持ち主)}が${formatMention(別荘)}にいた。`, 案件);
+
+    expect(segments[0]).toEqual({ type: 'mention', kind: 'person', id: 'person-owner', label: '別荘の持ち主', imageDataUrl: 持ち主の画像 });
+    expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
   });
 });

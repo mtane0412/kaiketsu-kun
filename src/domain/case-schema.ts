@@ -22,6 +22,12 @@ import type { Case, Id, Person, Speaker } from './types';
 
 const idSchema = z.string().min(1);
 
+/**
+ * エンティティの画像です。data URL だけを受け付けます。
+ * 読み込んだファイルに外部のURLが書かれていても、表示の際に外部へ通信しないようにするためです。
+ */
+const imageDataUrlSchema = z.string().startsWith('data:image/', '画像は data URL（data:image/...）で指定してください');
+
 const timeRefSchema = z
   .object({
     text: z.string(),
@@ -89,7 +95,7 @@ const caseSchema = z.object({
       id: idSchema,
       name: z.string(),
       aliases: z.array(z.string()).optional(),
-      imageDataUrl: z.string().optional(),
+      imageDataUrl: imageDataUrlSchema.optional(),
       note: z.string().optional(),
     })
   ),
@@ -99,6 +105,7 @@ const caseSchema = z.object({
       name: z.string(),
       latitude: z.number().optional(),
       longitude: z.number().optional(),
+      imageDataUrl: imageDataUrlSchema.optional(),
       note: z.string().optional(),
     })
   ),

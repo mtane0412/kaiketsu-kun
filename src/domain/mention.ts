@@ -26,7 +26,9 @@ export const MENTION_KINDS: MentionKind[] = ['person', 'place'];
 
 /** 本文を分解した1要素です。 */
 export type ContentSegment =
-  { type: 'text'; text: string } | { type: 'mention'; kind: MentionKind; id: Id; label: string };
+  | { type: 'text'; text: string }
+  /** imageDataUrl は、案件を参照して解決した場合（resolveContent）にだけ載ります。 */
+  | { type: 'mention'; kind: MentionKind; id: Id; label: string; imageDataUrl?: string };
 
 /** 下書きの中で「@表示名」として書かれているメンションです。 */
 export type DraftMention = { kind: MentionKind; id: Id; label: string };
@@ -64,26 +66,34 @@ export function parseContent(content: string): ContentSegment[] {
   return segments;
 }
 
-/** エンティティの現在の名前を返します。案件内に存在しない場合は undefined を返します。 */
-function findEntityName(target: Case, kind: MentionKind, id: Id): string | undefined {
+/** メンションが指すエンティティを返します。案件内に存在しない場合は undefined を返します。 */
+function findEntity(target: Case, kind: MentionKind, id: Id): { name: string; imageDataUrl?: string } | undefined {
   switch (kind) {
     case 'person':
-      return target.persons.find((person) => person.id === id)?.name;
+      return target.persons.find((person) => person.id === id);
     case 'place':
-      return target.places.find((place) => place.id === id)?.name;
+      return target.places.find((place) => place.id === id);
   }
 }
 
+/** エンティティの現在の名前を返します。案件内に存在しない場合は undefined を返します。 */
+function findEntityName(target: Case, kind: MentionKind, id: Id): string | undefined {
+  return findEntity(target, kind, id)?.name;
+}
+
 /**
- * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新して返します。
+ * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新し、エンティティの画像を載せて返します。
  * 案件内に存在しないエンティティ（保存前の新規エンティティなど）は、トークンに控えた表示名のままにします。
  */
 export function resolveContent(content: string, target: Case): ContentSegment[] {
-  return parseContent(content).map((segment) =>
-    segment.type === 'mention'
-      ? { ...segment, label: findEntityName(target, segment.kind, segment.id) ?? segment.label }
-      : segment
-  );
+  return parseContent(content).map((segment) => {
+    if (segment.type !== 'mention') return segment;
+    const entity = findEntity(target, segment.kind, segment.id);
+    if (!entity) return segment;
+    return entity.imageDataUrl === undefined
+      ? { ...segment, label: entity.name }
+      : { ...segment, label: entity.name, imageDataUrl: entity.imageDataUrl };
+  });
 }
 
 /** 本文のメンションを「@現在の名前」に置き換えた文字列を返します。一覧表示や入力欄で使用します。 */
