@@ -32,7 +32,7 @@ describe('CaseList', () => {
   it('保存済みのケースが無い場合は、ケースが無いことを伝える', async () => {
     render(<CaseList />);
 
-    expect(await screen.findByText('保存されているケースはありません。')).toBeInTheDocument();
+    expect(await screen.findByText(/保存されているケースはありません/)).toBeInTheDocument();
   });
 
   it('新しいケースを作って、そのケースのボードへ移る', async () => {
@@ -89,12 +89,12 @@ describe('CaseList', () => {
   it('ケースを削除する前に確認し、承認された場合は一覧から取り除く', async () => {
     const user = userEvent.setup();
     saveCase(sampleFictionalCase);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<CaseList />);
 
     await user.click(await screen.findByRole('button', { name: '「湖畔の別荘失踪事件（架空）」を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
     expect(listCaseSummaries()).toEqual([]);
-    expect(screen.getByText('保存されているケースはありません。')).toBeInTheDocument();
+    expect(screen.getByText(/保存されているケースはありません/)).toBeInTheDocument();
   });
 });

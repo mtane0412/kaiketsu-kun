@@ -73,8 +73,8 @@ function PersonChecklist({ legend, description, selectedIds, onChange, persons, 
 
   return (
     <fieldset className="space-y-1">
-      <legend className="text-xs font-semibold text-slate-700">{legend}</legend>
-      <p className="text-xs text-slate-500">{description}</p>
+      <legend className="text-xs font-semibold text-foreground">{legend}</legend>
+      <p className="text-xs text-muted-foreground">{description}</p>
       <div className="max-h-32 space-y-1 overflow-auto">
         {persons.map((person) => (
           <label key={person.id} className="flex items-center gap-2">
@@ -98,12 +98,12 @@ function PersonChecklist({ legend, description, selectedIds, onChange, persons, 
           onChange={(event) => setNewPersonName(event.target.value)}
           onKeyDown={handleNewPersonKeyDown}
           placeholder="人物を追加（新規作成も可）"
-          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs focus:border-sky-500 focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs focus-visible:border-ring focus:outline-none"
         />
         <button
           type="button"
           onClick={addPerson}
-          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+          className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40"
         >
           追加
         </button>
@@ -166,7 +166,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={toggleOpen}
-        className="max-w-full truncate rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+        className="max-w-full truncate rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted/40"
       >
         {`発言者: ${currentLabel}`}
       </button>
@@ -175,7 +175,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
           id={panelId}
           role="group"
           aria-label="発言者を選ぶ"
-          className={`absolute left-0 z-10 w-72 space-y-3 rounded border border-slate-300 bg-white p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
+          className={`absolute left-0 z-10 w-72 space-y-3 rounded border border-border bg-background p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
         >
           <PersonChecklist
             legend="発言者"

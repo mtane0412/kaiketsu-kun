@@ -30,7 +30,7 @@ const PATH_STYLE = { color: '#0284c7', weight: 3, opacity: 0.7, dashArray: '6 6'
 const ACTIVE_PIN_Z_INDEX_OFFSET = 1000;
 
 const PIN_LABEL_CLASS =
-  'absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border-2 border-white px-2 py-0.5 text-xs font-bold text-white shadow';
+  'absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border-2 border-background px-2 py-0.5 text-xs font-bold text-background shadow';
 
 type TrailMapProps = {
   /** 場所ごとのピンです。1つ以上が必要です。 */
@@ -53,7 +53,7 @@ function pinIcon(pin: MapPin, isActive: boolean) {
     className: '',
     iconSize: [0, 0],
     // 注意: html に入れるのは順番の数値だけです（ユーザーが入力した文字列は入れません）
-    html: `<span class="${PIN_LABEL_CLASS} ${isActive ? 'bg-red-600' : 'bg-slate-600'}">${pin.orders.join('・')}</span>`,
+    html: `<span class="${PIN_LABEL_CLASS} ${isActive ? 'bg-primary' : 'bg-muted-foreground'}">${pin.orders.join('・')}</span>`,
   });
 }
 

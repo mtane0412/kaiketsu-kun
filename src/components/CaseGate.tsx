@@ -30,7 +30,7 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
   if (loadError !== null) {
     return (
       <div className="mx-auto mt-4 max-w-5xl space-y-3">
-        <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+        <div role="alert" className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <p className="font-semibold">ケースを開けませんでした</p>
           <p className="mt-1">
             保存データの形式が正しくない場合、そのデータはブラウザのLocalStorageのキー{' '}
@@ -39,7 +39,7 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
           </p>
           <pre className="mt-2 whitespace-pre-wrap text-xs">{loadError}</pre>
         </div>
-        <Link href={casesHref()} className="text-sm text-sky-700 hover:underline">
+        <Link href={casesHref()} className="text-sm text-foreground hover:underline">
           ケースの一覧へ
         </Link>
       </div>

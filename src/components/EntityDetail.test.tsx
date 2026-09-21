@@ -79,7 +79,7 @@ describe('PersonDetail', () => {
   it('どの証言からも参照されていない人物を削除すると、ボードに戻る', async () => {
     // 前提: 証言にも関係にも現れない「町役場の職員」を登録したケースを用意する
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     openTestCase({
       ...sampleFictionalCase,
       persons: [...sampleFictionalCase.persons, { id: 'person-clerk', name: '町役場の職員' }],
@@ -87,6 +87,7 @@ describe('PersonDetail', () => {
     render(<PersonDetail personId="person-clerk" />);
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
     expect(openedCase().persons.map((person) => person.id)).not.toContain('person-clerk');
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside');
@@ -94,12 +95,13 @@ describe('PersonDetail', () => {
 
   it('証言から参照されている人物を削除しようとすると、理由を示して削除しない', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     render(<PersonDetail personId="person-neighbor" />);
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
+    expect(await screen.findByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 

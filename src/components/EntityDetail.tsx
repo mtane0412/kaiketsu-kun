@@ -25,6 +25,7 @@ import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { COLLECTION_KEY_BY_MENTION_KIND, useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
+import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { FormError } from './forms/fields';
@@ -43,7 +44,7 @@ function CloseLink({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
       <Link
         href={boardHref(caseId, tab)}
         aria-label={`${kindLabel}の詳細を閉じる`}
-        className="text-xs text-slate-600 hover:underline"
+        className="text-xs text-muted-foreground hover:underline"
       >
         閉じる
       </Link>
@@ -56,8 +57,8 @@ function NotFound({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
   return (
     <div className="space-y-4">
       <CloseLink kindLabel={kindLabel} tab={tab} />
-      <h2 className="text-lg font-semibold text-slate-900">{kindLabel}が見つかりません</h2>
-      <p className="text-sm text-slate-600">この{kindLabel}は削除されたか、URLが誤っています。</p>
+      <h2 className="text-lg font-semibold">{kindLabel}が見つかりません</h2>
+      <p className="text-sm text-muted-foreground">この{kindLabel}は削除されたか、URLが誤っています。</p>
     </div>
   );
 }
@@ -90,8 +91,6 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
   const kindLabel = MENTION_KIND_LABELS[kind];
 
   const handleDelete = () => {
-    // 削除は取り消せないため、実行前に確認する
-    if (!window.confirm(`「${name}」を削除しますか？`)) return;
     try {
       remove(COLLECTION_KEY_BY_MENTION_KIND[kind], id);
     } catch (caught) {
@@ -106,17 +105,22 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
     <div className="space-y-6">
       <CloseLink kindLabel={kindLabel} tab={tab} />
 
-      <section aria-label={`${kindLabel}の編集`} className="rounded border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">{name}</h2>
+      <section aria-label={`${kindLabel}の編集`} className="rounded-lg border bg-card p-4">
+        <h2 className="mb-3 text-lg font-semibold">{name}</h2>
         {form(() => setIsSaved(true))}
         {isSaved && (
-          <p role="status" className="mt-2 text-right text-xs text-emerald-700">
+          <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
             保存しました
           </p>
         )}
-        <button type="button" onClick={handleDelete} className="mt-2 text-xs text-red-600 hover:underline">
-          この{kindLabel}を削除
-        </button>
+        <div className="mt-3">
+          <DeleteConfirmButton
+            label={`この${kindLabel}を削除`}
+            title={`「${name}」を削除しますか？`}
+            description={`この${kindLabel}をケースから削除します。この操作は取り消せません。`}
+            onConfirm={handleDelete}
+          />
+        </div>
         <div className="mt-2">
           <FormError message={deleteError} />
         </div>
@@ -124,9 +128,9 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
 
       {claimGroups.map((group) => (
         <section key={group.label} aria-label={group.label} className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">
+          <h3 className="text-sm font-semibold">
             {group.label}
-            <span className="ml-2 text-xs font-normal text-slate-500">{group.claims.length}件</span>
+            <span className="ml-2 text-xs font-normal text-muted-foreground">{group.claims.length}件</span>
           </h3>
           <ul className="space-y-1">
             {group.claims.map((view) => (
@@ -139,20 +143,20 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
       ))}
 
       <section aria-label={RELATED_ENTITIES_LABEL} className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-800">{RELATED_ENTITIES_LABEL}</h3>
+        <h3 className="text-sm font-semibold">{RELATED_ENTITIES_LABEL}</h3>
         {relatedEntities.length === 0 ? (
-          <p className="text-xs text-slate-400">メモで「@」を入力すると、他の人物・場所と関連付けられます。</p>
+          <p className="text-xs text-muted-foreground">メモで「@」を入力すると、他の人物・場所と関連付けられます。</p>
         ) : (
           <ul className="space-y-1">
             {relatedEntities.map((related) => (
               <li key={`${related.kind}:${related.id}`}>
                 <Link
                   href={mentionHref(caseId, related.kind, related.id, tab)}
-                  className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm hover:border-sky-400"
+                  className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1.5 text-sm transition-colors hover:border-foreground/30"
                 >
                   <EntityAvatar imageDataUrl={related.imageDataUrl} iconText={related.iconText} size="sm" />
                   <span className="min-w-0">
-                    <span className="block truncate text-xs text-slate-500">
+                    <span className="block truncate text-xs text-muted-foreground">
                       {MENTION_KIND_LABELS[related.kind]}・{describeRelation(related)}
                     </span>
                     <span className="block truncate">{related.name}</span>
