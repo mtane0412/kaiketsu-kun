@@ -1,9 +1,10 @@
 /**
- * 画像の入力欄（アバター風の表示・ファイルの選択・クリップボードからの貼り付け・切り抜き）
+ * 画像の入力欄（プレビューの表示・ファイルの選択・クリップボードからの貼り付け・切り抜き）
  *
  * 画像は、ファイルの選択、キーボードでの貼り付け（Ctrl+V / ⌘+V）、「クリップボードから貼り付け」ボタンの
  * いずれかで受け取ります。受け取った画像は、必ず切り抜きの画面を通してから登録します。
- * 登録した画像は丸く表示するため（EntityAvatar）、切り抜きの範囲も丸で示します。
+ * 人物の画像はアバターとして丸く、場所の画像は写真として四角く、プレビューと切り抜きの範囲を示します（shape）。
+ * どちらの形でも、登録する画像そのものは正方形です。
  */
 'use client';
 
@@ -19,8 +20,18 @@ const ZOOM_STEP = 0.01;
 
 const SUB_BUTTON_CLASS = 'rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50';
 
+/** 形ごとの、プレビューの角の丸めです。 */
+const SHAPE_CLASSES = {
+  round: 'rounded-full',
+  rect: 'rounded-md',
+} as const;
+
+/** 画像の見せ方です。round は人物のアバター、rect は場所などの写真に使用します。 */
+type ImageShape = keyof typeof SHAPE_CLASSES;
+
 type ImageFieldProps = {
   label: string;
+  shape: ImageShape;
   /** 登録する画像（切り抜いて縮小済みの data URL）です。画像が無い場合は undefined です。 */
   value: string | undefined;
   onChange: (value: string | undefined) => void;
@@ -28,12 +39,12 @@ type ImageFieldProps = {
 
 /**
  * ラベル付きの画像の入力欄です。
- * 受け取った画像は、切り抜いて縮小した data URL にして onChange に渡し、丸いプレビューを表示します。
+ * 受け取った画像は、切り抜いて縮小した data URL にして onChange に渡し、shape の形のプレビューを表示します。
  * 画像として扱えない場合は、理由を欄の下に表示し、値を変えません。
  *
  * 注意: 表示している間は、ページ全体への画像の貼り付けを受け取ります。文字だけの貼り付けには干渉しません。
  */
-export function ImageField({ label, value, onChange }: ImageFieldProps) {
+export function ImageField({ label, shape, value, onChange }: ImageFieldProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   /** 切り抜きの画面に出している画像です。切り抜きの画面を出していない場合は null です。 */
@@ -103,6 +114,7 @@ export function ImageField({ label, value, onChange }: ImageFieldProps) {
       {croppingFile ? (
         <ImageCropper
           file={croppingFile}
+          shape={shape}
           onConfirm={(area) => handleCropConfirm(croppingFile, area)}
           onCancel={() => setCroppingFile(null)}
           onLoadError={() => {
@@ -112,19 +124,19 @@ export function ImageField({ label, value, onChange }: ImageFieldProps) {
         />
       ) : (
         <div className="flex items-center gap-3">
-          <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-slate-100">
+          <div className={`group relative h-20 w-20 shrink-0 overflow-hidden border border-slate-300 bg-slate-100 ${SHAPE_CLASSES[shape]}`}>
             {value ? (
               // 縮小済みの data URL のため、next/image の最適化は使用しない
               <img src={value} alt="登録する画像" className="h-full w-full object-cover" />
             ) : (
-              <PlaceholderIcon />
+              <PlaceholderIcon shape={shape} />
             )}
-            {/* アバター全体を覆うボタン。ポインターを重ねるかフォーカスすると、カメラのアイコンを表示する */}
+            {/* プレビュー全体を覆うボタン。ポインターを重ねるかフォーカスすると、カメラのアイコンを表示する */}
             <button
               type="button"
               aria-label="画像を選ぶ"
               onClick={() => inputRef.current?.click()}
-              className="absolute inset-0 flex items-center justify-center rounded-full bg-slate-900/50 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
+              className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
             >
               <CameraIcon />
             </button>
@@ -154,6 +166,7 @@ export function ImageField({ label, value, onChange }: ImageFieldProps) {
 
 type ImageCropperProps = {
   file: File;
+  shape: ImageShape;
   /** 切り抜き範囲（単位は元の画像のピクセル）を受け取ります。 */
   onConfirm: (area: Area) => void;
   onCancel: () => void;
@@ -162,7 +175,7 @@ type ImageCropperProps = {
 };
 
 /** 切り抜きの画面です。画像をドラッグして位置を、スライダーかホイールで拡大率を決めます。 */
-function ImageCropper({ file, onConfirm, onCancel, onLoadError }: ImageCropperProps) {
+function ImageCropper({ file, shape, onConfirm, onCancel, onLoadError }: ImageCropperProps) {
   const zoomId = useId();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -187,7 +200,7 @@ function ImageCropper({ file, onConfirm, onCancel, onLoadError }: ImageCropperPr
             minZoom={MIN_ZOOM}
             maxZoom={MAX_ZOOM}
             aspect={1}
-            cropShape="round"
+            cropShape={shape}
             showGrid={false}
             onCropChange={setCrop}
             onZoomChange={setZoom}
@@ -229,8 +242,16 @@ function ImageCropper({ file, onConfirm, onCancel, onLoadError }: ImageCropperPr
   );
 }
 
-/** 画像を登録していない場合に表示する、人影のアイコンです。 */
-function PlaceholderIcon() {
+/** 画像を登録していない場合に表示するアイコンです。人物（round）は人影、場所（rect）は風景です。 */
+function PlaceholderIcon({ shape }: { shape: ImageShape }) {
+  if (shape === 'rect') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-slate-300">
+        <circle cx="16.5" cy="8" r="2" />
+        <path d="M2 20l6.5-9 4.5 6 3-4 6 7z" />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-slate-300">
       <circle cx="12" cy="9" r="4" />

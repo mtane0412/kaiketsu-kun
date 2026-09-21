@@ -68,7 +68,10 @@ export type Person = {
   note?: string;
 };
 
-/** 案件に登場する場所です。緯度経度は地図ビューを作る段階で使用します。 */
+/** 地点の座標（世界測地系の緯度・経度。単位は度）です。 */
+export type Coordinates = { latitude: number; longitude: number };
+
+/** 案件に登場する場所です。緯度経度は、場所のフォームの座標欄で登録し、地図ビューで使用します。 */
 export type Place = {
   id: Id;
   name: string;
