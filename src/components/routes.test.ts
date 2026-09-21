@@ -2,7 +2,7 @@
  * 画面のURLを組み立てる関数のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { boardHref, claimHref, parseTab } from './routes';
+import { boardHref, claimHref, mentionHref, parseTab, personHref, placeHref } from './routes';
 
 describe('parseTab', () => {
   it('URLの tab の値を、ボードのタブとして読み取る', () => {
@@ -35,5 +35,34 @@ describe('claimHref', () => {
 
   it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
     expect(claimHref('a/b', 'timeline')).toBe('/claims/a%2Fb');
+  });
+});
+
+describe('personHref', () => {
+  it('人物の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(personHref('person-neighbor', 'timeline')).toBe('/persons/person-neighbor');
+    expect(personHref('person-neighbor', 'speaker')).toBe('/persons/person-neighbor?tab=speaker');
+  });
+
+  it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
+    expect(personHref('a/b', 'timeline')).toBe('/persons/a%2Fb');
+  });
+});
+
+describe('placeHref', () => {
+  it('場所の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(placeHref('place-villa', 'timeline')).toBe('/places/place-villa');
+    expect(placeHref('place-villa', 'map')).toBe('/places/place-villa?tab=map');
+  });
+
+  it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
+    expect(placeHref('a/b', 'timeline')).toBe('/places/a%2Fb');
+  });
+});
+
+describe('mentionHref', () => {
+  it('メンションの種類に応じて、人物・場所の詳細ページのURLを返す', () => {
+    expect(mentionHref('person', 'person-neighbor', 'map')).toBe('/persons/person-neighbor?tab=map');
+    expect(mentionHref('place', 'place-villa', 'map')).toBe('/places/place-villa?tab=map');
   });
 });

@@ -7,8 +7,9 @@
  * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
  * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
  * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
- * カード全体が、証言の詳細ページ（href）へのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
- * onOpenEntity を渡すとメンションと言及のアイコンがボタンになります。
+ * カード全体が、証言の詳細ページへのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
+ * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
+ * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
  * 詳細を開いている証言のカード（isActive）は、枠を強調し、画面の外にある場合は見える位置までスクロールします。
  * 詳細の関連リンクから別の証言へ移ったときに、ボード上の位置を見失わないようにするためです。
  *
@@ -22,8 +23,8 @@ import { useEffect, useRef } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
-import type { Id } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
+import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
 
 const MENTION_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100 text-sky-800',
@@ -37,15 +38,13 @@ type ClaimCardProps = {
   view: ClaimView;
   /** 発言者名を表示するかどうかです。証言者別ビューではグループ見出しと重複するため非表示にします。 */
   showSpeaker: boolean;
-  /** 本文のメンション、または言及の欄のアイコンが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
-  onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 証言の詳細ページのURLです。 */
-  href: string;
+  /** このカードを表示しているタブです。詳細ページへのリンクに、戻り先として引き継ぎます。 */
+  tab: TabKey;
   /** この証言の詳細を開いているかどうかです。 */
   isActive?: boolean;
 };
 
-export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = false }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCardProps) {
   const { claim } = view;
   const cardRef = useRef<HTMLLIElement>(null);
 
@@ -60,19 +59,14 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = fa
       {view.contentSegments.map((segment, index) =>
         segment.type !== 'mention' ? (
           segment.text
-        ) : onOpenEntity ? (
-          <button
+        ) : (
+          <Link
             key={index}
-            type="button"
-            onClick={() => onOpenEntity(segment.kind, segment.id)}
+            href={mentionHref(segment.kind, segment.id, tab)}
             className={`${ABOVE_CARD_LINK} rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
-          </button>
-        ) : (
-          <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
-            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
-          </span>
+          </Link>
         )
       )}
     </p>
@@ -96,7 +90,7 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = fa
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
         )}
         <Link
-          href={href}
+          href={claimHref(claim.id, tab)}
           aria-current={isActive ? 'true' : undefined}
           aria-label={`「${claimLabelOf(view)}」を開く`}
           className="ml-auto text-sky-700 after:absolute after:inset-0 hover:underline"
@@ -135,28 +129,19 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = fa
             <dt>言及</dt>
             <dd>
               <ul aria-label="言及している人物" className="flex flex-wrap gap-1">
-                {view.mentionedPersons.map((person) => {
-                  const avatar = <EntityAvatar imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="row" />;
-                  return (
-                    <li key={person.id} className="flex">
-                      {onOpenEntity ? (
-                        <button
-                          type="button"
-                          aria-label={person.name}
-                          title={person.name}
-                          onClick={() => onOpenEntity('person', person.id)}
-                          className={`${ABOVE_CARD_LINK} flex rounded-full hover:ring-2 hover:ring-sky-300`}
-                        >
-                          {avatar}
-                        </button>
-                      ) : (
-                        <span role="img" aria-label={person.name} title={person.name} className="flex">
-                          {avatar}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
+                {view.mentionedPersons.map((person) => (
+                  <li key={person.id} className="flex">
+                    <Link
+                      href={personHref(person.id, tab)}
+                      // アイコンだけのリンクのため、人物の名前をリンクの名前とツールチップに持たせる
+                      aria-label={person.name}
+                      title={person.name}
+                      className={`${ABOVE_CARD_LINK} flex rounded-full hover:ring-2 hover:ring-sky-300`}
+                    >
+                      <EntityAvatar imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="row" />
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </dd>
           </>

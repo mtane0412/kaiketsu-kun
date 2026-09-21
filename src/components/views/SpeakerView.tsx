@@ -8,7 +8,6 @@ import { useMemo } from 'react';
 import { groupClaimsBySpeaker } from '@/domain/case-views';
 import type { Case, Id } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
-import { claimHref } from '../routes';
 import { ClaimCard } from './ClaimCard';
 
 const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
@@ -43,7 +42,7 @@ export function SpeakerView({ target, activeClaimId }: SpeakerViewProps) {
                 key={view.claim.id}
                 view={view}
                 showSpeaker={false}
-                href={claimHref(view.claim.id, 'speaker')}
+                tab="speaker"
                 isActive={view.claim.id === activeClaimId}
               />
             ))}

@@ -13,7 +13,7 @@
  *
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 証言の編集・削除・日時の入力は、証言のカードから開く詳細ページ（ClaimDetail）で行います。ボード上では編集しません。
- * 本文のメンションは、エンティティの編集を開く導線（onOpenEntity）です。
+ * 本文のメンションは、その人物・場所の詳細ページ（EntityDetail）への導線です。
  */
 'use client';
 
@@ -32,11 +32,9 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
-import type { MentionKind } from '@/domain/mention';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
-import { claimHref } from '../routes';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
 
@@ -53,8 +51,6 @@ type TimelineViewProps = {
   target: Case;
   /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
   activeClaimId?: Id;
-  /** 本文のメンションが選ばれたときに呼び出します。 */
-  onOpenEntity?: (kind: MentionKind, id: Id) => void;
 };
 
 /** ボードの項目の名前を返します。ボタンの名前と読み上げに使います。 */
@@ -103,7 +99,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
   );
 }
 
-export function TimelineView({ target, activeClaimId, onOpenEntity }: TimelineViewProps) {
+export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -158,13 +154,7 @@ export function TimelineView({ target, activeClaimId, onOpenEntity }: TimelineVi
     <>
       {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
       <ul>
-        <ClaimCard
-          view={view}
-          showSpeaker
-          onOpenEntity={onOpenEntity}
-          href={claimHref(view.claim.id, 'timeline')}
-          isActive={view.claim.id === activeClaimId}
-        />
+        <ClaimCard view={view} showSpeaker tab="timeline" isActive={view.claim.id === activeClaimId} />
       </ul>
     </>
   );

@@ -6,6 +6,8 @@
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 地図ビューは、時系列の並び順のうち、座標のある場所を述べる証言だけをたどります（buildMapTrail）。
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
+ * 人物・場所の詳細では、その人物・場所から証言を逆引きします（buildPersonDetail・buildPlaceDetail）。
+ * 逆引きした証言は、証言の詳細と同じく時系列の並び順に並べます。
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
@@ -346,5 +348,94 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
     previous: views[index - 1],
     next: views[index + 1],
     relatedClaimGroups: groups.filter((group) => group.claims.length > 0),
+  };
+}
+
+/** 人物・場所の詳細に並べる、証言のまとまりです。 */
+export type EntityClaimGroup = {
+  /** このまとまりが、対象の人物・場所とどう関わる証言かを示す見出しです。 */
+  label: string;
+  /** 関わる証言です。時系列の並び順に並びます。 */
+  claims: ClaimView[];
+};
+
+/** 人物の詳細ページに表示する内容です。 */
+export type PersonDetail = {
+  person: Person;
+  /** この人物から逆引きした証言のまとまりです。1件も無いまとまりは含みません。 */
+  claimGroups: EntityClaimGroup[];
+  /** メモのメンションでつながったエンティティです（findRelatedEntities）。 */
+  relatedEntities: RelatedEntity[];
+};
+
+/** 場所の詳細ページに表示する内容です。 */
+export type PlaceDetail = {
+  place: Place;
+  /** この場所から逆引きした証言のまとまりです。1件も無いまとまりは含みません。 */
+  claimGroups: EntityClaimGroup[];
+  /** メモのメンションでつながったエンティティです（findRelatedEntities）。 */
+  relatedEntities: RelatedEntity[];
+};
+
+/** 1件も証言が無いまとまりを取り除きます。関わる証言が無い見出しだけが並ぶことを避けるためです。 */
+function withoutEmptyGroups(groups: EntityClaimGroup[]): EntityClaimGroup[] {
+  return groups.filter((group) => group.claims.length > 0);
+}
+
+/**
+ * 人物の詳細ページの内容を組み立てます。
+ *
+ * 証言から人物へ、人物から別の証言へとたどれるよう、この人物が述べた証言・経由して伝わった証言・
+ * 言及している証言を、時系列の並び順（buildTimeline）で逆引きします。
+ * 注意: 案件に無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
+ */
+export function buildPersonDetail(target: Case, personId: Id): PersonDetail | undefined {
+  const person = target.persons.find((candidate) => candidate.id === personId);
+  if (!person) return undefined;
+
+  const views = buildTimeline(target).items.map((item) => item.view);
+  return {
+    person,
+    claimGroups: withoutEmptyGroups([
+      {
+        label: 'この人物が述べた証言',
+        claims: views.filter(
+          (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personIds.includes(personId)
+        ),
+      },
+      {
+        label: 'この人物を経由して伝わった証言',
+        claims: views.filter((view) => view.claim.viaPersonIds.includes(personId)),
+      },
+      {
+        label: 'この人物に言及している証言',
+        claims: views.filter((view) => view.claim.mentionedPersonIds.includes(personId)),
+      },
+    ]),
+    relatedEntities: findRelatedEntities(target, 'person', personId),
+  };
+}
+
+/**
+ * 場所の詳細ページの内容を組み立てます。
+ *
+ * 証言から場所へ、場所から別の証言へとたどれるよう、この場所を述べている証言を、
+ * 時系列の並び順（buildTimeline）で逆引きします。
+ * 注意: 案件に無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
+ */
+export function buildPlaceDetail(target: Case, placeId: Id): PlaceDetail | undefined {
+  const place = target.places.find((candidate) => candidate.id === placeId);
+  if (!place) return undefined;
+
+  const views = buildTimeline(target).items.map((item) => item.view);
+  return {
+    place,
+    claimGroups: withoutEmptyGroups([
+      {
+        label: 'この場所を述べている証言',
+        claims: views.filter((view) => view.claim.placeId === placeId),
+      },
+    ]),
+    relatedEntities: findRelatedEntities(target, 'place', placeId),
   };
 }

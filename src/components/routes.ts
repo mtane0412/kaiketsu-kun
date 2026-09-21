@@ -1,9 +1,11 @@
 /**
  * 画面のURLを組み立てる関数
  *
+ * 証言・人物・場所の詳細は、それぞれ独立したページ（/claims/<ID>・/persons/<ID>・/places/<ID>）として開きます。
  * ボードのタブはURLのクエリ（?tab=）に持たせます。詳細ページからブラウザの「戻る」や
  * 「ボードに戻る」で、元のタブに戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
+import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 
 export const TABS = [
@@ -41,4 +43,19 @@ export function boardHref(tab: TabKey): string {
 /** 証言の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
 export function claimHref(claimId: Id, tab: TabKey): string {
   return `/claims/${encodeURIComponent(claimId)}${tabQuery(tab)}`;
+}
+
+/** 人物の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function personHref(personId: Id, tab: TabKey): string {
+  return `/persons/${encodeURIComponent(personId)}${tabQuery(tab)}`;
+}
+
+/** 場所の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function placeHref(placeId: Id, tab: TabKey): string {
+  return `/places/${encodeURIComponent(placeId)}${tabQuery(tab)}`;
+}
+
+/** メンションの種類（人物・場所）に応じた、詳細ページのURLを返します。証言の本文のメンションからたどるために使います。 */
+export function mentionHref(kind: MentionKind, id: Id, tab: TabKey): string {
+  return kind === 'person' ? personHref(id, tab) : placeHref(id, tab);
 }
