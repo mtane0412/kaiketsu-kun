@@ -203,6 +203,46 @@ describe('ClaimForm', () => {
     });
   });
 
+  it('見出しを入力すると、本文とは別の項目として保存する', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('見出し（任意）'), '  Zによる恐喝事件があった  ');
+    await user.type(screen.getByLabelText('内容'), 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。');
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    // 検証: 見出しは前後の空白を取り除いて保存し、本文には混ぜない
+    expect(lastSavedClaim()).toMatchObject({
+      title: 'Zによる恐喝事件があった',
+      content: 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。',
+    });
+  });
+
+  it('見出しを入力しない主張は、見出しの項目を持たない', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('内容'), '門は開いていた。');
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    // 検証: JSONの書き出しと読み込みで形が変わらないよう、空の見出しはキーごと持たせない
+    expect(lastSavedClaim()).not.toHaveProperty('title');
+  });
+
+  it('既存の主張を編集するときは、保存済みの見出しを示し、消すと見出しの項目を取り除く', async () => {
+    // 前提: 隣家の住人の証言に見出しが付いている
+    const user = userEvent.setup();
+    const 見出し付きの証言 = { ...sampleFictionalCase.claims[1]!, title: '夜9時に持ち主を庭で見た' };
+    render(<ClaimForm initial={見出し付きの証言} onDone={vi.fn()} />);
+
+    expect(screen.getByLabelText('見出し（任意）')).toHaveValue('夜9時に持ち主を庭で見た');
+    await user.clear(screen.getByLabelText('見出し（任意）'));
+    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+
+    const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 見出し付きの証言.id);
+    expect(保存後).not.toHaveProperty('title');
+  });
+
   it('資料内の位置（ページなど）の入力欄を持たない', () => {
     // 書誌情報は詳しすぎるため入力させない。URLなどは人物（媒体）のメモ欄に書く
     render(<ClaimForm onDone={vi.fn()} />);
@@ -529,6 +569,12 @@ describe('ClaimForm のキーボード操作', () => {
       expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
       expect(screen.queryByLabelText('証言が述べる日時：表記')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('ソース内の位置')).not.toBeInTheDocument();
+    });
+
+    it('見出しの入力欄も表示する', () => {
+      render(<ClaimForm compact onDone={vi.fn()} />);
+
+      expect(screen.getByLabelText('見出し（任意）')).toBeInTheDocument();
     });
 
     it('本文だけを編集しても、入力済みの日時・ソース内の位置を保持する', async () => {

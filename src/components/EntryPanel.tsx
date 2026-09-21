@@ -70,7 +70,7 @@ const SECTIONS: Section[] = [
     listItems: (target) =>
       target.claims.map((claim) => ({
         id: claim.id,
-        label: truncate(contentToPlainText(claim.content, target)),
+        label: truncate(claim.title ?? contentToPlainText(claim.content, target)),
         caption: describeClaimAttribution(target, claim),
       })),
     renderForm: (target, editingId, onDone) => (

@@ -4,6 +4,7 @@
  * 時系列ビューと証言者別ビューで共有します。
  * ユーザーの推測は、証言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
+ * 見出しのある主張は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
  * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと主張の編集・詳細ボタンを表示します。
  */
 import { formatViaLabel, type ClaimView } from '@/domain/case-views';
@@ -33,6 +34,28 @@ type ClaimCardProps = {
 export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, onOpenDetails }: ClaimCardProps) {
   const { claim } = view;
   const isUserSpeculation = claim.speaker.kind === 'user';
+  const content = (
+    <p className="whitespace-pre-line text-slate-900">
+      {view.contentSegments.map((segment, index) =>
+        segment.type !== 'mention' ? (
+          segment.text
+        ) : onOpenEntity ? (
+          <button
+            key={index}
+            type="button"
+            onClick={() => onOpenEntity(segment.kind, segment.id)}
+            className={`rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
+          >
+            @{segment.label}
+          </button>
+        ) : (
+          <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
+            @{segment.label}
+          </span>
+        )
+      )}
+    </p>
+  );
 
   return (
     <li
@@ -66,26 +89,17 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
         </span>
       </div>
 
-      <p className="whitespace-pre-line text-slate-900">
-        {view.contentSegments.map((segment, index) =>
-          segment.type !== 'mention' ? (
-            segment.text
-          ) : onOpenEntity ? (
-            <button
-              key={index}
-              type="button"
-              onClick={() => onOpenEntity(segment.kind, segment.id)}
-              className={`rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
-            >
-              @{segment.label}
-            </button>
-          ) : (
-            <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
-              @{segment.label}
-            </span>
-          )
-        )}
-      </p>
+      {claim.title ? (
+        <>
+          <p className="font-semibold text-slate-900">{claim.title}</p>
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs text-slate-500">本文を表示</summary>
+            <div className="mt-1">{content}</div>
+          </details>
+        </>
+      ) : (
+        content
+      )}
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-slate-500">
         {showEvent && view.event && (

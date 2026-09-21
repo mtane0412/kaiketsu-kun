@@ -15,6 +15,20 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(sampleFictionalCase))).toEqual(sampleFictionalCase);
   });
 
+  it('主張の見出しを保持して受け付ける', () => {
+    // 前提: 隣家の住人の証言に、長い本文を要約する見出しを付けている
+    const 案件 = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor' ? { ...claim, title: '夜9時に持ち主を庭で見た' } : claim
+      ),
+    };
+
+    const 読み込み後 = parseCase(toJsonData(案件));
+
+    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')?.title).toBe('夜9時に持ち主を庭で見た');
+  });
+
   it('並び順を持たない頃に保存したデータは、当時の表示順（日時の早い順）を並び順として補って受け付ける', () => {
     // 前提: 以前の版では、ボード上の位置を主張が述べる日時から決めており、timelineOrder を保存していなかった
     const { timelineOrder: _並び順, ...並び順の無い案件 } = sampleFictionalCase;
