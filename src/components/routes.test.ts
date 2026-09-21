@@ -98,15 +98,18 @@ describe('mentionHref', () => {
 
 describe('newPersonHref・newPlaceHref', () => {
   it('人物・場所を新しく登録するページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(newPersonHref(ケースのId, 'timeline')).toBe('/cases/case-villa/new/person');
-    expect(newPersonHref(ケースのId, 'map')).toBe('/cases/case-villa/new/person?tab=map');
-    expect(newPlaceHref(ケースのId, 'timeline')).toBe('/cases/case-villa/new/place');
-    expect(newPlaceHref(ケースのId, 'speaker')).toBe('/cases/case-villa/new/place?tab=speaker');
+    expect(newPersonHref(ケースのId, 'timeline')).toBe('/cases/case-villa/persons/new');
+    expect(newPersonHref(ケースのId, 'map')).toBe('/cases/case-villa/persons/new?tab=map');
+    expect(newPlaceHref(ケースのId, 'timeline')).toBe('/cases/case-villa/places/new');
+    expect(newPlaceHref(ケースのId, 'speaker')).toBe('/cases/case-villa/places/new?tab=speaker');
   });
 
-  it('登録のURLは、登録済みの人物・場所の詳細のURLと形が重ならない', () => {
-    // 前提: 読み込んだJSONのIDが「person」などであっても、登録のページと取り違えてはならない
-    expect(parseDetailKind(personHref(ケースのId, 'person', 'timeline'))).toBe('person');
+  it('登録のURLは、IDが「new」の人物・場所の詳細より優先される', () => {
+    // 前提: IDが「new」のエンティティは、アプリが振るID（nanoid）では生まれない。
+    // 読み込んだJSONに書かれていた場合だけ起こりうる衝突で、そのときは登録のページが優先される。
+    // Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するため、判定もそれに合わせる。
+    expect(parseDetailKind(personHref(ケースのId, 'new', 'timeline'))).toBe('newPerson');
+    expect(parseDetailKind(personHref(ケースのId, 'person-neighbor', 'timeline'))).toBe('person');
     expect(parseDetailKind(newPersonHref(ケースのId, 'timeline'))).toBe('newPerson');
   });
 });
@@ -119,8 +122,8 @@ describe('parseDetailKind', () => {
   });
 
   it('人物・場所を新しく登録するURLから、登録の種類を読み取る', () => {
-    expect(parseDetailKind('/cases/case-villa/new/person')).toBe('newPerson');
-    expect(parseDetailKind('/cases/case-villa/new/place')).toBe('newPlace');
+    expect(parseDetailKind('/cases/case-villa/persons/new')).toBe('newPerson');
+    expect(parseDetailKind('/cases/case-villa/places/new')).toBe('newPlace');
   });
 
   it('ボードのURLと、詳細ではないURLでは undefined を返す', () => {

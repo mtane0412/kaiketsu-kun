@@ -75,11 +75,15 @@ export function usePathname() {
 /** ケースのボードのURLから、ケースのIDを取り出すための形です。 */
 const CASE_PATH_PATTERN = /^\/cases\/([^/]+)/;
 
-/** 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。 */
+/**
+ * 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。
+ * 人物・場所の登録のURL（.../persons/new・.../places/new）は、本物のルーターでは静的なルートに当たり、
+ * personId・placeId を渡しません。代役でも同じになるよう、「new」だけは対象から外します。
+ */
 const DETAIL_PATH_PATTERNS: { name: 'claimId' | 'personId' | 'placeId'; pattern: RegExp }[] = [
   { name: 'claimId', pattern: /^\/cases\/[^/]+\/claims\/([^/]+)$/ },
-  { name: 'personId', pattern: /^\/cases\/[^/]+\/persons\/([^/]+)$/ },
-  { name: 'placeId', pattern: /^\/cases\/[^/]+\/places\/([^/]+)$/ },
+  { name: 'personId', pattern: /^\/cases\/[^/]+\/persons\/(?!new$)([^/]+)$/ },
+  { name: 'placeId', pattern: /^\/cases\/[^/]+\/places\/(?!new$)([^/]+)$/ },
 ];
 
 export function useParams(): { caseId?: string; claimId?: string; personId?: string; placeId?: string } {
