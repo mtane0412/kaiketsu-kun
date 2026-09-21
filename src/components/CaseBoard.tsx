@@ -13,7 +13,7 @@
  *
  * 注意: このコンポーネントはレイアウト（src/app/(board)/layout.tsx）に置きます。レイアウトはページを移っても再マウントされないため、
  * 証言を開閉しても、ボードのスクロール位置や入力中の内容を保ちます。
- * 保存済みの案件の復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
+ * 保存済みのケースの復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
  * useSearchParams を使うため、ページでは Suspense の中に置いてください。
  */
 'use client';
@@ -21,10 +21,11 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import type { Id } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { useCurrentCase } from '@/stores/useCaseStore';
 import { CaseToolbar } from './CaseToolbar';
 import { EntryPanel } from './EntryPanel';
 import { boardHref, claimHref, parseTab, personHref, placeHref, TAB_SEARCH_PARAM, TABS, type TabKey } from './routes';
+import { useCaseId } from './useCaseId';
 import { MapView } from './views/MapView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
@@ -42,7 +43,7 @@ const DETAIL_ROUTES = [
 type DetailParams = Partial<Record<(typeof DETAIL_ROUTES)[number]['param'], string>>;
 
 /** ボードの横に開いている詳細です。 */
-type OpenDetail = { label: string; id: Id; href: (id: Id, tab: TabKey) => string };
+type OpenDetail = { label: string; id: Id; href: (caseId: Id, id: Id, tab: TabKey) => string };
 
 /**
  * 開いている詳細を、ルートのパラメータから読み取ります。詳細のルートでない場合は undefined を返します。
@@ -62,7 +63,8 @@ type CaseBoardProps = {
 };
 
 export function CaseBoard({ children }: CaseBoardProps) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
+  const caseId = useCaseId();
   const router = useRouter();
   const activeTab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -88,7 +90,9 @@ export function CaseBoard({ children }: CaseBoardProps) {
               aria-selected={tab.key === activeTab}
               // タブの切り替えは履歴に積まない。詳細を開いている場合は、開いたままタブだけを切り替える
               onClick={() =>
-                router.replace(detail ? detail.href(detail.id, tab.key) : boardHref(tab.key), { scroll: false })
+                router.replace(detail ? detail.href(caseId, detail.id, tab.key) : boardHref(caseId, tab.key), {
+                  scroll: false,
+                })
               }
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                 tab.key === activeTab

@@ -7,8 +7,8 @@
  * Claim の placeId・mentionedPersonIds は、本文のトークンから導出します。
  * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
- * 本文には、案件のエンティティ（人物・場所）のほかに、日時のメンションも書けます。
- * 日時のメンションは案件のエンティティを指さず、時刻参照（TimeRef）そのものをIDとして持ちます
+ * 本文には、ケースのエンティティ（人物・場所）のほかに、日時のメンションも書けます。
+ * 日時のメンションはケースのエンティティを指さず、時刻参照（TimeRef）そのものをIDとして持ちます
  * （例: `@[1998年8月12日 19:00](date:1998-08-12T19:00)`）。証言の日時を本文の中で書けるようにするためです。
  *
  * 導出の規則:
@@ -32,7 +32,7 @@ export type MentionKind = 'person' | 'place';
 
 /**
  * 本文に書けるメンションの種類です。
- * date は案件のエンティティではなく、日時そのもの（TimeRef）を指します。
+ * date はケースのエンティティではなく、日時そのもの（TimeRef）を指します。
  */
 export type SegmentKind = MentionKind | 'date';
 
@@ -43,7 +43,7 @@ export const MENTION_KINDS: MentionKind[] = ['person', 'place'];
 export type ContentSegment =
   | { type: 'text'; text: string }
   /**
-   * imageDataUrl と iconText は、案件を参照して解決した場合（resolveContent）にだけ載ります。
+   * imageDataUrl と iconText は、ケースを参照して解決した場合（resolveContent）にだけ載ります。
    * iconText は、画像が無い場合にアイコンへ表示する1文字で、人物のメンションにだけ載ります。
    */
   | { type: 'mention'; kind: SegmentKind; id: Id; label: string; imageDataUrl?: string; iconText?: string };
@@ -92,7 +92,7 @@ export function dateMentionOf(when: TimeRef): DraftMention {
   return { kind: 'date', id: when, label: formatTimeRef(when) };
 }
 
-/** メンションが指すエンティティを返します。案件内に存在しない場合は undefined を返します。 */
+/** メンションが指すエンティティを返します。ケース内に存在しない場合は undefined を返します。 */
 function findEntity(
   target: Case,
   kind: MentionKind,
@@ -106,7 +106,7 @@ function findEntity(
   }
 }
 
-/** エンティティの現在の名前を返します。案件内に存在しない場合は undefined を返します。 */
+/** エンティティの現在の名前を返します。ケース内に存在しない場合は undefined を返します。 */
 function findEntityName(target: Case, kind: MentionKind, id: Id): string | undefined {
   return findEntity(target, kind, id)?.name;
 }
@@ -118,12 +118,12 @@ function dateMentionSegment(when: TimeRef): ContentSegment {
 
 /**
  * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新し、エンティティの画像と、人物のアイコンの文字を載せて返します。
- * 案件内に存在しないエンティティ（保存前の新規エンティティなど）は、トークンに控えた表示名のままにします。
+ * ケース内に存在しないエンティティ（保存前の新規エンティティなど）は、トークンに控えた表示名のままにします。
  */
 export function resolveContent(content: string, target: Case): ContentSegment[] {
   return parseContent(content).map((segment) => {
     if (segment.type !== 'mention') return segment;
-    // 日時のメンションは案件を参照しない。表示名は、保存済みの表示名ではなく時刻参照から組み立て直す
+    // 日時のメンションはケースを参照しない。表示名は、保存済みの表示名ではなく時刻参照から組み立て直す
     if (segment.kind === 'date') return isValidTimeRef(segment.id) ? dateMentionSegment(segment.id) : segment;
     const entity = findEntity(target, segment.kind, segment.id);
     if (!entity) return segment;

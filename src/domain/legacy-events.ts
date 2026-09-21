@@ -46,7 +46,7 @@ function bundledClaims(claims: LegacyClaim[], eventId: Id): LegacyClaim[] {
  * 並び順（timelineOrder）を持たない頃のデータの、当時の表示順を返します。要素は 'event:出来事のID' または 'claim:証言のID' です。
  *
  * 当時の位置は証言が述べる日時で決まっていました。日時を持つ項目を早い順に、日時を持たない項目を
- * 出来事、証言（案件への登録順）の順で並べます。
+ * 出来事、証言（ケースへの登録順）の順で並べます。
  * 出来事の束の位置は、束ねた証言が述べる日時のうち最も早いものです。
  */
 function legacyTimelineOrder(events: LegacyEvent[], claims: LegacyClaim[]): string[] {

@@ -1,15 +1,32 @@
 /**
- * 案件ツールバー（案件名の変更・JSONの書き出しと読み込み・サンプルの読み込み・初期化）のテスト
+ * ケースツールバー（ケース名の変更・JSONの書き出し・ケースの削除・一覧への導線）のテスト
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
+import { listCaseSummaries } from '@/lib/case-storage';
 import { useCaseStore } from '@/stores/useCaseStore';
+import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
+import { openTestCase } from '@/test/open-case';
+import { CaseGate } from './CaseGate';
 import { CaseToolbar } from './CaseToolbar';
 
+/** 実際の画面と同じく、ケースを開く枠（CaseGate）の中にツールバーを描画します。 */
+function ツールバーを描画する() {
+  return render(
+    <CaseGate caseId={sampleFictionalCase.id}>
+      <CaseToolbar />
+    </CaseGate>
+  );
+}
+
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
 beforeEach(() => {
-  useCaseStore.getState().resetCase();
+  localStorage.clear();
+  openTestCase(sampleFictionalCase);
+  resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
 afterEach(() => {
@@ -17,62 +34,24 @@ afterEach(() => {
 });
 
 describe('CaseToolbar', () => {
-  it('案件名を変更する', async () => {
+  it('ケース名を変更する', async () => {
     const user = userEvent.setup();
-    render(<CaseToolbar />);
+    ツールバーを描画する();
 
-    await user.clear(screen.getByLabelText('案件名'));
-    await user.type(screen.getByLabelText('案件名'), '湖畔の事件');
+    await user.clear(screen.getByLabelText('ケース名'));
+    await user.type(screen.getByLabelText('ケース名'), '湖畔の事件');
 
-    expect(useCaseStore.getState().currentCase.name).toBe('湖畔の事件');
+    expect(useCaseStore.getState().currentCase?.name).toBe('湖畔の事件');
   });
 
-  it('空の案件では、確認なしで架空のサンプルを読み込む', async () => {
-    const user = userEvent.setup();
-    const confirm = vi.spyOn(window, 'confirm');
-    render(<CaseToolbar />);
+  it('ケースの一覧へ戻るリンクを表示する', () => {
+    ツールバーを描画する();
 
-    await user.click(screen.getByRole('button', { name: '架空のサンプルを読み込む' }));
-
-    expect(confirm).not.toHaveBeenCalled();
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+    expect(screen.getByRole('link', { name: 'ケースの一覧' })).toHaveAttribute('href', '/');
   });
 
-  it('入力済みの案件を初期化する前に確認し、取り消された場合は変更しない', async () => {
+  it('現在のケースをJSONファイルとして書き出す', async () => {
     const user = userEvent.setup();
-    useCaseStore.getState().replaceCase(sampleFictionalCase);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<CaseToolbar />);
-
-    await user.click(screen.getByRole('button', { name: '空の案件にする' }));
-
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
-  });
-
-  it('JSONファイルを読み込んで案件を置き換える', async () => {
-    const user = userEvent.setup();
-    const file = new File([JSON.stringify(sampleFictionalCase)], '湖畔の事件.json', { type: 'application/json' });
-    render(<CaseToolbar />);
-
-    await user.upload(screen.getByLabelText('JSONを読み込む'), file);
-
-    await vi.waitFor(() => expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase));
-  });
-
-  it('検証に失敗するJSONファイルは、理由を示して読み込まない', async () => {
-    const user = userEvent.setup();
-    const file = new File([JSON.stringify({ name: '項目が足りない案件' })], '壊れた案件.json', { type: 'application/json' });
-    render(<CaseToolbar />);
-
-    await user.upload(screen.getByLabelText('JSONを読み込む'), file);
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('案件データの形式が正しくありません');
-    expect(useCaseStore.getState().currentCase.claims).toEqual([]);
-  });
-
-  it('現在の案件をJSONファイルとして書き出す', async () => {
-    const user = userEvent.setup();
-    useCaseStore.getState().replaceCase(sampleFictionalCase);
     let exported: Blob | undefined;
     URL.createObjectURL = vi.fn((blob: Blob) => {
       exported = blob;
@@ -80,10 +59,32 @@ describe('CaseToolbar', () => {
     });
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-    render(<CaseToolbar />);
+    ツールバーを描画する();
 
     await user.click(screen.getByRole('button', { name: 'JSONを書き出す' }));
 
     expect(JSON.parse(await exported!.text())).toEqual(sampleFictionalCase);
+  });
+
+  it('ケースを削除する前に確認し、承認された場合は削除して一覧へ移る', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    ツールバーを描画する();
+
+    await user.click(screen.getByRole('button', { name: 'このケースを削除' }));
+
+    expect(listCaseSummaries()).toEqual([]);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('ケースの削除が取り消された場合は、ケースを消さない', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    ツールバーを描画する();
+
+    await user.click(screen.getByRole('button', { name: 'このケースを削除' }));
+
+    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
+    expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 });

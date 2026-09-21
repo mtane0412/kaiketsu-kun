@@ -1,10 +1,11 @@
 /**
- * 案件ストア（追加・更新・削除・読み込み・ブラウザ保存）のテスト
+ * ケースストア（ケースの切り替え・追加・更新・削除・ブラウザ保存）のテスト
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import type { Claim } from '@/domain/types';
-import { BACKUP_STORAGE_KEY, STORAGE_KEY, useCaseStore } from './useCaseStore';
+import type { Case, Claim } from '@/domain/types';
+import { CASE_KEY_PREFIX, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
+import { useCaseStore } from './useCaseStore';
 
 const 新しい証言: Claim = {
   id: 'claim-postman',
@@ -14,32 +15,149 @@ const 新しい証言: Claim = {
   mentionedPersonIds: ['person-owner'],
 };
 
+/** 開いているケースを返します。開いていない場合はテストを失敗させます。 */
+function 開いているケース(): Case {
+  const { currentCase } = useCaseStore.getState();
+  if (currentCase === null) throw new Error('ケースが開かれていません');
+  return currentCase;
+}
+
 beforeEach(() => {
-  useCaseStore.getState().replaceCase(sampleFictionalCase);
+  localStorage.clear();
+  saveCase(sampleFictionalCase);
+  useCaseStore.getState().openCase(sampleFictionalCase.id);
+});
+
+describe('openCase', () => {
+  it('保存済みのケースを開く', () => {
+    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(useCaseStore.getState().loadError).toBeNull();
+  });
+
+  it('保存されていないIDを開こうとすると、ケースを開かずに理由を示す', () => {
+    useCaseStore.getState().openCase('case-unknown');
+
+    expect(useCaseStore.getState().currentCase).toBeNull();
+    expect(useCaseStore.getState().loadError).toContain('ケースが見つかりません');
+  });
+
+  it('保存データが検証に失敗した場合は、ケースを開かずに理由を示す', () => {
+    localStorage.setItem(`${CASE_KEY_PREFIX}case-broken`, '{"id":"case-broken"}');
+
+    useCaseStore.getState().openCase('case-broken');
+
+    expect(useCaseStore.getState().currentCase).toBeNull();
+    expect(useCaseStore.getState().loadError).toContain('ケースデータの形式が正しくありません');
+  });
+});
+
+describe('createCase', () => {
+  it('空のケースを作って保存し、そのIDを返す', () => {
+    const 新しいケースのId = useCaseStore.getState().createCase('湖畔の別荘の事件');
+
+    expect(loadCase(新しいケースのId).name).toBe('湖畔の別荘の事件');
+    expect(listCaseSummaries().map((summary) => summary.id)).toContain(新しいケースのId);
+  });
+
+  it('作っただけでは、開いているケースを切り替えない', () => {
+    useCaseStore.getState().createCase('湖畔の別荘の事件');
+
+    expect(開いているケース().id).toBe(sampleFictionalCase.id);
+  });
+});
+
+describe('importCase', () => {
+  it('読み込んだケースを、新しいケースとして保存する', () => {
+    const 読み込んだケース: Case = { ...sampleFictionalCase, id: 'case-imported', name: '受け取ったケース' };
+
+    const ケースのId = useCaseStore.getState().importCase(読み込んだケース);
+
+    expect(ケースのId).toBe('case-imported');
+    expect(loadCase('case-imported').name).toBe('受け取ったケース');
+  });
+
+  it('保存済みのケースとIDが重なる場合は、新しいIDを振って追加し、元のケースを上書きしない', () => {
+    const 同じIDのケース: Case = { ...sampleFictionalCase, name: '別の人から受け取ったケース' };
+
+    const ケースのId = useCaseStore.getState().importCase(同じIDのケース);
+
+    expect(ケースのId).not.toBe(sampleFictionalCase.id);
+    expect(loadCase(sampleFictionalCase.id).name).toBe(sampleFictionalCase.name);
+    expect(loadCase(ケースのId).name).toBe('別の人から受け取ったケース');
+  });
+
+  it('検証に失敗するデータは受け付けず、ケースを追加しない', () => {
+    expect(() => useCaseStore.getState().importCase({ name: '項目が足りないケース' })).toThrow(
+      'ケースデータの形式が正しくありません'
+    );
+    expect(listCaseSummaries()).toHaveLength(1);
+  });
+});
+
+describe('deleteCase', () => {
+  it('ケースを保存から消し、一覧からも取り除く', () => {
+    useCaseStore.getState().deleteCase(sampleFictionalCase.id);
+
+    expect(listCaseSummaries()).toEqual([]);
+  });
+
+  it('開いているケースを消した場合は、開いているケースを空にする', () => {
+    useCaseStore.getState().deleteCase(sampleFictionalCase.id);
+
+    expect(useCaseStore.getState().currentCase).toBeNull();
+  });
+
+  it('開いていないケースを消しても、開いているケースはそのままにする', () => {
+    const 別のケースのId = useCaseStore.getState().createCase('別のケース');
+
+    useCaseStore.getState().deleteCase(別のケースのId);
+
+    expect(開いているケース().id).toBe(sampleFictionalCase.id);
+  });
+});
+
+describe('ケースの一覧', () => {
+  it('ケースを作ると、一覧に加える', () => {
+    useCaseStore.getState().createCase('湖畔の別荘の事件');
+
+    expect(useCaseStore.getState().summaries.map((summary) => summary.name)).toContain('湖畔の別荘の事件');
+  });
+
+  it('ケース名を変えると、一覧の名前も変える', () => {
+    useCaseStore.getState().renameCase('改名したケース');
+
+    expect(useCaseStore.getState().summaries.map((summary) => summary.name)).toContain('改名したケース');
+  });
 });
 
 describe('upsert', () => {
   it('新しいIDの証言を追加する', () => {
     useCaseStore.getState().upsert('claims', 新しい証言);
 
-    expect(useCaseStore.getState().currentCase.claims).toHaveLength(sampleFictionalCase.claims.length + 1);
+    expect(開いているケース().claims).toHaveLength(sampleFictionalCase.claims.length + 1);
   });
 
   it('既存のIDの証言は、追加せずに置き換える', () => {
     useCaseStore.getState().upsert('claims', { ...sampleFictionalCase.claims[1]!, locator: '社会面 3段目' });
 
-    const claims = useCaseStore.getState().currentCase.claims;
+    const claims = 開いているケース().claims;
     expect(claims).toHaveLength(sampleFictionalCase.claims.length);
     expect(claims.find((claim) => claim.id === 'claim-neighbor')?.locator).toBe('社会面 3段目');
   });
 
-  it('存在しない人物を参照する証言はエラーにし、案件を変更しない', () => {
+  it('存在しない人物を参照する証言はエラーにし、ケースを変更しない', () => {
     const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
 
     expect(() => useCaseStore.getState().upsert('claims', 不正な証言)).toThrow(
       '存在しない人物を参照しています: person-unknown'
     );
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+    expect(開いているケース()).toEqual(sampleFictionalCase);
+  });
+
+  it('ケースを開いていない場合はエラーにする', () => {
+    useCaseStore.getState().closeCase();
+
+    expect(() => useCaseStore.getState().upsert('claims', 新しい証言)).toThrow('ケースが開かれていません');
   });
 });
 
@@ -53,7 +171,7 @@ describe('upsertMany', () => {
       { key: 'claims', entity: 配達員への言及 },
     ]);
 
-    const { persons, claims } = useCaseStore.getState().currentCase;
+    const { persons, claims } = 開いているケース();
     expect(persons).toContainEqual(郵便配達員);
     expect(claims).toContainEqual(配達員への言及);
   });
@@ -68,7 +186,7 @@ describe('upsertMany', () => {
         { key: 'claims', entity: 不正な証言 },
       ])
     ).toThrow('存在しない人物を参照しています: person-unknown');
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+    expect(開いているケース()).toEqual(sampleFictionalCase);
   });
 });
 
@@ -76,28 +194,28 @@ describe('remove', () => {
   it('どこからも参照されていない証言を削除する', () => {
     useCaseStore.getState().remove('claims', 'claim-report');
 
-    const ids = useCaseStore.getState().currentCase.claims.map((claim) => claim.id);
+    const ids = 開いているケース().claims.map((claim) => claim.id);
     expect(ids).not.toContain('claim-report');
   });
 
-  it('証言の経由としてだけ参照されている人物（媒体）も削除できず、案件を変更しない', () => {
+  it('証言の経由としてだけ参照されている人物（媒体）も削除できず、ケースを変更しない', () => {
     // 前提: 書籍「湖畔の夏」は、管理人の証言の経由としてだけ参照されている（発言者でも、本文のメンションでもない）
     expect(() => useCaseStore.getState().remove('persons', 'person-book')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+    expect(開いているケース()).toEqual(sampleFictionalCase);
   });
 
-  it('証言から参照されている人物は削除できず、案件を変更しない', () => {
+  it('証言から参照されている人物は削除できず、ケースを変更しない', () => {
     expect(() => useCaseStore.getState().remove('persons', 'person-owner')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
+    expect(開いているケース()).toEqual(sampleFictionalCase);
   });
 });
 
 describe('remove（メモのメンション）', () => {
-  it('他のエンティティのメモで言及されているだけの場所も削除できず、案件を変更しない', () => {
+  it('他のエンティティのメモで言及されているだけの場所も削除できず、ケースを変更しない', () => {
     // 前提: 湖畔駅は証言からは参照されておらず、管理人のメモだけが言及している
     useCaseStore.getState().upsertMany([
       { key: 'places', entity: { id: 'place-station', name: '湖畔駅' } },
@@ -106,71 +224,28 @@ describe('remove（メモのメンション）', () => {
         entity: { id: 'person-caretaker', name: '管理人', note: '@[湖畔駅](place:place-station)の近くに住んでいる。' },
       },
     ]);
-    const 削除前の案件 = useCaseStore.getState().currentCase;
+    const 削除前のケース = 開いているケース();
 
     expect(() => useCaseStore.getState().remove('places', 'place-station')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(useCaseStore.getState().currentCase).toEqual(削除前の案件);
-  });
-});
-
-describe('replaceCase', () => {
-  it('検証に失敗するデータは受け付けず、案件を変更しない', () => {
-    expect(() => useCaseStore.getState().replaceCase({ name: '項目が足りない案件' })).toThrow(
-      '案件データの形式が正しくありません'
-    );
-    expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
-  });
-});
-
-describe('resetCase', () => {
-  it('新しいIDを持つ空の案件に置き換える', () => {
-    useCaseStore.getState().resetCase();
-
-    const { currentCase } = useCaseStore.getState();
-    expect(currentCase.id).not.toBe(sampleFictionalCase.id);
-    expect(currentCase.claims).toEqual([]);
-    expect(currentCase.persons).toEqual([]);
+    expect(開いているケース()).toEqual(削除前のケース);
   });
 });
 
 describe('ブラウザへの保存', () => {
-  it('案件を変更すると、LocalStorageに保存する', () => {
+  it('ケースを変更すると、そのケースのキーへ保存する', () => {
     useCaseStore.getState().upsert('claims', 新しい証言);
 
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
-    expect(saved.state.currentCase.claims.map((claim: Claim) => claim.id)).toContain('claim-postman');
+    expect(loadCase(sampleFictionalCase.id).claims.map((claim) => claim.id)).toContain('claim-postman');
   });
 
-  it('保存済みの案件を読み込んで復元する', async () => {
-    const 保存済みの案件 = { ...sampleFictionalCase, name: '保存済みの案件' };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: 保存済みの案件 }, version: 0 }));
+  it('開いていないケースは書き換えない', () => {
+    const 別のケースのId = useCaseStore.getState().createCase('別のケース');
 
-    await useCaseStore.persist.rehydrate();
+    useCaseStore.getState().upsert('claims', 新しい証言);
 
-    expect(useCaseStore.getState().currentCase.name).toBe('保存済みの案件');
-    expect(useCaseStore.getState().loadError).toBeNull();
-  });
-
-  it('保存済みのデータが無い初回起動では、読み込みエラーを示さず、退避も行わない', async () => {
-    useCaseStore.getState().resetCase();
-    localStorage.clear();
-
-    await useCaseStore.persist.rehydrate();
-
-    expect(useCaseStore.getState().loadError).toBeNull();
-    expect(localStorage.getItem(BACKUP_STORAGE_KEY)).toBeNull();
-  });
-
-  it('保存済みのデータが検証に失敗した場合は、退避用のキーに保管して読み込みエラーを示す', async () => {
-    const 壊れた保存データ = { state: { currentCase: { name: '古い形式の案件' } }, version: 0 };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(壊れた保存データ));
-
-    await useCaseStore.persist.rehydrate();
-
-    expect(useCaseStore.getState().loadError).toContain('案件データの形式が正しくありません');
-    expect(JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) ?? 'null')).toEqual({ name: '古い形式の案件' });
+    expect(loadCase(別のケースのId).claims).toEqual([]);
   });
 });
 
@@ -189,7 +264,7 @@ describe('時系列ボードの並び順', () => {
     // 前提: サンプルの並びは、管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測（日時なし）
     useCaseStore.getState().moveTimelineItem('claim:claim-user-guess', 0);
 
-    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+    expect(開いているケース().timelineOrder).toEqual([
       'claim:claim-user-guess',
       'claim:claim-caretaker',
       'claim:claim-police-camera',
@@ -198,13 +273,13 @@ describe('時系列ボードの並び順', () => {
     ]);
   });
 
-  it('日時と矛盾する位置へは動かせず、案件を変更しない', () => {
+  it('日時と矛盾する位置へは動かせず、ケースを変更しない', () => {
     // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている
     useCaseStore.getState().upsert('claims', 捜索の推測);
-    const 変更前 = useCaseStore.getState().currentCase;
+    const 変更前 = 開いているケース();
 
     expect(() => useCaseStore.getState().moveTimelineItem('claim:claim-police-search', 0)).toThrow('日時と矛盾するため');
-    expect(useCaseStore.getState().currentCase).toBe(変更前);
+    expect(開いているケース()).toBe(変更前);
   });
 
   it('証言に日時を入力して現在の位置と矛盾した場合は、最も近い矛盾しない位置へ動かす', () => {
@@ -214,7 +289,7 @@ describe('時系列ボードの並び順', () => {
     // 末尾の捜索の推測の日時を、サンプルの証言より前の「8月10日」に直す
     useCaseStore.getState().upsert('claims', { ...捜索の推測, when: '1998-08-10' });
 
-    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+    expect(開いているケース().timelineOrder).toEqual([
       'claim:claim-police-search',
       'claim:claim-caretaker',
       'claim:claim-police-camera',

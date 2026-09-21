@@ -1,10 +1,10 @@
 /**
- * 読み込んだ案件データの検証
+ * 読み込んだケースデータの検証
  *
  * JSONから読み込んだデータは型の保証が無いため、次の3点を検証してから Case として扱います。
  * 1. 形式（必須項目と値の型）
  * 2. 日時の表記（ISO 8601の部分表記として解釈できること）
- * 3. 参照の整合性（IDの参照先と、証言の本文のメンションの参照先が案件内に存在すること）と、経由の規則
+ * 3. 参照の整合性（IDの参照先と、証言の本文のメンションの参照先がケース内に存在すること）と、経由の規則
  *
  * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
  * 出来事（Event）に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換します（src/domain/legacy-events.ts）。
@@ -151,7 +151,7 @@ const caseSchema = z.object({
 });
 
 /**
- * 案件内の規則違反（参照切れ、ユーザーの推測に付いた経由）を列挙します。
+ * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
 export function findCaseViolations(target: Case): string[] {
@@ -174,7 +174,7 @@ export function findCaseViolations(target: Case): string[] {
 
   /**
    * 文章（証言の本文、エンティティのメモ）のトークンを検証します。
-   * 人物・場所のメンションは参照先が案件内に存在すること、日時のメンションは日時として解釈できることを確かめます。
+   * 人物・場所のメンションは参照先がケース内に存在すること、日時のメンションは日時として解釈できることを確かめます。
    */
   const checkMentions = (content: string) => {
     for (const segment of parseContent(content)) {
@@ -253,7 +253,7 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
 
   const personIdOf = (sourceId: Id): Id => {
     const personId = personIdBySourceId.get(sourceId);
-    if (personId === undefined) throw new Error(`案件データの参照に問題があります\n存在しないソースを参照しています: ${sourceId}`);
+    if (personId === undefined) throw new Error(`ケースデータの参照に問題があります\n存在しないソースを参照しています: ${sourceId}`);
     return personId;
   };
 
@@ -264,7 +264,7 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
     let via: Id[] = viaPersonIds ?? [];
     if (parsedSpeaker.kind === 'source') {
       if (sourcePersonId === undefined) {
-        throw new Error(`案件データの参照に問題があります\nソース自体の記述にソースがありません: ${rest.id}`);
+        throw new Error(`ケースデータの参照に問題があります\nソース自体の記述にソースがありません: ${rest.id}`);
       }
       speaker = { kind: 'person', personIds: [sourcePersonId] };
     } else {
@@ -307,7 +307,7 @@ export function parseCase(data: unknown): Case {
   const result = caseSchema.safeParse(data);
   if (!result.success) {
     const details = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n');
-    throw new Error(`案件データの形式が正しくありません\n${details}`);
+    throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
   const { sources: _legacySources, events, timelineOrder, ...current } = result.data;
@@ -319,7 +319,7 @@ export function parseCase(data: unknown): Case {
   }
   const violations = findCaseViolations(parsed);
   if (violations.length > 0) {
-    throw new Error(`案件データの参照に問題があります\n${violations.join('\n')}`);
+    throw new Error(`ケースデータの参照に問題があります\n${violations.join('\n')}`);
   }
   return parsed;
 }

@@ -19,7 +19,7 @@ import { MENTION_KIND_LABELS } from '@/domain/labels';
 import { contentToPlainText, type MentionKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import type { Case, Id } from '@/domain/types';
-import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase, type CollectionKey } from '@/stores/useCaseStore';
 import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { ClaimForm } from './forms/ClaimForm';
@@ -108,7 +108,7 @@ type EntryPanelProps = {
 };
 
 export function EntryPanel({ initial }: EntryPanelProps) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
   const remove = useCaseStore((state) => state.remove);
 
   const [activeKey, setActiveKey] = useState<EntryKey>(initial?.key ?? 'persons');

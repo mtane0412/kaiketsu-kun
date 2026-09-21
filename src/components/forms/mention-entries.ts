@@ -8,7 +8,7 @@ import type { Case } from '@/domain/types';
 import type { UpsertEntry } from '@/stores/useCaseStore';
 import type { MentionCandidate } from './MentionTextarea';
 
-/** 案件に登録済みのエンティティを、メンションの候補に変換します。 */
+/** ケースに登録済みのエンティティを、メンションの候補に変換します。 */
 export function caseToCandidates(target: Case): MentionCandidate[] {
   return [
     ...target.persons.map((person) => ({
