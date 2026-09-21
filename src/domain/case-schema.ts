@@ -3,20 +3,22 @@
  *
  * JSONから読み込んだデータは型の保証が無いため、次の3点を検証してから Case として扱います。
  * 1. 形式（必須項目と値の型）
- * 2. 時刻表記（earliest / latest が解釈でき、区間が逆転していないこと）
+ * 2. 日時の表記（ISO 8601の部分表記として解釈できること）
  * 3. 参照の整合性（IDの参照先と、証言の本文のメンションの参照先が案件内に存在すること）と、経由の規則
  *
  * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
  * 出来事（Event）に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換します（src/domain/legacy-events.ts）。
  * 発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除きます（発言者は speaker に保存済みです）。
  * ソース（Source）を人物とは別の種類で持っていた頃のデータは、ソースを人物に統合します（migrateLegacySources）。
+ * 日時を区間で持っていた頃のデータは、最も早い時点だけを日時として引き継ぎます（migrateLegacyTimeRef）。
+ * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
 import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
-import { isValidPartialIso, toInterval } from './time-ref';
+import { isValidTimeRef } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
 import type { Case, Id, Person, Speaker } from './types';
 
@@ -28,31 +30,35 @@ const idSchema = z.string().min(1);
  */
 const imageDataUrlSchema = z.string().startsWith('data:image/', '画像は data URL（data:image/...）で指定してください');
 
-const timeRefSchema = z
-  .object({
-    text: z.string(),
-    earliest: z.string().optional(),
-    latest: z.string().optional(),
-    order: z.number().optional(),
-  })
-  .superRefine((ref, context) => {
-    for (const key of ['earliest', 'latest'] as const) {
-      const value = ref[key];
-      if (value !== undefined && !isValidPartialIso(value)) {
-        context.addIssue({ code: 'custom', message: `${key} を解釈できません: ${value}` });
-        return;
-      }
-    }
-    if (ref.latest !== undefined && ref.earliest === undefined) {
-      context.addIssue({ code: 'custom', message: 'latest を指定する場合は earliest も必要です' });
-      return;
-    }
-    try {
-      toInterval(ref);
-    } catch (error) {
-      context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : String(error) });
-    }
-  });
+/** 日時を区間（earliest / latest）と原文表記で持っていた頃の時刻参照です。 */
+const legacyTimeRefSchema = z.object({
+  text: z.string(),
+  earliest: z.string().optional(),
+  latest: z.string().optional(),
+  order: z.number().optional(),
+});
+
+/**
+ * 日時を区間で持っていた頃の時刻参照を、現在の形（ISO 8601の部分表記の文字列）に変換します。
+ *
+ * 引き継ぐのは最も早い時点（earliest）だけです。最も遅い時点（latest）と原文表記（text）・
+ * 並び順（order）は、現在の形に変換先が無いため引き継ぎません。
+ * それ以外の値は、そのまま返して後段の検証に委ねます。
+ */
+function migrateLegacyTimeRef(value: unknown): unknown {
+  const legacy = legacyTimeRefSchema.safeParse(value);
+  return legacy.success ? legacy.data.earliest : value;
+}
+
+const TIME_REF_FORMAT_EXAMPLES = '1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00';
+
+const timeRefSchema = z.preprocess(
+  migrateLegacyTimeRef,
+  z
+    .string()
+    .refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`)
+    .optional()
+);
 
 /**
  * 発言者を1人しか持てなかった頃のデータ（speaker.personId）を、現在の形（speaker.personIds）に変換します。
@@ -85,7 +91,7 @@ const caseSchema = z.object({
         id: idSchema,
         title: z.string(),
         url: z.string().optional(),
-        publishedAt: timeRefSchema.optional(),
+        publishedAt: legacyTimeRefSchema.optional(),
         note: z.string().optional(),
       })
     )
@@ -123,7 +129,6 @@ const caseSchema = z.object({
       locator: z.string().optional(),
       title: z.string().optional(),
       content: z.string(),
-      statedAt: timeRefSchema.optional(),
       // 出来事を廃止する前のデータだけが持つ項目です
       eventId: idSchema.optional(),
       mentionedPersonIds: z.array(idSchema),
@@ -167,10 +172,18 @@ export function findCaseViolations(target: Case): string[] {
     }
   };
 
-  /** 文章（証言の本文、エンティティのメモ）のトークンが指すエンティティを検証します。 */
+  /**
+   * 文章（証言の本文、エンティティのメモ）のトークンを検証します。
+   * 人物・場所のメンションは参照先が案件内に存在すること、日時のメンションは日時として解釈できることを確かめます。
+   */
   const checkMentions = (content: string) => {
     for (const segment of parseContent(content)) {
-      if (segment.type === 'mention') check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
+      if (segment.type !== 'mention') continue;
+      if (segment.kind === 'date') {
+        if (!isValidTimeRef(segment.id)) violations.push(`日時を解釈できません: ${segment.id}`);
+        continue;
+      }
+      check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
     }
   };
 
@@ -244,7 +257,7 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
     return personId;
   };
 
-  const claims = data.claims.map(({ speaker: parsedSpeaker, sourceId, viaPersonIds, content: parsedContent, ...rest }): LegacyClaim => {
+  const claims = data.claims.map(({ speaker: parsedSpeaker, sourceId, viaPersonIds, content: parsedContent, when, ...rest }): LegacyClaim => {
     const sourcePersonId = sourceId === undefined ? undefined : personIdOf(sourceId);
 
     let speaker: Speaker;
@@ -273,6 +286,8 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
 
     return {
       ...rest,
+      // 日時を持たない証言は、項目ごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
+      ...(when !== undefined && { when }),
       speaker,
       viaPersonIds: via,
       content,

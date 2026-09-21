@@ -8,6 +8,7 @@ import {
   buildPersonDetail,
   buildPlaceDetail,
   buildTimeline,
+  claimLabelOf,
   findRelatedEntities,
   groupClaimsBySpeaker,
   groupStopsByPlace,
@@ -55,6 +56,17 @@ describe('buildTimeline', () => {
   });
 });
 
+describe('claimLabelOf', () => {
+  it('見出しの無い証言の名前には、本文の日時のメンションを含めない（日時は時系列の並びで分かるため）', () => {
+    // 前提: 隣家の住人の証言は、本文の先頭に日時のメンション（1998年8月12日 21:00）を持つ
+    const 隣家の証言 = buildTimeline(sampleFictionalCase).items.find(
+      (item) => item.view.claim.id === 'claim-neighbor'
+    )!;
+
+    expect(claimLabelOf(隣家の証言.view)).toBe('ごろ、@湖畔の別荘の明かりがついていて、…');
+  });
+});
+
 describe('groupClaimsBySpeaker', () => {
   it('人物（案件への登録順）、ユーザーの推測の順にグループを作る。新聞のような媒体も人物として並ぶ', () => {
     const groups = groupClaimsBySpeaker(sampleFictionalCase);
@@ -81,25 +93,26 @@ describe('groupClaimsBySpeaker', () => {
     ]);
   });
 
-  it('同じ発言者の証言を、述べられた時点の早い順に並べる', () => {
+  it('同じ発言者の証言を、時系列ボードの並び順で並べる', () => {
+    // 前提: 管理人の2件目の証言を、案件の並び順では管理人の1件目より前に置いている
     const 案件: Case = {
       ...sampleFictionalCase,
       claims: [
         ...sampleFictionalCase.claims,
         {
-          id: 'claim-caretaker-early',
+          id: 'claim-caretaker-acquaintance',
           speaker: { kind: 'person', personIds: ['person-caretaker'] },
           viaPersonIds: ['person-newspaper'],
           content: '持ち主とは挨拶をする程度の付き合いだった。',
-          statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
           mentionedPersonIds: ['person-owner'],
         },
       ],
+      timelineOrder: ['claim:claim-caretaker-acquaintance', ...sampleFictionalCase.timelineOrder],
     };
 
     const 管理人 = groupClaimsBySpeaker(案件).find((group) => group.label === '管理人');
 
-    expect(管理人?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-early', 'claim-caretaker']);
+    expect(管理人?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-acquaintance', 'claim-caretaker']);
   });
 
   it('複数の人物が述べた証言は、それぞれの人物のグループに入れ、発言者名を全員分つなげて示す', () => {

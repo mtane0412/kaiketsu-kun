@@ -32,6 +32,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
+import { formatTimeRef } from '@/domain/time-ref';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
@@ -152,7 +153,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
   /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
   const renderItem = ({ view }: TimelineItem) => (
     <>
-      {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
+      {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{formatTimeRef(view.claim.when)}</p>}
       <ul>
         <ClaimCard view={view} showSpeaker tab="timeline" isActive={view.claim.id === activeClaimId} />
       </ul>

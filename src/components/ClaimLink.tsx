@@ -9,6 +9,7 @@
 
 import Link from 'next/link';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
+import { formatTimeRef } from '@/domain/time-ref';
 import { claimHref, type TabKey } from './routes';
 
 type ClaimLinkProps = {
@@ -31,7 +32,7 @@ export function ClaimLink({ view, tab, prefix }: ClaimLinkProps) {
         {formatViaLabel(view.viaPersons.map((person) => person.name))}
       </span>
       <span className="text-slate-900">{claimLabelOf(view)}</span>
-      {view.claim.when && <span className="ml-2 text-xs text-sky-700">{view.claim.when.text}</span>}
+      {view.claim.when && <span className="ml-2 text-xs text-sky-700">{formatTimeRef(view.claim.when)}</span>}
     </Link>
   );
 }

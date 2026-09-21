@@ -100,7 +100,6 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         <ClaimForm
           initial={view.claim}
           onDone={() => setIsSaved(true)}
-          expandDetails
           actions={
             <button type="button" onClick={handleDelete} className="mr-auto text-xs text-red-600 hover:underline">
               この証言を削除

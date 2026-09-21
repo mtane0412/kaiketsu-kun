@@ -13,7 +13,6 @@
  */
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
-import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
 import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
 
@@ -109,16 +108,29 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
 /** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
 const CLAIM_LABEL_LENGTH = 20;
 
-/** 証言の名前（見出し、見出しが無ければ本文の冒頭）を返します。ボタンやリンクの名前と、読み上げに使います。 */
+/**
+ * 証言の名前（見出し、見出しが無ければ本文の冒頭）を返します。ボタンやリンクの名前と、読み上げに使います。
+ *
+ * 注意: 本文の日時のメンションは名前に含めません。日時は時系列の並びと、カードの上の表示で分かるため、
+ * 短い名前の文字数を日時で使ってしまうと、証言を見分けにくくなるためです。
+ */
 export function claimLabelOf(view: ClaimView): string {
   if (view.claim.title) return view.claim.title;
-  const text = view.contentSegments.map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`)).join('');
+  const text = view.contentSegments
+    .filter((segment) => segment.type !== 'mention' || segment.kind !== 'date')
+    .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
+    .join('');
   return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
 }
 
-/** 証言を、述べられた時点の早い順に並べます。 */
-function sortByStatedAt(claims: ClaimView[]): ClaimView[] {
-  return [...claims].sort((a, b) => compareTimeRef(a.claim.statedAt, b.claim.statedAt));
+/**
+ * 証言を、時系列ボードの並び順（resolveTimelineOrder）で並べます。
+ * 証言者別ビューの中の順番を、時系列ビューで見える順番と一致させるためです。
+ */
+function sortByTimelineOrder(target: Case, claims: ClaimView[]): ClaimView[] {
+  const indexByKey = new Map(resolveTimelineOrder(target).map((key, index) => [key, index]));
+  const indexOf = (view: ClaimView) => indexByKey.get(timelineKeyOf(view.claim.id)) ?? Number.MAX_SAFE_INTEGER;
+  return [...claims].sort((a, b) => indexOf(a) - indexOf(b));
 }
 
 /** 時系列ビューを組み立てます。証言を、案件の並び順（resolveTimelineOrder）のとおりに並べます。 */
@@ -137,6 +149,7 @@ export function buildTimeline(target: Case): Timeline {
  * 人物（案件への登録順）、ユーザーの推測の順にグループを並べます。
  * 証言が1件も無い発言者のグループは作りません。複数の人物が述べた証言は、それぞれの人物のグループに入れます。
  * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
+ * グループの中の証言は、時系列ボードの並び順で並べます。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   const claimViews = target.claims.map((claim) => toClaimView(target, claim));
@@ -161,7 +174,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
 
   return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
-    .map((group) => ({ ...group, claims: sortByStatedAt(group.claims) }));
+    .map((group) => ({ ...group, claims: sortByTimelineOrder(target, group.claims) }));
 }
 
 /** 地図ビューでたどる1地点（座標のある場所を述べる証言）です。 */

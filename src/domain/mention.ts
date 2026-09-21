@@ -7,9 +7,14 @@
  * Claim の placeId・mentionedPersonIds は、本文のトークンから導出します。
  * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
+ * 本文には、案件のエンティティ（人物・場所）のほかに、日時のメンションも書けます。
+ * 日時のメンションは案件のエンティティを指さず、時刻参照（TimeRef）そのものをIDとして持ちます
+ * （例: `@[1998年8月12日 19:00](date:1998-08-12T19:00)`）。証言の日時を本文の中で書けるようにするためです。
+ *
  * 導出の規則:
  * - 場所は、最初のメンションを採用します。
  * - 人物のメンションは、言及している人物です。
+ * - 日時は、最初の日時のメンションを採用します。
  *
  * 以前の版では、本文の先頭を「@人物:」と書くとその人物を発言者として導出していました。
  * その頃に保存した本文に残っている発言者の記法は、読み込み時に stripLegacySpeakerPrefix で取り除きます。
@@ -19,10 +24,17 @@
  * 注意: 下書きの型は名前に Claim を含みますが、メモの入力欄でも同じ型を使用します。
  */
 import { personIconText } from './person-icon';
-import type { Case, Claim, Id, Speaker } from './types';
+import { formatTimeRef, isValidTimeRef } from './time-ref';
+import type { Case, Claim, Id, Speaker, TimeRef } from './types';
 
 /** メンションで参照できるエンティティの種類です。 */
 export type MentionKind = 'person' | 'place';
+
+/**
+ * 本文に書けるメンションの種類です。
+ * date は案件のエンティティではなく、日時そのもの（TimeRef）を指します。
+ */
+export type SegmentKind = MentionKind | 'date';
 
 /** メンションの種類の一覧です。新規作成の選択肢は、この順序で表示します。 */
 export const MENTION_KINDS: MentionKind[] = ['person', 'place'];
@@ -34,18 +46,18 @@ export type ContentSegment =
    * imageDataUrl と iconText は、案件を参照して解決した場合（resolveContent）にだけ載ります。
    * iconText は、画像が無い場合にアイコンへ表示する1文字で、人物のメンションにだけ載ります。
    */
-  | { type: 'mention'; kind: MentionKind; id: Id; label: string; imageDataUrl?: string; iconText?: string };
+  | { type: 'mention'; kind: SegmentKind; id: Id; label: string; imageDataUrl?: string; iconText?: string };
 
-/** 下書きの中で「@表示名」として書かれているメンションです。 */
-export type DraftMention = { kind: MentionKind; id: Id; label: string };
+/** 下書きの中で「@表示名」として書かれているメンションです。日時のメンションでは、id が時刻参照そのものです。 */
+export type DraftMention = { kind: SegmentKind; id: Id; label: string };
 
 /** 入力欄の状態です。text 中の「@表示名」のうち、mentions に登録されたものだけがメンションになります。 */
 export type ClaimDraft = { text: string; mentions: DraftMention[] };
 
 /** 本文のトークンから導出した、証言の参照です。 */
-export type ClaimLinks = Pick<Claim, 'placeId' | 'mentionedPersonIds'>;
+export type ClaimLinks = Pick<Claim, 'placeId' | 'mentionedPersonIds' | 'when'>;
 
-const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place):([^)\s]+)\)/g;
+const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|date):([^)\s]+)\)/g;
 /**
  * 以前の版の発言者の記法です。本文の先頭に人物のメンションを空白または読点で区切って並べ、コロン（: または ：）で閉じます。
  */
@@ -65,11 +77,19 @@ export function parseContent(content: string): ContentSegment[] {
   let cursor = 0;
   for (const match of content.matchAll(TOKEN_PATTERN)) {
     if (match.index > cursor) segments.push({ type: 'text', text: content.slice(cursor, match.index) });
-    segments.push({ type: 'mention', kind: match[2] as MentionKind, id: match[3]!, label: match[1]! });
+    segments.push({ type: 'mention', kind: match[2] as SegmentKind, id: match[3]!, label: match[1]! });
     cursor = match.index + match[0].length;
   }
   if (cursor < content.length) segments.push({ type: 'text', text: content.slice(cursor) });
   return segments;
+}
+
+/**
+ * 時刻参照から、日時のメンションを作ります。
+ * 表示名は、書かれた精度のままの日本語の表記です（1998-08-12T19:00 → 「1998年8月12日 19:00」）。
+ */
+export function dateMentionOf(when: TimeRef): DraftMention {
+  return { kind: 'date', id: when, label: formatTimeRef(when) };
 }
 
 /** メンションが指すエンティティを返します。案件内に存在しない場合は undefined を返します。 */
@@ -91,6 +111,11 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
   return findEntity(target, kind, id)?.name;
 }
 
+/** 時刻参照を、本文を分解した要素としての日時のメンションにします。 */
+function dateMentionSegment(when: TimeRef): ContentSegment {
+  return { type: 'mention', ...dateMentionOf(when) };
+}
+
 /**
  * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新し、エンティティの画像と、人物のアイコンの文字を載せて返します。
  * 案件内に存在しないエンティティ（保存前の新規エンティティなど）は、トークンに控えた表示名のままにします。
@@ -98,6 +123,8 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
 export function resolveContent(content: string, target: Case): ContentSegment[] {
   return parseContent(content).map((segment) => {
     if (segment.type !== 'mention') return segment;
+    // 日時のメンションは案件を参照しない。表示名は、保存済みの表示名ではなく時刻参照から組み立て直す
+    if (segment.kind === 'date') return isValidTimeRef(segment.id) ? dateMentionSegment(segment.id) : segment;
     const entity = findEntity(target, segment.kind, segment.id);
     if (!entity) return segment;
     const resolved = { ...segment, label: entity.name };
@@ -118,6 +145,7 @@ export function contentToPlainText(content: string, target: Case): string {
 export function deriveClaimLinks(content: string): ClaimLinks {
   const mentions = parseContent(content).filter((segment) => segment.type === 'mention');
   const placeId = mentions.find((mention) => mention.kind === 'place')?.id;
+  const when = mentions.find((mention) => mention.kind === 'date' && isValidTimeRef(mention.id))?.id;
 
   // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
   const links: ClaimLinks = {
@@ -126,6 +154,7 @@ export function deriveClaimLinks(content: string): ClaimLinks {
     ],
   };
   if (placeId !== undefined) links.placeId = placeId;
+  if (when !== undefined) links.when = when;
   return links;
 }
 
@@ -208,6 +237,12 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   let text = draft.text;
 
   const derived = deriveClaimLinks(claim.content);
+  // 日時の入力欄を持っていた頃の証言は、本文にメンションが無いため、末尾に補う
+  if (claim.when !== undefined && derived.when === undefined) {
+    const dateMention = dateMentionOf(claim.when);
+    mentions.push(dateMention);
+    text += ` @${dateMention.label}`;
+  }
   const missing: [MentionKind, Id | undefined][] = [
     ...claim.mentionedPersonIds
       .filter((id) => !derived.mentionedPersonIds.includes(id))

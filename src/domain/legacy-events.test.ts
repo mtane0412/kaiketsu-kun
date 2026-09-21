@@ -20,10 +20,10 @@ function 当時の証言(id: string, options: { when?: TimeRef; eventId?: string
 }
 
 const 最後の目撃 = { id: 'event-last-seen', title: '持ち主が最後に目撃された' };
-const 八月十日: TimeRef = { text: '8月10日', earliest: '1998-08-10' };
-const 夜7時: TimeRef = { text: '8月12日 夜7時', earliest: '1998-08-12T19:00' };
-const 夜9時: TimeRef = { text: '8月12日 夜9時', earliest: '1998-08-12T21:00' };
-const 八月十五日: TimeRef = { text: '8月15日', earliest: '1998-08-15' };
+const 八月十日: TimeRef = '1998-08-10';
+const 夜7時: TimeRef = '1998-08-12T19:00';
+const 夜9時: TimeRef = '1998-08-12T21:00';
+const 八月十五日: TimeRef = '1998-08-15';
 
 describe('migrateLegacyEvents', () => {
   it('並び順の中の出来事の束を、その位置に、束ねていた証言を当時の束の中の表示順（述べる日時の早い順）で並べて解く', () => {
@@ -102,15 +102,13 @@ describe('migrateLegacyEvents', () => {
     expect(変換後.claims[0]?.content).toBe('持ち主が最後に目撃された');
   });
 
-  it('並び順を持たない頃のデータは、当時の表示順（日時の早い順、並び順の数値の順、どちらも無い項目）を補ってから束を解く', () => {
+  it('並び順を持たない頃のデータは、当時の表示順（日時の早い順、日時を持たない項目は登録順）を補ってから束を解く', () => {
     const 変換後 = migrateLegacyEvents({
       events: [最後の目撃, { id: 'event-empty', title: '証言の無い出来事' }],
       claims: [
         当時の証言('claim-memo'),
-        当時の証言('claim-episode-4', { when: { text: '第4話', order: 4 } }),
         当時の証言('claim-search', { when: 八月十五日 }),
         当時の証言('claim-caretaker', { when: 夜7時, eventId: 'event-last-seen' }),
-        当時の証言('claim-episode-3', { when: { text: '第3話', order: 3 } }),
         当時の証言('claim-arrival', { when: 八月十日 }),
       ],
     });
@@ -120,8 +118,6 @@ describe('migrateLegacyEvents', () => {
       'claim:claim-arrival',
       'claim:claim-caretaker',
       'claim:claim-search',
-      'claim:claim-episode-3',
-      'claim:claim-episode-4',
       'claim:claim-memo',
     ]);
   });

@@ -1,5 +1,5 @@
 /**
- * 読み込んだ案件データの検証（形式・時刻表記・参照の整合性）のテスト
+ * 読み込んだ案件データの検証（形式・日時の表記・参照の整合性）のテスト
  */
 import { describe, expect, it } from 'vitest';
 import { parseCase } from './case-schema';
@@ -46,7 +46,7 @@ describe('parseCase', () => {
       ],
     };
 
-    // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言を述べられた時点の早い順に並べる
+    // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言を案件への登録順に並べる
     expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
       'claim:claim-arrival',
       'claim:claim-caretaker',
@@ -160,25 +160,72 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(証言一覧が無いデータ))).toThrow('案件データの形式が正しくありません');
   });
 
-  it('解釈できない時刻表記を拒否する', () => {
+  it('解釈できない日時の表記を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
-      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, when: { text: '8月12日', earliest: '1998年8月12日' } })),
+      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, when: '1998年8月12日' })),
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('earliest');
+    expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
   });
 
-  it('latestがearliestより前の時刻参照を拒否する', () => {
+  it('本文に解釈できない日時のメンションを含む証言を拒否する', () => {
     const データ = {
+      ...sampleFictionalCase,
+      claims: [
+        {
+          ...sampleFictionalCase.claims[0],
+          content: '@[1998年8月32日](date:1998-08-32)に別荘を訪ねた。',
+        },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('日時を解釈できません: 1998-08-32');
+  });
+
+  it('日時を区間で持っていた頃のデータは、最も早い時点を日時として受け付ける', () => {
+    // 前提: 以前の版では、日時を { text, earliest, latest, order } の形で持っていた
+    const 旧データ = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor'
+          ? { ...claim, when: { text: '8月12日 夜9時ごろ', earliest: '1998-08-12T20:30', latest: '1998-08-12T21:30' } }
+          : claim
+      ),
+    };
+
+    const 読み込み後 = parseCase(toJsonData(旧データ));
+
+    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')?.when).toBe('1998-08-12T20:30');
+  });
+
+  it('実在の日時を持たない旧形式の時刻参照は、日時なしとして受け付ける', () => {
+    // 前提: 以前の版では、実在の日時が無い時刻を、原文表記（text）と並び順（order）だけで持てた
+    const 旧データ = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor' ? { ...claim, when: { text: '第3話', order: 3 } } : claim
+      ),
+    };
+
+    const 読み込み後 = parseCase(toJsonData(旧データ));
+
+    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')).not.toHaveProperty('when');
+  });
+
+  it('証言が述べられた時点を持っていた頃のデータは、その時点を取り除いて受け付ける', () => {
+    // 前提: 以前の版では、証言が述べられた時点（statedAt）を、述べる内容の日時とは別の時間軸として持っていた
+    const 旧データ = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) => ({
         ...claim,
-        when: { text: '逆転', earliest: '1998-08', latest: '1998-07' },
+        statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
       })),
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('latest が earliest より前です');
+    const 読み込み後 = parseCase(toJsonData(旧データ));
+
+    expect(読み込み後.claims.every((claim) => !('statedAt' in claim))).toBe(true);
   });
 
   it('経由が存在しない人物を参照している証言を拒否する', () => {
