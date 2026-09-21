@@ -24,7 +24,7 @@ import {
 } from '@/domain/mention';
 import { firstCharacter } from '@/domain/person-icon';
 import type { Coordinates, Person, Place } from '@/domain/types';
-import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 import { CoordinateField } from './CoordinateField';
 import { ImageField } from './ImageField';
@@ -55,7 +55,7 @@ function useNoteField(
   kind: MentionKind,
   initial: Person | Place | undefined
 ): { field: ReactNode; note: string; newEntries: UpsertEntry[] } {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
   const [draft, setDraft] = useState<ClaimDraft>(() => contentToDraft(initial?.note ?? '', currentCase));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);

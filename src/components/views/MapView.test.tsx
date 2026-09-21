@@ -3,11 +3,19 @@
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MapPin } from '@/domain/case-views';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
+import { resetMockNavigation } from '@/test/mock-navigation';
 import { MapView } from './MapView';
+
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+beforeEach(() => {
+  // 証言のカードは、リンク先のURLの組み立てに案件のIDをURLから読み取るため、案件のボードのURLから始める
+  resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
+});
 
 // jsdom は地図を描画できないため、ピンと選択中の番号を文字で示し、ボタンでピンを選ぶ部品に差し替える
 vi.mock('./TrailMap', () => ({

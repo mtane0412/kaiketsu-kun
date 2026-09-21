@@ -20,11 +20,12 @@ import { buildClaimDetail, claimLabelOf, type ClaimView } from '@/domain/case-vi
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM } from './routes';
+import { useCaseId } from './useCaseId';
 
 /** この証言が触れている人物・場所を並べる欄の見出しです。 */
 const MENTIONED_ENTITIES_LABEL = 'この証言が触れている人物・場所';
@@ -49,7 +50,8 @@ function mentionedEntitiesOf(view: ClaimView): MentionedEntity[] {
 }
 
 export function ClaimDetail({ claimId }: { claimId: Id }) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
+  const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const router = useRouter();
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
@@ -59,7 +61,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
   const closeLink = (
     <div className="flex justify-end">
-      <Link href={boardHref(tab)} aria-label="証言の詳細を閉じる" className="text-xs text-slate-600 hover:underline">
+      <Link href={boardHref(caseId, tab)} aria-label="証言の詳細を閉じる" className="text-xs text-slate-600 hover:underline">
         閉じる
       </Link>
     </div>
@@ -88,7 +90,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
       return;
     }
     // 削除した証言のURLへ「戻る」で戻らないよう、履歴を置き換える
-    router.replace(boardHref(tab));
+    router.replace(boardHref(caseId, tab));
   };
 
   return (
@@ -123,7 +125,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
             {mentionedEntities.map((entity) => (
               <li key={`${entity.role}:${entity.kind}:${entity.id}`}>
                 <Link
-                  href={mentionHref(entity.kind, entity.id, tab)}
+                  href={mentionHref(caseId, entity.kind, entity.id, tab)}
                   // どの立場で触れているかを読み上げにも伝えるため、リンクの名前に立場と名前を明示する
                   aria-label={`${entity.role} ${entity.name}`}
                   className="flex items-baseline gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-sm hover:border-sky-400"
@@ -151,7 +153,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           <section key={`${group.kind}:${group.id}`} aria-label={label} className="space-y-2">
             <h3 className="text-sm font-semibold text-slate-800">
               「
-              <Link href={mentionHref(group.kind, group.id, tab)} className="text-sky-700 hover:underline">
+              <Link href={mentionHref(caseId, group.kind, group.id, tab)} className="text-sky-700 hover:underline">
                 {group.label}
               </Link>
               」に触れている他の証言

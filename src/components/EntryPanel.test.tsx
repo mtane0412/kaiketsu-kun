@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { fileToResizedDataUrl } from '@/lib/image-utils';
 import { useCaseStore } from '@/stores/useCaseStore';
+import { openedCase, openTestCase } from '@/test/open-case';
 import { EntryPanel } from './EntryPanel';
 
 // jsdom は画像のデコードと canvas の描画を持たないため、画像の縮小は差し替える（縮小そのものは image-utils.test.ts で検証する）
@@ -46,7 +47,8 @@ vi.mock('./forms/CoordinateMap', () => ({
 }));
 
 beforeEach(() => {
-  useCaseStore.getState().replaceCase(sampleFictionalCase);
+  localStorage.clear();
+  openTestCase(sampleFictionalCase);
 });
 
 afterEach(() => {
@@ -74,7 +76,7 @@ describe('EntryPanel', () => {
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
     expect(within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員')).toBeInTheDocument();
-    expect(useCaseStore.getState().currentCase.persons.at(-1)).toMatchObject({
+    expect(openedCase().persons.at(-1)).toMatchObject({
       name: '郵便配達員',
       aliases: ['配達員', '郵便屋'],
     });
@@ -89,7 +91,7 @@ describe('EntryPanel', () => {
     await user.type(screen.getByLabelText(/アイコンの文字/), '〒便');
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    expect(useCaseStore.getState().currentCase.persons.at(-1)).toMatchObject({ name: '郵便配達員', iconText: '〒' });
+    expect(openedCase().persons.at(-1)).toMatchObject({ name: '郵便配達員', iconText: '〒' });
     const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
     // 文字は CSS で描画するため、要素の中身ではなく data-icon-text 属性に入っている
     expect(配達員の行?.querySelector('[data-icon-text]')).toHaveAttribute('data-icon-text', '〒');
@@ -102,7 +104,7 @@ describe('EntryPanel', () => {
     await user.type(screen.getByLabelText('名前'), '郵便配達員');
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    expect(useCaseStore.getState().currentCase.persons.at(-1)).not.toHaveProperty('iconText');
+    expect(openedCase().persons.at(-1)).not.toHaveProperty('iconText');
     const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
     expect(配達員の行?.querySelector('[data-icon-text]')).toHaveAttribute('data-icon-text', '郵');
   });
@@ -122,7 +124,7 @@ describe('EntryPanel', () => {
     await user.click(screen.getByRole('button', { name: '別荘の持ち主を削除' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
-    expect(useCaseStore.getState().currentCase.persons).toHaveLength(sampleFictionalCase.persons.length);
+    expect(openedCase().persons).toHaveLength(sampleFictionalCase.persons.length);
   });
 
   it('証言の一覧に、誰の発言かと、誰を経由して伝わったかを示す', async () => {
@@ -144,7 +146,7 @@ describe('EntryPanel', () => {
 
   it('見出しのある証言は、証言の一覧に本文の冒頭ではなく見出しを表示する', async () => {
     // 前提: 隣家の住人の証言に見出しが付いている
-    useCaseStore.getState().replaceCase({
+    openTestCase({
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.id === 'claim-neighbor' ? { ...claim, title: '夜9時に持ち主を庭で見た' } : claim
@@ -211,7 +213,7 @@ describe('EntryPanel（エンティティの画像）', () => {
 
     // 検証: 切り抜きの画面で決めた範囲を、縮小の処理に渡している
     expect(fileToResizedDataUrl).toHaveBeenCalledWith(顔写真, 顔の周り);
-    expect(useCaseStore.getState().currentCase.persons.at(-1)).toMatchObject({ name: '郵便配達員', imageDataUrl: 縮小済みの画像 });
+    expect(openedCase().persons.at(-1)).toMatchObject({ name: '郵便配達員', imageDataUrl: 縮小済みの画像 });
     const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
     expect(配達員の行?.querySelector('img')).toHaveAttribute('src', 縮小済みの画像);
   });
@@ -225,7 +227,7 @@ describe('EntryPanel（エンティティの画像）', () => {
     await screen.findByRole('img', { name: '登録する画像' });
     await user.click(screen.getByRole('button', { name: '場所を保存' }));
 
-    expect(useCaseStore.getState().currentCase.places.find((place) => place.id === 'place-villa')).toMatchObject({
+    expect(openedCase().places.find((place) => place.id === 'place-villa')).toMatchObject({
       name: '湖畔の別荘',
       imageDataUrl: 縮小済みの画像,
     });
@@ -346,7 +348,7 @@ describe('EntryPanel（エンティティの画像）', () => {
     expect(screen.queryByRole('img', { name: '登録する画像' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    const 管理人 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-caretaker');
+    const 管理人 = openedCase().persons.find((person) => person.id === 'person-caretaker');
     expect(管理人).not.toHaveProperty('imageDataUrl');
   });
 
@@ -357,7 +359,7 @@ describe('EntryPanel（エンティティの画像）', () => {
 
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    const 管理人 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-caretaker');
+    const 管理人 = openedCase().persons.find((person) => person.id === 'person-caretaker');
     expect(管理人?.imageDataUrl).toBe(縮小済みの画像);
   });
 
@@ -406,7 +408,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
 
   /** 持ち主のメモが管理人と別荘に触れている案件を読み込みます。 */
   function loadCaseWithOwnerNote() {
-    useCaseStore.getState().replaceCase({
+    openTestCase({
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner'
@@ -427,7 +429,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.type(screen.getByLabelText('メモ'), 'の鍵を預かっていた。');
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    const 管理人 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-caretaker');
+    const 管理人 = openedCase().persons.find((person) => person.id === 'person-caretaker');
     expect(管理人?.note).toBe('@[湖畔の別荘](place:place-villa)の鍵を預かっていた。');
   });
 
@@ -439,7 +441,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.type(screen.getByLabelText('メモ'), 'が1990年に建てた。');
     await user.click(screen.getByRole('button', { name: '場所を保存' }));
 
-    expect(useCaseStore.getState().currentCase.places[0]?.note).toBe(
+    expect(openedCase().places[0]?.note).toBe(
       '@[別荘の持ち主](person:person-owner)が1990年に建てた。'
     );
   });
@@ -452,7 +454,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.type(screen.getByLabelText('メモ'), 'の近くに住んでいる。');
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    const { persons, places } = useCaseStore.getState().currentCase;
+    const { persons, places } = openedCase();
     const 湖畔駅 = places.find((place) => place.name === '湖畔駅');
     expect(湖畔駅).toBeDefined();
     expect(persons.find((person) => person.id === 'person-caretaker')?.note).toBe(
@@ -468,7 +470,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.clear(screen.getByLabelText('メモ'));
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    expect(useCaseStore.getState().currentCase.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
+    expect(openedCase().places.map((place) => place.name)).toEqual(['湖畔の別荘']);
   });
 
   it('編集を開くと、メモのメンションをエンティティの現在の名前で表示し、そのまま保存してもメンションを保つ', async () => {
@@ -481,7 +483,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
 
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
-    const 持ち主 = useCaseStore.getState().currentCase.persons.find((person) => person.id === 'person-owner');
+    const 持ち主 = openedCase().persons.find((person) => person.id === 'person-owner');
     expect(持ち主?.note).toBe(
       '@[管理人](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。'
     );
@@ -546,7 +548,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
 });
 
 describe('EntryPanel（場所の座標）', () => {
-  const 別荘 = () => useCaseStore.getState().currentCase.places.find((place) => place.id === 'place-villa');
+  const 別荘 = () => openedCase().places.find((place) => place.id === 'place-villa');
 
   it('場所のフォームで地図から地点を選んで保存すると、緯度と経度を保存する', async () => {
     const user = userEvent.setup();

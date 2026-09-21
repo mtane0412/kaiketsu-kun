@@ -36,7 +36,7 @@ import {
 import { timelineKeyOf } from '@/domain/timeline-order';
 import { formatTimeRef } from '@/domain/time-ref';
 import type { Claim } from '@/domain/types';
-import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
@@ -63,7 +63,7 @@ type ClaimFormProps = {
 };
 
 export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
 

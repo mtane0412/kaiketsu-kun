@@ -21,23 +21,26 @@ import { buildPersonDetail, buildPlaceDetail, type EntityClaimGroup, type Relate
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
 import { EntityAvatar } from './EntityAvatar';
 import { ENTRY_KEY_BY_MENTION_KIND } from './EntryPanel';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM, type TabKey } from './routes';
+import { useCaseId } from './useCaseId';
 
 /** 関連するエンティティの一覧の見出しです。 */
 const RELATED_ENTITIES_LABEL = '関連するエンティティ';
 
 /** 詳細を閉じて、ボードに戻るリンクです。 */
 function CloseLink({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
+  const caseId = useCaseId();
+
   return (
     <div className="flex justify-end">
       <Link
-        href={boardHref(tab)}
+        href={boardHref(caseId, tab)}
         aria-label={`${kindLabel}の詳細を閉じる`}
         className="text-xs text-slate-600 hover:underline"
       >
@@ -78,6 +81,7 @@ type EntityDetailShellProps = {
 
 /** 人物と場所で共通の、詳細の枠組みです。編集フォームと、逆引きした証言・関連するエンティティを並べます。 */
 function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEntities }: EntityDetailShellProps) {
+  const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const router = useRouter();
   const [isSaved, setIsSaved] = useState(false);
@@ -94,7 +98,7 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
       return;
     }
     // 削除したエンティティのURLへ「戻る」で戻らないよう、履歴を置き換える
-    router.replace(boardHref(tab));
+    router.replace(boardHref(caseId, tab));
   };
 
   return (
@@ -142,7 +146,7 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
             {relatedEntities.map((related) => (
               <li key={`${related.kind}:${related.id}`}>
                 <Link
-                  href={mentionHref(related.kind, related.id, tab)}
+                  href={mentionHref(caseId, related.kind, related.id, tab)}
                   className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm hover:border-sky-400"
                 >
                   <EntityAvatar imageDataUrl={related.imageDataUrl} iconText={related.iconText} size="sm" />
@@ -163,7 +167,7 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
 }
 
 export function PersonDetail({ personId }: { personId: Id }) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const detail = useMemo(() => buildPersonDetail(currentCase, personId), [currentCase, personId]);
 
@@ -183,7 +187,7 @@ export function PersonDetail({ personId }: { personId: Id }) {
 }
 
 export function PlaceDetail({ placeId }: { placeId: Id }) {
-  const currentCase = useCaseStore((state) => state.currentCase);
+  const currentCase = useCurrentCase();
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const detail = useMemo(() => buildPlaceDetail(currentCase, placeId), [currentCase, placeId]);
 

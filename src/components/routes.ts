@@ -1,7 +1,9 @@
 /**
  * 画面のURLを組み立てる関数
  *
- * 証言・人物・場所の詳細は、それぞれ独立したページ（/claims/<ID>・/persons/<ID>・/places/<ID>）として開きます。
+ * 案件は複数を保存できるため、ボードと詳細のURLは、どの案件かを表す案件のID（/cases/<案件のID>）から始めます。
+ * 案件の一覧はトップページ（/）です。
+ * 証言・人物・場所の詳細は、それぞれ独立したページ（.../claims/<ID>・.../persons/<ID>・.../places/<ID>）として開きます。
  * ボードのタブはURLのクエリ（?tab=）に持たせます。詳細ページからブラウザの「戻る」や
  * 「ボードに戻る」で、元のタブに戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
@@ -35,27 +37,37 @@ function tabQuery(tab: TabKey): string {
   return tab === DEFAULT_TAB ? '' : `?${TAB_SEARCH_PARAM}=${tab}`;
 }
 
-/** ボードのURLを返します。 */
-export function boardHref(tab: TabKey): string {
-  return `/${tabQuery(tab)}`;
+/** 案件のボードのURLの、共通の前半（/cases/<案件のID>）を組み立てます。 */
+function caseBasePath(caseId: Id): string {
+  return `/cases/${encodeURIComponent(caseId)}`;
+}
+
+/** 案件の一覧ページのURLを返します。 */
+export function casesHref(): string {
+  return '/';
+}
+
+/** 案件のボードのURLを返します。 */
+export function boardHref(caseId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}${tabQuery(tab)}`;
 }
 
 /** 証言の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
-export function claimHref(claimId: Id, tab: TabKey): string {
-  return `/claims/${encodeURIComponent(claimId)}${tabQuery(tab)}`;
+export function claimHref(caseId: Id, claimId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/claims/${encodeURIComponent(claimId)}${tabQuery(tab)}`;
 }
 
 /** 人物の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
-export function personHref(personId: Id, tab: TabKey): string {
-  return `/persons/${encodeURIComponent(personId)}${tabQuery(tab)}`;
+export function personHref(caseId: Id, personId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/persons/${encodeURIComponent(personId)}${tabQuery(tab)}`;
 }
 
 /** 場所の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
-export function placeHref(placeId: Id, tab: TabKey): string {
-  return `/places/${encodeURIComponent(placeId)}${tabQuery(tab)}`;
+export function placeHref(caseId: Id, placeId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/places/${encodeURIComponent(placeId)}${tabQuery(tab)}`;
 }
 
 /** メンションの種類（人物・場所）に応じた、詳細ページのURLを返します。証言の本文のメンションからたどるために使います。 */
-export function mentionHref(kind: MentionKind, id: Id, tab: TabKey): string {
-  return kind === 'person' ? personHref(id, tab) : placeHref(id, tab);
+export function mentionHref(caseId: Id, kind: MentionKind, id: Id, tab: TabKey): string {
+  return kind === 'person' ? personHref(caseId, id, tab) : placeHref(caseId, id, tab);
 }

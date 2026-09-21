@@ -25,6 +25,7 @@ import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import { EntityAvatar } from '../EntityAvatar';
 import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
+import { useCaseId } from '../useCaseId';
 
 const MENTION_STYLES: Record<SegmentKind, string> = {
   person: 'bg-sky-100 text-sky-800',
@@ -47,6 +48,7 @@ type ClaimCardProps = {
 
 export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCardProps) {
   const { claim } = view;
+  const caseId = useCaseId();
   const cardRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
         ) : (
           <Link
             key={index}
-            href={mentionHref(segment.kind, segment.id, tab)}
+            href={mentionHref(caseId, segment.kind, segment.id, tab)}
             className={`${ABOVE_CARD_LINK} rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
@@ -96,7 +98,7 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
         )}
         <Link
-          href={claimHref(claim.id, tab)}
+          href={claimHref(caseId, claim.id, tab)}
           aria-current={isActive ? 'true' : undefined}
           aria-label={`「${claimLabelOf(view)}」を開く`}
           className="ml-auto text-sky-700 after:absolute after:inset-0 hover:underline"
@@ -132,7 +134,7 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
                 {view.mentionedPersons.map((person) => (
                   <li key={person.id} className="flex">
                     <Link
-                      href={personHref(person.id, tab)}
+                      href={personHref(caseId, person.id, tab)}
                       // アイコンだけのリンクのため、人物の名前をリンクの名前とツールチップに持たせる
                       aria-label={person.name}
                       title={person.name}

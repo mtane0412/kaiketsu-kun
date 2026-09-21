@@ -3,12 +3,22 @@
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { useCurrentCase } from '@/stores/useCaseStore';
+import { resetMockNavigation } from '@/test/mock-navigation';
+import { openedCase, openTestCase } from '@/test/open-case';
 import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
+
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+beforeEach(() => {
+  localStorage.clear();
+  openTestCase(sampleFictionalCase);
+  resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
+});
 
 /** 見出し（要約）を付けた、長文の証言です。 */
 const 見出し付きの記述: Claim = {
@@ -129,8 +139,7 @@ describe('TimelineView', () => {
 
 /** ストアの案件を時系列ボードに表示します。ボードへの書き足しがストアを通じて画面に反映されることを検証するために使います。 */
 function StoreBoard() {
-  const currentCase = useCaseStore((state) => state.currentCase);
-  return <TimelineView target={currentCase} />;
+  return <TimelineView target={useCurrentCase()} />;
 }
 
 /** 警察の捜索（8月15日）についての証言です。 */
@@ -145,7 +154,7 @@ const 捜索の記述: Claim = {
 
 describe('TimelineView への書き足し', () => {
   beforeEach(() => {
-    useCaseStore.getState().replaceCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 捜索の記述] });
+    openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 捜索の記述] });
   });
 
   it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {
@@ -157,7 +166,7 @@ describe('TimelineView への書き足し', () => {
     await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    expect(useCaseStore.getState().currentCase.claims.at(-1)?.when).toBeUndefined();
+    expect(openedCase().claims.at(-1)?.when).toBeUndefined();
     const 時系列 = screen.getByRole('list', { name: '時系列' });
     const 本文の並び = within(時系列)
       .getAllByText(/見回りをしたとき|見慣れない車|金銭の問題があった可能性/)
@@ -177,8 +186,8 @@ describe('TimelineView への書き足し', () => {
     await user.type(screen.getByLabelText('内容'), '持ち主は8月の初めに別荘へ来たらしい。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    expect(useCaseStore.getState().currentCase.timelineOrder[0]).toBe(
-      `claim:${useCaseStore.getState().currentCase.claims.at(-1)?.id}`
+    expect(openedCase().timelineOrder[0]).toBe(
+      `claim:${openedCase().claims.at(-1)?.id}`
     );
   });
 
@@ -198,14 +207,14 @@ describe('TimelineView への書き足し', () => {
   it('「やめる」で、保存せずに入力欄を閉じる', async () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
-    const 件数 = useCaseStore.getState().currentCase.claims.length;
+    const 件数 = openedCase().claims.length;
 
     await user.click(screen.getByRole('button', { name: 'ボードに書き足す' }));
     await user.type(screen.getByLabelText('内容'), '書きかけの文章');
     await user.click(screen.getByRole('button', { name: 'やめる' }));
 
     expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
-    expect(useCaseStore.getState().currentCase.claims).toHaveLength(件数);
+    expect(openedCase().claims).toHaveLength(件数);
   });
 
   it('ボードに書き足すときに、誰の発言かを「発言者」で紐づけられる', async () => {
@@ -223,7 +232,7 @@ describe('TimelineView への書き足し', () => {
     const 書き足した証言 = screen.getByText(/持ち主は几帳面な人だった。/).closest('li')!;
     expect(within(書き足した証言).getByText('隣家の住人')).toBeInTheDocument();
     expect(within(書き足した証言).getByText('（架空日報 朝刊 による）')).toBeInTheDocument();
-    expect(useCaseStore.getState().currentCase.claims.at(-1)).toMatchObject({
+    expect(openedCase().claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       content: '持ち主は几帳面な人だった。',
@@ -237,7 +246,7 @@ describe('TimelineView への書き足し', () => {
     const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
     expect(within(捜索).getByRole('link', { name: '「警察が別荘を捜索した。」を開く' })).toHaveAttribute(
       'href',
-      '/claims/claim-police-search'
+      '/cases/case-lakeside/claims/claim-police-search'
     );
     expect(within(捜索).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
     expect(within(捜索).queryByRole('button', { name: 'この証言の詳細' })).not.toBeInTheDocument();
@@ -248,7 +257,7 @@ describe('TimelineView への書き足し', () => {
     render(<StoreBoard />);
 
     const 隣家の証言 = screen.getByText(/明かりがついていて/).closest('li')!;
-    expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
+    expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 });
 
@@ -269,7 +278,7 @@ describe('SpeakerView', () => {
     render(<SpeakerView target={sampleFictionalCase} />);
 
     const 管理人 = screen.getByRole('region', { name: '管理人' });
-    expect(within(管理人).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-caretaker?tab=speaker');
+    expect(within(管理人).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker?tab=speaker');
   });
 
   it('証言が1件も無い場合は、案内を表示する', () => {
@@ -387,7 +396,7 @@ describe('人物のアイコンの表示', () => {
     if (!推測) throw new Error('ユーザーの推測のカードが見つかりません');
     const 言及 = within(推測).getByRole('list', { name: '言及している人物' });
 
-    expect(within(言及).getByRole('link', { name: '隣家の住人' })).toHaveAttribute('href', '/persons/person-neighbor');
+    expect(within(言及).getByRole('link', { name: '隣家の住人' })).toHaveAttribute('href', '/cases/case-lakeside/persons/person-neighbor');
   });
 
   it('証言者別ビューの見出しに、画像の無い発言者の文字のアイコンを表示する', () => {

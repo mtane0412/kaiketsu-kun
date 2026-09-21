@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import { formatTimeRef } from '@/domain/time-ref';
 import { claimHref, type TabKey } from './routes';
+import { useCaseId } from './useCaseId';
 
 type ClaimLinkProps = {
   view: ClaimView;
@@ -21,9 +22,11 @@ type ClaimLinkProps = {
 };
 
 export function ClaimLink({ view, tab, prefix }: ClaimLinkProps) {
+  const caseId = useCaseId();
+
   return (
     <Link
-      href={claimHref(view.claim.id, tab)}
+      href={claimHref(caseId, view.claim.id, tab)}
       className="block rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-sky-400"
     >
       {prefix && <span className="mr-2 text-xs text-slate-500">{prefix}</span>}

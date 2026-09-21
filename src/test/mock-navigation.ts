@@ -3,7 +3,8 @@
  *
  * App Router のルーターはテスト環境（jsdom）には存在しないため、URLを1つ持つだけの最小の代役を用意します。
  * router.push・router.replace で URL を書き換えると、useSearchParams・useParams を使うコンポーネントが再描画されます。
- * useParams は、詳細ページのURL（/claims/<証言のID>・/persons/<人物のID>・/places/<場所のID>）から、
+ * useParams は、案件のボードのURL（/cases/<案件のID>）から caseId を読み取り、
+ * 詳細ページのURL（.../claims/<証言のID>・.../persons/<人物のID>・.../places/<場所のID>）から、
  * それぞれ claimId・personId・placeId を読み取ります。
  *
  * 使い方: テストファイルの先頭で vi.mock('next/navigation', () => import('@/test/mock-navigation')) を呼び、
@@ -51,18 +52,24 @@ export function useSearchParams() {
   return new URLSearchParams(search);
 }
 
+/** 案件のボードのURLから、案件のIDを取り出すための形です。 */
+const CASE_PATH_PATTERN = /^\/cases\/([^/]+)/;
+
 /** 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。 */
 const DETAIL_PATH_PATTERNS: { name: 'claimId' | 'personId' | 'placeId'; pattern: RegExp }[] = [
-  { name: 'claimId', pattern: /^\/claims\/([^/]+)$/ },
-  { name: 'personId', pattern: /^\/persons\/([^/]+)$/ },
-  { name: 'placeId', pattern: /^\/places\/([^/]+)$/ },
+  { name: 'claimId', pattern: /^\/cases\/[^/]+\/claims\/([^/]+)$/ },
+  { name: 'personId', pattern: /^\/cases\/[^/]+\/persons\/([^/]+)$/ },
+  { name: 'placeId', pattern: /^\/cases\/[^/]+\/places\/([^/]+)$/ },
 ];
 
-export function useParams(): { claimId?: string; personId?: string; placeId?: string } {
+export function useParams(): { caseId?: string; claimId?: string; personId?: string; placeId?: string } {
   const pathname = useSyncExternalStore(subscribe, () => currentUrl.pathname);
+  const caseId = CASE_PATH_PATTERN.exec(pathname)?.[1];
+  if (caseId === undefined) return {};
+
   for (const { name, pattern } of DETAIL_PATH_PATTERNS) {
     const id = pattern.exec(pathname)?.[1];
-    if (id !== undefined) return { [name]: id };
+    if (id !== undefined) return { caseId, [name]: id };
   }
-  return {};
+  return { caseId };
 }

@@ -1,11 +1,11 @@
 /**
  * ルートレイアウト
  *
- * 案件のデータはブラウザ内にのみ保存するため、すべてのページを、保存データの復元を待つ枠（CaseStoreGate）の中に描画します。
+ * 案件のデータはブラウザ内にのみ保存します。どの案件を開くかはURL（/cases/<案件のID>）が決めるため、
+ * 案件を開く処理は、案件のボードのレイアウト（src/app/cases/[caseId]/layout.tsx）の CaseGate が担います。
  */
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { CaseStoreGate } from '@/components/CaseStoreGate';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,9 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        <CaseStoreGate>{children}</CaseStoreGate>
-      </body>
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">{children}</body>
     </html>
   );
 }

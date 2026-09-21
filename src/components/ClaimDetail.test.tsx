@@ -5,16 +5,17 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { openedCase, openTestCase } from '@/test/open-case';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { ClaimDetail } from './ClaimDetail';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
+  localStorage.clear();
   // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
-  useCaseStore.getState().replaceCase(sampleFictionalCase);
-  resetMockNavigation('/claims/claim-neighbor');
+  openTestCase(sampleFictionalCase);
+  resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
 });
 
 describe('ClaimDetail', () => {
@@ -30,7 +31,7 @@ describe('ClaimDetail', () => {
     await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-neighbor');
+    const 保存後 = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
     expect(保存後?.content).toContain('窓は開いていた。');
     expect(保存後?.when).toBe('1998-08-12T21:00');
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
@@ -40,8 +41,8 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
-    expect(within(前後).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/claims/claim-police-camera');
-    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/claims/claim-report');
+    expect(within(前後).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-police-camera');
+    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report');
   });
 
   it('同じ人物・場所に触れている他の証言を、人物・場所ごとにまとめてリンクにする', () => {
@@ -50,7 +51,7 @@ describe('ClaimDetail', () => {
     const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
     const links = within(within(湖畔の別荘).getByRole('list')).getAllByRole('link');
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute('href', '/claims/claim-caretaker');
+    expect(links[0]).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker');
     expect(links[0]).toHaveTextContent('管理人');
     expect(links[0]).toHaveTextContent(/見回りをしたとき/);
   });
@@ -62,19 +63,19 @@ describe('ClaimDetail', () => {
     const 触れている先 = screen.getByRole('navigation', { name: 'この証言が触れている人物・場所' });
     expect(within(触れている先).getByRole('link', { name: '発言者 隣家の住人' })).toHaveAttribute(
       'href',
-      '/persons/person-neighbor'
+      '/cases/case-lakeside/persons/person-neighbor'
     );
     expect(within(触れている先).getByRole('link', { name: '経由 架空日報 朝刊' })).toHaveAttribute(
       'href',
-      '/persons/person-newspaper'
+      '/cases/case-lakeside/persons/person-newspaper'
     );
     expect(within(触れている先).getByRole('link', { name: '言及 別荘の持ち主' })).toHaveAttribute(
       'href',
-      '/persons/person-owner'
+      '/cases/case-lakeside/persons/person-owner'
     );
     expect(within(触れている先).getByRole('link', { name: '場所 湖畔の別荘' })).toHaveAttribute(
       'href',
-      '/places/place-villa'
+      '/cases/case-lakeside/places/place-villa'
     );
   });
 
@@ -82,16 +83,16 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
-    expect(within(湖畔の別荘).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
+    expect(within(湖畔の別荘).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 
   it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {
-    resetMockNavigation('/claims/claim-neighbor?tab=map');
+    resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor?tab=map');
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/?tab=map');
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside?tab=map');
     const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
-    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/claims/claim-report?tab=map');
+    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report?tab=map');
   });
 
   it('証言を削除すると、ボードに戻る', async () => {
@@ -101,8 +102,8 @@ describe('ClaimDetail', () => {
 
     await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
 
-    expect(useCaseStore.getState().currentCase.claims.map((claim) => claim.id)).not.toContain('claim-neighbor');
-    expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
+    expect(openedCase().claims.map((claim) => claim.id)).not.toContain('claim-neighbor');
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside');
   });
 
   it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
@@ -121,6 +122,6 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-deleted" />);
 
     expect(screen.getByRole('heading', { name: '証言が見つかりません' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside');
   });
 });
