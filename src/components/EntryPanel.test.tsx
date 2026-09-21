@@ -23,11 +23,11 @@ const 顔の周り = { x: 100, y: 50, width: 512, height: 512 };
 // jsdom は要素の大きさを持たず、切り抜きのライブラリは範囲を計算できないため、
 // 表示した時点で「顔の周り」を切り抜き範囲として通知する部品に差し替える
 vi.mock('react-easy-crop', () => ({
-  default: function CropperStub({ image, mediaProps, onCropAreaChange }: Partial<CropperProps>) {
+  default: function CropperStub({ image, mediaProps, cropShape, onCropAreaChange }: Partial<CropperProps>) {
     useEffect(() => {
       onCropAreaChange?.({ x: 10, y: 5, width: 50, height: 50 }, 顔の周り);
     }, [onCropAreaChange]);
-    return <img src={image} alt="切り抜く画像" onError={mediaProps?.onError} />;
+    return <img src={image} alt="切り抜く画像" data-crop-shape={cropShape} onError={mediaProps?.onError} />;
   },
 }));
 
@@ -188,6 +188,28 @@ describe('EntryPanel（エンティティの画像）', () => {
       name: '湖畔の別荘',
       imageDataUrl: 縮小済みの画像,
     });
+  });
+
+  it('人物の画像は丸く切り抜き、丸く表示する（アバター）', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.upload(screen.getByLabelText('画像'), 顔写真);
+    expect(await screen.findByRole('img', { name: '切り抜く画像' })).toHaveAttribute('data-crop-shape', 'round');
+    await 切り抜いて登録する(user);
+
+    expect((await screen.findByRole('img', { name: '登録する画像' })).parentElement).toHaveClass('rounded-full');
+  });
+
+  it('場所の画像は四角く切り抜き、四角く表示する（場所の写真はアバターではない）', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
+
+    await user.upload(screen.getByLabelText('画像'), 顔写真);
+    expect(await screen.findByRole('img', { name: '切り抜く画像' })).toHaveAttribute('data-crop-shape', 'rect');
+    await 切り抜いて登録する(user);
+
+    expect((await screen.findByRole('img', { name: '登録する画像' })).parentElement).not.toHaveClass('rounded-full');
   });
 
   it('「画像を選ぶ」を押すと、ファイルの選択を開く', async () => {

@@ -118,7 +118,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="名前" value={name} onChange={setName} required />
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
-      <ImageField label="画像" value={imageDataUrl} onChange={setImageDataUrl} />
+      <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
       {noteField}
       <FormError message={error} />
       <SubmitButton label="人物を保存" />
@@ -155,7 +155,7 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="名前" value={name} onChange={setName} required />
-      <ImageField label="画像" value={imageDataUrl} onChange={setImageDataUrl} />
+      <ImageField label="画像" shape="rect" value={imageDataUrl} onChange={setImageDataUrl} />
       {noteField}
       <FormError message={error} />
       <SubmitButton label="場所を保存" />
