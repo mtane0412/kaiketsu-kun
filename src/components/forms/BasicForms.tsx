@@ -1,6 +1,10 @@
 /**
  * 人物・場所の入力フォーム
  *
+ * メモには「@」で他の人物・場所を書けます（メンション。形式は src/domain/mention.ts を参照）。
+ * メモのメンションは、エンティティ同士の関連の元になります。未登録の名前は候補の一覧から新規作成でき、
+ * 新しいエンティティは編集中のエンティティと同時に保存します。
+ *
  * どのフォームも、initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
@@ -8,11 +12,21 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
+import {
+  contentToDraft,
+  draftToContent,
+  parseContent,
+  type ClaimDraft,
+  type DraftMention,
+  type MentionKind,
+} from '@/domain/mention';
 import type { Person, Place } from '@/domain/types';
-import { useCaseStore } from '@/stores/useCaseStore';
+import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 import { ImageField } from './ImageField';
+import { caseToCandidates, createEntry } from './mention-entries';
+import { MentionTextarea } from './MentionTextarea';
 
 type FormProps<T> = {
   initial?: T;
@@ -24,12 +38,59 @@ function toMessage(caught: unknown): string {
   return caught instanceof Error ? caught.message : String(caught);
 }
 
+/**
+ * メンションを書けるメモ欄の状態を持ちます。
+ *
+ * @param kind 編集中のエンティティの種類
+ * @param initial 編集中のエンティティ（新規登録の場合は undefined）
+ * @returns field はメモの入力欄、note は保存するメモ（トークンを含む文章）、
+ *   newEntries はメモで新規作成し、保存時にもメモに残っているエンティティです。
+ *
+ * 注意: 編集中のエンティティ自身は、候補に出しません（自分自身とは関連付けないためです）。
+ */
+function useNoteField(
+  kind: MentionKind,
+  initial: Person | Place | undefined
+): { field: ReactNode; note: string; newEntries: UpsertEntry[] } {
+  const currentCase = useCaseStore((state) => state.currentCase);
+  const [draft, setDraft] = useState<ClaimDraft>(() => contentToDraft(initial?.note ?? '', currentCase));
+  /** このフォームで新規作成した、まだ保存していないエンティティです。 */
+  const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
+
+  const candidates = [
+    ...caseToCandidates(currentCase).filter((candidate) => !(candidate.kind === kind && candidate.id === initial?.id)),
+    ...pending.map((item) => item.mention),
+  ];
+  const handleCreate = (createdKind: MentionKind, name: string): DraftMention => {
+    const mention = { kind: createdKind, id: nanoid(), label: name };
+    setPending((current) => [...current, { mention, entry: createEntry(createdKind, mention.id, name) }]);
+    return mention;
+  };
+
+  const note = draftToContent({ ...draft, text: draft.text.trim() });
+  // 新規作成した後にメモから消されたエンティティは保存しない
+  const usedIds = new Set(parseContent(note).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : [])));
+  const newEntries = pending.filter((item) => usedIds.has(item.mention.id)).map((item) => item.entry);
+
+  const field = (
+    <MentionTextarea
+      label="メモ"
+      value={draft}
+      onChange={setDraft}
+      candidates={candidates}
+      onCreate={handleCreate}
+      placeholder="「@」で関連する人物・場所を書けます"
+    />
+  );
+  return { field, note, newEntries };
+}
+
 export function PersonForm({ initial, onDone }: FormProps<Person>) {
-  const upsert = useCaseStore((state) => state.upsert);
+  const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
   const [aliases, setAliases] = useState(initial?.aliases?.join('、') ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
-  const [note, setNote] = useState(initial?.note ?? '');
+  const { field: noteField, note, newEntries } = useNoteField('person', initial);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent) => {
@@ -42,10 +103,10 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
     const person: Person = { id: initial?.id ?? nanoid(), name: name.trim() };
     if (aliasList.length > 0) person.aliases = aliasList;
     if (imageDataUrl) person.imageDataUrl = imageDataUrl;
-    if (note.trim()) person.note = note.trim();
+    if (note) person.note = note;
 
     try {
-      upsert('persons', person);
+      upsertMany([...newEntries, { key: 'persons', entity: person }]);
     } catch (caught) {
       setError(toMessage(caught));
       return;
@@ -58,7 +119,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
       <TextField label="名前" value={name} onChange={setName} required />
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
       <ImageField label="画像" value={imageDataUrl} onChange={setImageDataUrl} />
-      <TextField label="メモ" value={note} onChange={setNote} multiline />
+      {noteField}
       <FormError message={error} />
       <SubmitButton label="人物を保存" />
     </form>
@@ -66,10 +127,10 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
 }
 
 export function PlaceForm({ initial, onDone }: FormProps<Place>) {
-  const upsert = useCaseStore((state) => state.upsert);
+  const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
-  const [note, setNote] = useState(initial?.note ?? '');
+  const { field: noteField, note, newEntries } = useNoteField('place', initial);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent) => {
@@ -80,10 +141,10 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
     if (initial?.latitude !== undefined) place.latitude = initial.latitude;
     if (initial?.longitude !== undefined) place.longitude = initial.longitude;
     if (imageDataUrl) place.imageDataUrl = imageDataUrl;
-    if (note.trim()) place.note = note.trim();
+    if (note) place.note = note;
 
     try {
-      upsert('places', place);
+      upsertMany([...newEntries, { key: 'places', entity: place }]);
     } catch (caught) {
       setError(toMessage(caught));
       return;
@@ -95,7 +156,7 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="名前" value={name} onChange={setName} required />
       <ImageField label="画像" value={imageDataUrl} onChange={setImageDataUrl} />
-      <TextField label="メモ" value={note} onChange={setNote} multiline />
+      {noteField}
       <FormError message={error} />
       <SubmitButton label="場所を保存" />
     </form>

@@ -96,6 +96,25 @@ describe('remove', () => {
   });
 });
 
+describe('remove（メモのメンション）', () => {
+  it('他のエンティティのメモで言及されているだけの場所も削除できず、案件を変更しない', () => {
+    // 前提: 湖畔駅は証言からは参照されておらず、管理人のメモだけが言及している
+    useCaseStore.getState().upsertMany([
+      { key: 'places', entity: { id: 'place-station', name: '湖畔駅' } },
+      {
+        key: 'persons',
+        entity: { id: 'person-caretaker', name: '管理人', note: '@[湖畔駅](place:place-station)の近くに住んでいる。' },
+      },
+    ]);
+    const 削除前の案件 = useCaseStore.getState().currentCase;
+
+    expect(() => useCaseStore.getState().remove('places', 'place-station')).toThrow(
+      '他のデータから参照されているため削除できません'
+    );
+    expect(useCaseStore.getState().currentCase).toEqual(削除前の案件);
+  });
+});
+
 describe('replaceCase', () => {
   it('検証に失敗するデータは受け付けず、案件を変更しない', () => {
     expect(() => useCaseStore.getState().replaceCase({ name: '項目が足りない案件' })).toThrow(

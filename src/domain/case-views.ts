@@ -1,13 +1,14 @@
 /**
- * 案件データから時系列ビュー・証言者別ビューを導出するロジック
+ * 案件データから時系列ビュー・証言者別ビュー・エンティティ同士の関連を導出するロジック
  *
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
  * 時系列ボードには証言だけを並べます。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
-import { resolveContent, type ContentSegment } from './mention';
+import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
 import type { Case, Claim, Id, Person, Place } from './types';
@@ -144,4 +145,52 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
     .map((group) => ({ ...group, claims: sortByStatedAt(group.claims) }));
+}
+
+/** あるエンティティに関連するエンティティです。 */
+export type RelatedEntity = {
+  kind: MentionKind;
+  id: Id;
+  name: string;
+  imageDataUrl?: string;
+  /** 対象のエンティティのメモが、このエンティティに言及しているかどうかです。 */
+  mentions: boolean;
+  /** このエンティティのメモが、対象のエンティティに言及しているかどうかです。 */
+  mentionedBy: boolean;
+};
+
+/**
+ * 指定したエンティティに関連するエンティティを、人物・場所の登録順に返します。
+ *
+ * 関連とは、メモのメンションでつながっていることです。対象のメモが言及しているエンティティ（mentions）と、
+ * 対象に言及しているメモを持つエンティティ（mentionedBy）の両方を含みます。
+ * 注意: 自分自身へのメンションは関連に含めません。証言の本文のメンションも関連に含めません。
+ */
+export function findRelatedEntities(target: Case, kind: MentionKind, id: Id): RelatedEntity[] {
+  const entities: { kind: MentionKind; entity: Person | Place }[] = [
+    ...target.persons.map((entity) => ({ kind: 'person' as const, entity })),
+    ...target.places.map((entity) => ({ kind: 'place' as const, entity })),
+  ];
+  /** メモが、指定したエンティティに言及しているかどうかを返します。 */
+  const noteMentions = (note: string | undefined, mentionKind: MentionKind, mentionId: Id) =>
+    note !== undefined &&
+    parseContent(note).some(
+      (segment) => segment.type === 'mention' && segment.kind === mentionKind && segment.id === mentionId
+    );
+
+  const self = entities.find((item) => item.kind === kind && item.entity.id === id);
+  if (!self) {
+    throw new Error(`エンティティが見つかりません: ${kind}:${id}`);
+  }
+
+  return entities.flatMap((item) => {
+    if (item === self) return [];
+    const mentions = noteMentions(self.entity.note, item.kind, item.entity.id);
+    const mentionedBy = noteMentions(item.entity.note, kind, id);
+    if (!mentions && !mentionedBy) return [];
+
+    const related: RelatedEntity = { kind: item.kind, id: item.entity.id, name: item.entity.name, mentions, mentionedBy };
+    if (item.entity.imageDataUrl !== undefined) related.imageDataUrl = item.entity.imageDataUrl;
+    return [related];
+  });
 }

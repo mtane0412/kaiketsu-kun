@@ -4,6 +4,8 @@
  * 人物・場所・証言のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
  * 一覧の「編集」を選ぶとフォームが編集に切り替わり、「削除」は他のデータから参照されている場合に
  * 理由を示して中止します。
+ * 人物・場所の編集中は、メモのメンションでつながったエンティティを「関連するエンティティ」に表示します。
+ * 関連するエンティティを選ぶと、そのエンティティの編集に切り替わります。
  *
  * 日常の入力は時系列ボードへの書き足しで行います。このパネルは、ボード上のメンションから
  * エンティティの詳細を編集するため、およびボードに現れていないエンティティを編集・削除するための導線です。
@@ -12,8 +14,9 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { describeClaimAttribution } from '@/domain/case-views';
-import { contentToPlainText } from '@/domain/mention';
+import { describeClaimAttribution, findRelatedEntities, type RelatedEntity } from '@/domain/case-views';
+import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { contentToPlainText, type MentionKind } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
 import { EntityAvatar } from './EntityAvatar';
@@ -22,6 +25,18 @@ import { ClaimForm } from './forms/ClaimForm';
 
 /** このパネルで扱う一覧の名前です。関係（relationships）はグラフ表示を移植する段階で追加します。 */
 export type EntryKey = Exclude<CollectionKey, 'relationships'>;
+
+/** メンションの種類に対応する、登録済みの一覧の種類です。 */
+export const ENTRY_KEY_BY_MENTION_KIND: Record<MentionKind, EntryKey> = {
+  person: 'persons',
+  place: 'places',
+};
+
+/** 関連の向きを説明する文を返します。 */
+function describeRelation(related: RelatedEntity): string {
+  if (related.mentions && related.mentionedBy) return '互いのメモで言及しています';
+  return related.mentions ? 'メモで言及しています' : 'メモで言及されています';
+}
 
 /** 一覧に表示する内容の最大文字数です。 */
 const ITEM_LABEL_MAX_LENGTH = 40;
@@ -34,6 +49,8 @@ function truncate(text: string): string {
 type Section = {
   key: EntryKey;
   label: string;
+  /** メンションで参照できる種類（人物・場所）の場合の、メンションの種類です。関連するエンティティの表示に使用します。 */
+  mentionKind?: MentionKind;
   /**
    * 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（証言の発言者と経由）。
    * imageDataUrl は、表示名の前に添える画像です（人物・場所）。
@@ -47,6 +64,7 @@ const SECTIONS: Section[] = [
   {
     key: 'persons',
     label: '人物',
+    mentionKind: 'person',
     listItems: (target) =>
       target.persons.map((person) => ({ id: person.id, label: person.name, imageDataUrl: person.imageDataUrl })),
     renderForm: (target, editingId, onDone) => (
@@ -56,6 +74,7 @@ const SECTIONS: Section[] = [
   {
     key: 'places',
     label: '場所',
+    mentionKind: 'place',
     listItems: (target) =>
       target.places.map((place) => ({ id: place.id, label: place.name, imageDataUrl: place.imageDataUrl })),
     renderForm: (target, editingId, onDone) => (
@@ -97,6 +116,12 @@ export function EntryPanel({ initial }: EntryPanelProps) {
     throw new Error(`入力パネルの種類が不正です: ${activeKey}`);
   }
 
+  /** 編集中の人物・場所に関連するエンティティです。新規登録と証言の編集では null です。 */
+  const relatedEntities =
+    section.mentionKind !== undefined && editingId !== null
+      ? findRelatedEntities(currentCase, section.mentionKind, editingId)
+      : null;
+
   const resetForm = () => {
     setEditingId(null);
     setFormVersion((version) => version + 1);
@@ -106,6 +131,12 @@ export function EntryPanel({ initial }: EntryPanelProps) {
     setActiveKey(key);
     setDeleteError(null);
     resetForm();
+  };
+
+  const handleOpenRelated = (related: RelatedEntity) => {
+    setActiveKey(ENTRY_KEY_BY_MENTION_KIND[related.kind]);
+    setEditingId(related.id);
+    setDeleteError(null);
   };
 
   const handleDelete = (id: Id, label: string) => {
@@ -157,6 +188,35 @@ export function EntryPanel({ initial }: EntryPanelProps) {
             {section.renderForm(currentCase, editingId, resetForm)}
           </div>
         </section>
+
+        {relatedEntities && (
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">関連するエンティティ</h3>
+            {relatedEntities.length === 0 ? (
+              <p className="text-xs text-slate-400">メモで「@」を入力すると、他の人物・場所と関連付けられます。</p>
+            ) : (
+              <ul aria-label="関連するエンティティ" className="space-y-1">
+                {relatedEntities.map((related) => (
+                  <li key={`${related.kind}:${related.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRelated(related)}
+                      className="flex w-full items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                    >
+                      <EntityAvatar imageDataUrl={related.imageDataUrl} size="sm" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs text-slate-500">
+                          {MENTION_KIND_LABELS[related.kind]}・{describeRelation(related)}
+                        </span>
+                        <span className="block truncate">{related.name}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         <section>
           <h3 className="mb-2 text-sm font-semibold text-slate-800">登録済みの{section.label}</h3>

@@ -166,6 +166,16 @@ export function findCaseViolations(target: Case): string[] {
     }
   };
 
+  /** 文章（証言の本文、エンティティのメモ）のトークンが指すエンティティを検証します。 */
+  const checkMentions = (content: string) => {
+    for (const segment of parseContent(content)) {
+      if (segment.type === 'mention') check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
+    }
+  };
+
+  for (const entity of [...target.persons, ...target.places]) {
+    if (entity.note !== undefined) checkMentions(entity.note);
+  }
   for (const claim of target.claims) {
     if (claim.speaker.kind === 'person') claim.speaker.personIds.forEach((id) => check(personIds, id, '人物'));
     claim.viaPersonIds.forEach((id) => check(personIds, id, '人物'));
@@ -175,9 +185,7 @@ export function findCaseViolations(target: Case): string[] {
     check(placeIds, claim.placeId, '場所');
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
     // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
-    for (const segment of parseContent(claim.content)) {
-      if (segment.type === 'mention') check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
-    }
+    checkMentions(claim.content);
   }
   for (const relationship of target.relationships) {
     check(personIds, relationship.fromPersonId, '人物');
