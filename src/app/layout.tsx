@@ -17,7 +17,7 @@ import './globals.css';
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: 'Caseboard',
+  title: 'kaiketsu-kun',
   description: '誰が何を述べたかを起点に、人物・場所を時系列で整理する調査ボード',
 };
 
