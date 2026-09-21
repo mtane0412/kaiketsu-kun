@@ -104,6 +104,37 @@ describe('TimelineView', () => {
     expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
   });
 
+  it('つまみは、環境のフォントに左右される文字ではなく、アイコンで描く', () => {
+    // 前提: 以前のつまみは点字の記号（⠿ U+283F）1文字だったため、表示される形が環境のフォントに左右されていた
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const つまみ = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    expect(つまみ.querySelector('svg')).toBeInTheDocument();
+    expect(つまみ).not.toHaveTextContent('⠿');
+  });
+
+  it('つまみはカードと同じ行に並べ、日時はその行の上に置く', () => {
+    // 前提: つまみをカードと同じ高さの帯にするため、日時（カードの上に出る行）は帯の外に置く
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    // 「1998年8月12日 19:00」の日時を持つ、管理人の証言で確かめる
+    const 項目 = screen.getAllByText('1998年8月12日 19:00')[0]!.closest('li')!;
+    const つまみ = within(項目).getByRole('button', { name: /を動かす$/ });
+    const 行 = つまみ.parentElement!;
+    // 検証: つまみと同じ行にはカードだけがあり、日時は含まれない
+    expect(within(行).getByText(/見回りをしたとき/)).toBeInTheDocument();
+    expect(within(行).queryByText('1998年8月12日 19:00')).not.toBeInTheDocument();
+    expect(within(項目).getByText('1998年8月12日 19:00')).toBeInTheDocument();
+  });
+
+  it('つまみにカーソルを乗せると、マウスとキーボードの両方の動かし方が分かる', () => {
+    // 検証: 読み上げにしか届かない aria-label とは別に、マウスの利用者にも操作方法を示す
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const つまみ = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    expect(つまみ).toHaveAttribute('title', 'ドラッグ、またはスペースキーを押してから矢印キーで動かします');
+  });
+
   it('見出しのある証言は、見出しを表示し、本文は折りたたんで示す', () => {
     // 前提: 長い本文に、要約としての見出しを付けている
     const ケース: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };

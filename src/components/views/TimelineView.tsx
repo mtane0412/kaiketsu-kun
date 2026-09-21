@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus } from 'lucide-react';
+import { GripVertical, Plus } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import { formatTimeRef } from '@/domain/time-ref';
@@ -42,6 +42,12 @@ import { ClaimCard } from './ClaimCard';
 
 const DRAG_INSTRUCTIONS =
   '項目を動かすには、スペースキーで持ち上げ、上下の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
+
+/**
+ * つまみにカーソルを乗せたときに出る案内です。
+ * 読み上げには DRAG_INSTRUCTIONS が届きますが、マウスの利用者には届かないため、つまみの title で同じことを短く示します。
+ */
+const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから矢印キーで動かします';
 
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
@@ -60,27 +66,48 @@ function labelOf(item: TimelineItem): string {
 
 /**
  * ドラッグで動かせるボードの1項目です。つまみだけがドラッグの起点になり、本文の選択やボタンの操作を妨げません。
+ *
+ * つまみは、カードの左辺に接した、カードと同じ高さの帯です。面積で「この1枚ごと動かせる」ことを示します。
+ * カードの表面は詳細ページへのリンクが覆っている（ClaimCard.tsx の after:inset-0）ため、つまみはカードの外に置きます。
+ * above は、カードの上に置く付加情報（日時）です。帯の高さをカードにそろえるため、帯と同じ行には入れません。
  */
-function SortableItem({ id, label, dimmed, children }: { id: TimelineKey; label: string; dimmed: boolean; children: ReactNode }) {
+function SortableItem({
+  id,
+  label,
+  dimmed,
+  above,
+  children,
+}: {
+  id: TimelineKey;
+  label: string;
+  dimmed: boolean;
+  above?: ReactNode;
+  children: ReactNode;
+}) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
 
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`flex items-start gap-2 ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
+      className={`group ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
     >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        aria-label={`「${label}」を動かす`}
-        className="mt-0.5 cursor-grab touch-none rounded px-0.5 text-muted-foreground/40 hover:bg-accent hover:text-foreground active:cursor-grabbing"
-      >
-        <span aria-hidden="true">⠿</span>
-      </button>
-      <div className="min-w-0 flex-1">{children}</div>
+      {above}
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`「${label}」を動かす`}
+          title={DRAG_HINT}
+          // 既定では帯の地色を敷かず（ボード左の縦線と二重に見えないよう）、行にカーソルを乗せたときに色を乗せる
+          className="flex w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-l-lg text-muted-foreground/50 transition-colors group-hover:bg-accent/50 group-hover:text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="size-4" aria-hidden="true" />
+        </button>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
     </li>
   );
 }
@@ -149,15 +176,19 @@ export function TimelineView({ target }: TimelineViewProps) {
     onDragCancel: ({ active }) => `「${labelOfKey(active.id)}」を動かすのをやめました。`,
   };
 
-  /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
+  /** ボードの1項目（証言）のカードを表示します。 */
   const renderItem = ({ view }: TimelineItem) => (
-    <>
-      {view.claim.when && <p className="mb-1 text-xs font-medium text-muted-foreground">{formatTimeRef(view.claim.when)}</p>}
-      <ul>
-        <ClaimCard view={view} showSpeaker tab="timeline" />
-      </ul>
-    </>
+    <ul>
+      <ClaimCard view={view} showSpeaker tab="timeline" />
+    </ul>
   );
+
+  /** 述べる日時を持つ証言に、カードの上に示す日時を返します。日時が無ければ何も返しません。 */
+  const renderWhen = ({ view }: TimelineItem) =>
+    view.claim.when ? (
+      // 帯（つまみ）の幅ぶん右に寄せ、カードの左辺に日時の頭をそろえる
+      <p className="mb-1 pl-6 text-xs font-medium text-muted-foreground">{formatTimeRef(view.claim.when)}</p>
+    ) : undefined;
 
   /**
    * 時系列の index 番目の項目の前の差し込み口を表示します。
@@ -201,7 +232,13 @@ export function TimelineView({ target }: TimelineViewProps) {
             <ol aria-label="時系列" className="space-y-2 border-l-2 pl-2">
               {timeline.items.flatMap((item, index) => [
                 renderSlot(item, index),
-                <SortableItem key={item.key} id={item.key} label={labelOf(item)} dimmed={item.key !== draggingKey && !isAllowedIndex(index)}>
+                <SortableItem
+                  key={item.key}
+                  id={item.key}
+                  label={labelOf(item)}
+                  dimmed={item.key !== draggingKey && !isAllowedIndex(index)}
+                  above={renderWhen(item)}
+                >
                   {renderItem(item)}
                 </SortableItem>,
               ])}
