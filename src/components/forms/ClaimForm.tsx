@@ -4,12 +4,13 @@
  * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事を書くと、
  * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
+ * 本文が長い主張には、本文を要約する見出しを任意で付けられます。見出しはメンションに対応せず、参照の導出には使いません。
  * 誰の発言か、誰を経由して伝わったかは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。
  * 新規登録でも編集でも選べます。発言者を選ばない主張は、ユーザーの推測です。
  * 本文から導出できない項目（日時）は「詳細」にまとめています。
  * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
  *
- * compact を指定すると、ボード上の入力欄として本文の1欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
+ * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、束ねる出来事と時系列の並び順の中での位置を決めます。
  *
@@ -36,7 +37,7 @@ import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
 import { resolveTimelineOrder, timelineKeyOf } from '@/domain/timeline-order';
 import type { Case, Claim, Id } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SubmitButton, TimeRefInput } from './fields';
+import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
 
@@ -86,7 +87,7 @@ type ClaimFormProps = {
   onDone: () => void;
   /** 内容欄に初期フォーカスを置くかどうかです。ボード上で開いた入力欄にすぐ書き始められるようにします。 */
   autoFocus?: boolean;
-  /** 本文の1欄と投稿ボタンだけを表示するかどうかです。 */
+  /** 見出しと本文の欄・「発言者」・投稿ボタンだけを表示するかどうかです。 */
   compact?: boolean;
   /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
   actions?: ReactNode;
@@ -100,6 +101,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
   );
+  const [title, setTitle] = useState(initial?.title ?? '');
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
@@ -162,6 +164,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       content,
       ...links,
     };
+    if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
     if (statedAtResult.value) claim.statedAt = statedAtResult.value;
     if (whenResult.value) claim.when = whenResult.value;
@@ -203,6 +206,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       }}
       className="space-y-3"
     >
+      <TextField
+        label="見出し（任意）"
+        value={title}
+        onChange={setTitle}
+        placeholder="本文が長いときの要約（例: Zによる恐喝事件があった）"
+      />
       <MentionTextarea
         label="内容"
         value={draft}

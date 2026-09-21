@@ -63,9 +63,10 @@ type TimelineViewProps = {
   onOpenClaimDetails?: (claimId: Id) => void;
 };
 
-/** ボードの項目の名前（出来事のタイトル、または主張の本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
+/** ボードの項目の名前（出来事のタイトル、主張の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
 function labelOf(item: TimelineItem): string {
   if (item.kind === 'event') return item.event.title;
+  if (item.view.claim.title) return item.view.claim.title;
   const text = item.view.contentSegments
     .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
     .join('');

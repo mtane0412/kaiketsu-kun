@@ -88,6 +88,24 @@ describe('EntryPanel', () => {
     expect(推測).toHaveTextContent('ユーザーの推測');
   });
 
+  it('見出しのある主張は、主張の一覧に本文の冒頭ではなく見出しを表示する', async () => {
+    // 前提: 隣家の住人の証言に見出しが付いている
+    useCaseStore.getState().replaceCase({
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor' ? { ...claim, title: '夜9時に持ち主を庭で見た' } : claim
+      ),
+    });
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.click(screen.getByRole('tab', { name: /主張/ }));
+    const 一覧 = screen.getByRole('list', { name: '登録済みの主張' });
+
+    expect(within(一覧).getByText('夜9時に持ち主を庭で見た')).toBeInTheDocument();
+    expect(within(一覧).queryByText(/^夜9時ごろ、/)).not.toBeInTheDocument();
+  });
+
   it('登録済みの主張の編集を選ぶと、フォームに内容を読み込み、取り消しで新規登録に戻る', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);

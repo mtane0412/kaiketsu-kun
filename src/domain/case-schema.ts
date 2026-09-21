@@ -116,6 +116,7 @@ const caseSchema = z.object({
       viaPersonIds: z.array(idSchema).optional(),
       sourceId: idSchema.optional(),
       locator: z.string().optional(),
+      title: z.string().optional(),
       content: z.string(),
       statedAt: timeRefSchema.optional(),
       eventId: idSchema.optional(),

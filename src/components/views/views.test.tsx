@@ -10,6 +10,16 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
 
+/** 見出し（要約）を付けた、出来事に束ねていない長文の主張です。 */
+const 見出し付きの記述: Claim = {
+  id: 'claim-extortion',
+  speaker: { kind: 'person', personIds: ['person-newspaper'] },
+  viaPersonIds: [],
+  title: 'Zによる恐喝事件があった',
+  content: 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。被害者は数回にわたって現金を渡したという。',
+  mentionedPersonIds: [],
+};
+
 describe('TimelineView', () => {
   it('出来事の束に、束ねた主張から導出した日時・場所・人物と、束ねた主張を表示する', () => {
     render(<TimelineView target={sampleFictionalCase} />);
@@ -94,6 +104,32 @@ describe('TimelineView', () => {
     expect(screen.getByRole('button', { name: '「持ち主が最後に目撃された」を動かす' })).toBeInTheDocument();
     // 出来事に束ねていない主張は、本文の冒頭20文字を名前にする
     expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
+  });
+
+  it('見出しのある主張は、見出しを表示し、本文は折りたたんで示す', () => {
+    // 前提: 長い本文に、要約としての見出しを付けている
+    const 案件: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
+    render(<TimelineView target={案件} />);
+
+    const 主張 = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+    const 本文 = within(主張).getByText(/現金を渡すよう繰り返し迫った/);
+    // 検証: 本文は「本文を表示」を開くまで閉じている
+    expect(within(主張).getByText('本文を表示')).toBeInTheDocument();
+    expect(本文.closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('見出しの無い主張は、本文を折りたたまずに表示する', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const 本文 = screen.getByText(/夜9時ごろ、/);
+    expect(本文.closest('details')).toBeNull();
+  });
+
+  it('見出しのある主張は、本文の冒頭ではなく見出しを、つまみの名前にする', () => {
+    const 案件: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
+    render(<TimelineView target={案件} />);
+
+    expect(screen.getByRole('button', { name: '「Zによる恐喝事件があった」を動かす' })).toBeInTheDocument();
   });
 
   it('主張も出来事も1件も無い場合は、書き始め方の案内を表示する', () => {
