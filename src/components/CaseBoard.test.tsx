@@ -169,7 +169,7 @@ describe('CaseBoard', () => {
     });
 
     it('人物を新しく登録するURLでも、ボードの横に登録の枠を並べる', async () => {
-      resetMockNavigation('/cases/case-lakeside/new/person');
+      resetMockNavigation('/cases/case-lakeside/persons/new');
       renderBoard(<p>人物の登録フォーム</p>);
 
       const 登録 = await screen.findByRole('complementary', { name: '人物の登録' });
@@ -178,7 +178,7 @@ describe('CaseBoard', () => {
     });
 
     it('場所を新しく登録するURLでも、ボードの横に登録の枠を並べる', async () => {
-      resetMockNavigation('/cases/case-lakeside/new/place');
+      resetMockNavigation('/cases/case-lakeside/places/new');
       renderBoard(<p>場所の登録フォーム</p>);
 
       expect(await screen.findByRole('complementary', { name: '場所の登録' })).toBeInTheDocument();

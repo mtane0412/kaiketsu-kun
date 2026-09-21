@@ -147,7 +147,7 @@ describe('PlaceDetail', () => {
 describe('NewPersonDetail・NewPlaceDetail', () => {
   it('人物を新しく登録し、保存するとその人物の詳細へ移る', async () => {
     const user = userEvent.setup();
-    resetMockNavigation('/cases/case-lakeside/new/person');
+    resetMockNavigation('/cases/case-lakeside/persons/new');
     render(<NewPersonDetail />);
 
     const 登録 = screen.getByRole('region', { name: '人物の登録' });
@@ -161,7 +161,7 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
   });
 
   it('人物の登録では、削除のボタンを表示しない', () => {
-    resetMockNavigation('/cases/case-lakeside/new/person');
+    resetMockNavigation('/cases/case-lakeside/persons/new');
     render(<NewPersonDetail />);
 
     // 前提: まだ保存していないため、削除できる対象が無い
@@ -170,7 +170,7 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
 
   it('場所を新しく登録し、保存するとその場所の詳細へ移る', async () => {
     const user = userEvent.setup();
-    resetMockNavigation('/cases/case-lakeside/new/place?tab=map');
+    resetMockNavigation('/cases/case-lakeside/places/new?tab=map');
     render(<NewPlaceDetail />);
 
     const 登録 = screen.getByRole('region', { name: '場所の登録' });

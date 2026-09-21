@@ -90,9 +90,9 @@ describe('CaseSidebar', () => {
 
       expect(await screen.findByRole('link', { name: '人物を登録' })).toHaveAttribute(
         'href',
-        '/cases/case-lakeside/new/person'
+        '/cases/case-lakeside/persons/new'
       );
-      expect(screen.getByRole('link', { name: '場所を登録' })).toHaveAttribute('href', '/cases/case-lakeside/new/place');
+      expect(screen.getByRole('link', { name: '場所を登録' })).toHaveAttribute('href', '/cases/case-lakeside/places/new');
     });
 
     it('証言の一覧は、開いてから証言の詳細ページへのリンクを並べる', async () => {
