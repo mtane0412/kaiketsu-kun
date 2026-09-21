@@ -80,6 +80,33 @@ describe('EntryPanel', () => {
     });
   });
 
+  it('人物にアイコンの文字を指定すると、先頭の1文字を保存し、登録済みの一覧のアイコンにする', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.type(screen.getByLabelText('名前'), '郵便配達員');
+    // 2文字入力しても、アイコンに入るのは1文字のため、先頭の1文字だけを保存する
+    await user.type(screen.getByLabelText(/アイコンの文字/), '〒便');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(useCaseStore.getState().currentCase.persons.at(-1)).toMatchObject({ name: '郵便配達員', iconText: '〒' });
+    const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
+    // 文字は CSS で描画するため、要素の中身ではなく data-icon-text 属性に入っている
+    expect(配達員の行?.querySelector('[data-icon-text]')).toHaveAttribute('data-icon-text', '〒');
+  });
+
+  it('アイコンの文字を指定しない人物は、アイコンの文字を保存せず、名前の先頭の文字を一覧のアイコンにする', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel />);
+
+    await user.type(screen.getByLabelText('名前'), '郵便配達員');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(useCaseStore.getState().currentCase.persons.at(-1)).not.toHaveProperty('iconText');
+    const 配達員の行 = within(screen.getByRole('list', { name: '登録済みの人物' })).getByText('郵便配達員').closest('li');
+    expect(配達員の行?.querySelector('[data-icon-text]')).toHaveAttribute('data-icon-text', '郵');
+  });
+
   it('種類の選択肢に「出来事」は無い（語られる出来事は、すべて誰かの証言として書く）', () => {
     render(<EntryPanel />);
 

@@ -4,12 +4,14 @@
  * 時系列ビューと証言者別ビューで共有します。
  * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
- * 発言者と本文のメンションには、エンティティに登録した画像を添えます。
+ * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
+ * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
  * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
- * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
+ * onOpenEntity を渡すとメンションと言及のアイコンがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
  */
 import { formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
+import { personIconText } from '@/domain/person-icon';
 import type { Id } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
 
@@ -22,7 +24,7 @@ type ClaimCardProps = {
   view: ClaimView;
   /** 発言者名を表示するかどうかです。証言者別ビューではグループ見出しと重複するため非表示にします。 */
   showSpeaker: boolean;
-  /** 本文のメンションが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
+  /** 本文のメンション、または言及の欄のアイコンが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
   /** 証言の編集ボタンが選ばれたときに呼び出します。 */
   onEdit?: () => void;
@@ -45,11 +47,11 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
             onClick={() => onOpenEntity(segment.kind, segment.id)}
             className={`rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
           >
-            <EntityAvatar imageDataUrl={segment.imageDataUrl} size="sm" />@{segment.label}
+            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
           </button>
         ) : (
           <span key={index} className={`rounded px-0.5 ${MENTION_STYLES[segment.kind]}`}>
-            <EntityAvatar imageDataUrl={segment.imageDataUrl} size="sm" />@{segment.label}
+            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
           </span>
         )
       )}
@@ -65,7 +67,9 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
       <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isUserSpeculation && <span className="rounded bg-violet-200 px-1.5 py-0.5 font-medium text-violet-800">推測</span>}
         {showSpeaker &&
-          view.speakerPersons.map((person) => <EntityAvatar key={person.id} imageDataUrl={person.imageDataUrl} size="sm" />)}
+          view.speakerPersons.map((person) => (
+            <EntityAvatar key={person.id} imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="sm" />
+          ))}
         {showSpeaker && <span className="font-semibold text-slate-800">{view.speakerLabel}</span>}
         {view.viaPersons.length > 0 && (
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
@@ -112,7 +116,32 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
         {view.mentionedPersons.length > 0 && (
           <>
             <dt>言及</dt>
-            <dd>{view.mentionedPersons.map((person) => person.name).join('、')}</dd>
+            <dd>
+              <ul aria-label="言及している人物" className="flex flex-wrap gap-1">
+                {view.mentionedPersons.map((person) => {
+                  const avatar = <EntityAvatar imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="row" />;
+                  return (
+                    <li key={person.id} className="flex">
+                      {onOpenEntity ? (
+                        <button
+                          type="button"
+                          aria-label={person.name}
+                          title={person.name}
+                          onClick={() => onOpenEntity('person', person.id)}
+                          className="flex rounded-full hover:ring-2 hover:ring-sky-300"
+                        >
+                          {avatar}
+                        </button>
+                      ) : (
+                        <span role="img" aria-label={person.name} title={person.name} className="flex">
+                          {avatar}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </dd>
           </>
         )}
         {claim.locator && (

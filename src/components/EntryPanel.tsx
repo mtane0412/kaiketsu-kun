@@ -17,6 +17,7 @@ import { useState, type ReactNode } from 'react';
 import { describeClaimAttribution, findRelatedEntities, type RelatedEntity } from '@/domain/case-views';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import { contentToPlainText, type MentionKind } from '@/domain/mention';
+import { personIconText } from '@/domain/person-icon';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
 import { EntityAvatar } from './EntityAvatar';
@@ -53,9 +54,9 @@ type Section = {
   mentionKind?: MentionKind;
   /**
    * 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（証言の発言者と経由）。
-   * imageDataUrl は、表示名の前に添える画像です（人物・場所）。
+   * imageDataUrl は、表示名の前に添える画像です（人物・場所）。iconText は、画像が無い場合にアイコンへ表示する1文字です（人物）。
    */
-  listItems: (target: Case) => { id: Id; label: string; caption?: string; imageDataUrl?: string }[];
+  listItems: (target: Case) => { id: Id; label: string; caption?: string; imageDataUrl?: string; iconText?: string }[];
   /** 入力フォームを描画します。editingId が null の場合は新規登録です。 */
   renderForm: (target: Case, editingId: Id | null, onDone: () => void) => ReactNode;
 };
@@ -66,7 +67,12 @@ const SECTIONS: Section[] = [
     label: '人物',
     mentionKind: 'person',
     listItems: (target) =>
-      target.persons.map((person) => ({ id: person.id, label: person.name, imageDataUrl: person.imageDataUrl })),
+      target.persons.map((person) => ({
+        id: person.id,
+        label: person.name,
+        imageDataUrl: person.imageDataUrl,
+        iconText: personIconText(person),
+      })),
     renderForm: (target, editingId, onDone) => (
       <PersonForm initial={target.persons.find((person) => person.id === editingId)} onDone={onDone} />
     ),
@@ -203,7 +209,7 @@ export function EntryPanel({ initial }: EntryPanelProps) {
                       onClick={() => handleOpenRelated(related)}
                       className="flex w-full items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1.5 text-left text-sm hover:bg-slate-50"
                     >
-                      <EntityAvatar imageDataUrl={related.imageDataUrl} size="sm" />
+                      <EntityAvatar imageDataUrl={related.imageDataUrl} iconText={related.iconText} size="sm" />
                       <span className="min-w-0">
                         <span className="block truncate text-xs text-slate-500">
                           {MENTION_KIND_LABELS[related.kind]}・{describeRelation(related)}
@@ -234,7 +240,7 @@ export function EntryPanel({ initial }: EntryPanelProps) {
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <EntityAvatar imageDataUrl={item.imageDataUrl} size="sm" />
+                  <EntityAvatar imageDataUrl={item.imageDataUrl} iconText={item.iconText} size="sm" />
                   <span className="min-w-0">
                     {item.caption && <span className="block truncate text-xs font-semibold text-slate-600">{item.caption}</span>}
                     <span className="block truncate">{item.label}</span>

@@ -18,6 +18,7 @@
  * この入力欄の状態を「下書き（ClaimDraft）」と呼び、保存時に draftToContent で本文に変換します。
  * 注意: 下書きの型は名前に Claim を含みますが、メモの入力欄でも同じ型を使用します。
  */
+import { personIconText } from './person-icon';
 import type { Case, Claim, Id, Speaker } from './types';
 
 /** メンションで参照できるエンティティの種類です。 */
@@ -29,8 +30,11 @@ export const MENTION_KINDS: MentionKind[] = ['person', 'place'];
 /** 本文を分解した1要素です。 */
 export type ContentSegment =
   | { type: 'text'; text: string }
-  /** imageDataUrl は、案件を参照して解決した場合（resolveContent）にだけ載ります。 */
-  | { type: 'mention'; kind: MentionKind; id: Id; label: string; imageDataUrl?: string };
+  /**
+   * imageDataUrl と iconText は、案件を参照して解決した場合（resolveContent）にだけ載ります。
+   * iconText は、画像が無い場合にアイコンへ表示する1文字で、人物のメンションにだけ載ります。
+   */
+  | { type: 'mention'; kind: MentionKind; id: Id; label: string; imageDataUrl?: string; iconText?: string };
 
 /** 下書きの中で「@表示名」として書かれているメンションです。 */
 export type DraftMention = { kind: MentionKind; id: Id; label: string };
@@ -69,7 +73,11 @@ export function parseContent(content: string): ContentSegment[] {
 }
 
 /** メンションが指すエンティティを返します。案件内に存在しない場合は undefined を返します。 */
-function findEntity(target: Case, kind: MentionKind, id: Id): { name: string; imageDataUrl?: string } | undefined {
+function findEntity(
+  target: Case,
+  kind: MentionKind,
+  id: Id
+): { name: string; imageDataUrl?: string; iconText?: string } | undefined {
   switch (kind) {
     case 'person':
       return target.persons.find((person) => person.id === id);
@@ -84,7 +92,7 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
 }
 
 /**
- * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新し、エンティティの画像を載せて返します。
+ * 本文を分解し、メンションの表示名をエンティティの現在の名前に更新し、エンティティの画像と、人物のアイコンの文字を載せて返します。
  * 案件内に存在しないエンティティ（保存前の新規エンティティなど）は、トークンに控えた表示名のままにします。
  */
 export function resolveContent(content: string, target: Case): ContentSegment[] {
@@ -92,9 +100,10 @@ export function resolveContent(content: string, target: Case): ContentSegment[] 
     if (segment.type !== 'mention') return segment;
     const entity = findEntity(target, segment.kind, segment.id);
     if (!entity) return segment;
-    return entity.imageDataUrl === undefined
-      ? { ...segment, label: entity.name }
-      : { ...segment, label: entity.name, imageDataUrl: entity.imageDataUrl };
+    const resolved = { ...segment, label: entity.name };
+    if (entity.imageDataUrl !== undefined) resolved.imageDataUrl = entity.imageDataUrl;
+    if (segment.kind === 'person') resolved.iconText = personIconText(entity);
+    return resolved;
   });
 }
 

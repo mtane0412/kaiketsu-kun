@@ -413,3 +413,27 @@ describe('parseCase（人物・場所の画像）', () => {
     expect(() => parseCase(toJsonData(案件))).toThrow(/places\.0\.imageDataUrl/);
   });
 });
+
+describe('parseCase（人物のアイコンの文字）', () => {
+  it('人物のアイコンの文字を保持して受け付ける', () => {
+    const 案件 = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-caretaker' ? { ...person, iconText: '鍵' } : person
+      ),
+    };
+
+    const 読み込み後 = parseCase(toJsonData(案件));
+
+    expect(読み込み後.persons.find((person) => person.id === 'person-caretaker')?.iconText).toBe('鍵');
+  });
+
+  it('アイコンの文字が空文字列の場合は拒否する（指定しない場合は項目ごと省略するため）', () => {
+    const 案件 = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) => ({ ...person, iconText: '' })),
+    };
+
+    expect(() => parseCase(toJsonData(案件))).toThrow(/persons\.0\.iconText/);
+  });
+});
