@@ -1,5 +1,5 @@
 /**
- * エンティティに登録する画像の縮小
+ * エンティティに登録する画像の切り抜きと縮小
  *
  * 案件データは localStorage の1キーにJSONで保存しており、容量の上限（約5MB）があります。
  * 画像は登録の時点で小さなJPEGに縮小し、data URL として案件データに含めます。
@@ -17,6 +17,14 @@ const BACKGROUND_COLOR = '#ffffff';
 
 type Size = { width: number; height: number };
 
+/** 元の画像のうち、登録する範囲です（単位は元の画像のピクセル）。 */
+export type CropArea = Size & { x: number; y: number };
+
+/** 画像ファイルかどうかを、MIMEタイプで判定します。 */
+export function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/');
+}
+
 /** 縦横比を保ったまま、長辺が maxEdge に収まる大きさを返します。拡大はしません。 */
 export function fitWithin(size: Size, maxEdge: number): Size {
   const scale = Math.min(1, maxEdge / Math.max(size.width, size.height));
@@ -27,11 +35,11 @@ export function fitWithin(size: Size, maxEdge: number): Size {
 }
 
 /**
- * 画像ファイルを、長辺 ENTITY_IMAGE_MAX_EDGE 以内のJPEGに縮小し、data URL で返します。
+ * 画像ファイルの crop の範囲を切り抜き、長辺 ENTITY_IMAGE_MAX_EDGE 以内のJPEGに縮小して、data URL で返します。
  * 画像でないファイル、画像として読み込めないファイルは例外を投げます。
  */
-export async function fileToResizedDataUrl(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) {
+export async function fileToResizedDataUrl(file: File, crop: CropArea): Promise<string> {
+  if (!isImageFile(file)) {
     throw new Error('画像ファイルを選んでください');
   }
 
@@ -43,7 +51,7 @@ export async function fileToResizedDataUrl(file: File): Promise<string> {
   }
 
   try {
-    const { width, height } = fitWithin(bitmap, ENTITY_IMAGE_MAX_EDGE);
+    const { width, height } = fitWithin(crop, ENTITY_IMAGE_MAX_EDGE);
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -53,7 +61,7 @@ export async function fileToResizedDataUrl(file: File): Promise<string> {
     }
     context.fillStyle = BACKGROUND_COLOR;
     context.fillRect(0, 0, width, height);
-    context.drawImage(bitmap, 0, 0, width, height);
+    context.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
     return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
   } finally {
     bitmap.close();

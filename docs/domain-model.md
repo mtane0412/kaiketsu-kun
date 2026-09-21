@@ -46,7 +46,7 @@ UIは次の範囲に絞っています。
 |---|---|
 | `Case` | 1つの事件または作品。すべてのデータの入れ物。時系列ボードの並び順（`timelineOrder`）も保持 |
 | `Claim` | 誰が・誰を経由して・何を述べたか。人物の発言と、ユーザーの推測の総称 |
-| `Person` / `Place` | 登場する人物と場所。`Person` は、組織・記録装置・媒体（新聞、書籍、調書）を含む、発言しうる主体全般を表す。どちらにも画像を登録できる（`imageDataUrl`。登録時に長辺256px以内のJPEGへ縮小した data URL で、`src/lib/image-utils.ts` が縮小する） |
+| `Person` / `Place` | 登場する人物と場所。`Person` は、組織・記録装置・媒体（新聞、書籍、調書）を含む、発言しうる主体全般を表す。どちらにも画像を登録できる（`imageDataUrl`。登録時に正方形の範囲を切り抜き、長辺256px以内のJPEGへ縮小した data URL で、`src/lib/image-utils.ts` が切り抜きと縮小を行う） |
 | `Relationship` | 証言から導いた結論。`basisClaimIds` で根拠を参照 |
 | `TimeRef` | 曖昧さを許す時刻。原文表記と、区間または並び順を保持 |
 
