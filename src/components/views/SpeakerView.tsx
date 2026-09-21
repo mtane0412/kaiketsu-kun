@@ -24,7 +24,7 @@ export function SpeakerView({ target }: { target: Case }) {
       {groups.map((group) => (
         <section key={group.key} aria-label={group.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-slate-900">
-            <EntityAvatar imageDataUrl={group.imageDataUrl} size="md" />
+            <EntityAvatar imageDataUrl={group.imageDataUrl} iconText={group.iconText} size="md" />
             {group.label}
             <span className="text-xs font-normal text-slate-500">
               {KIND_LABELS[group.kind]}・{group.claims.length}件

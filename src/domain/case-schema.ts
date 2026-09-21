@@ -96,6 +96,7 @@ const caseSchema = z.object({
       name: z.string(),
       aliases: z.array(z.string()).optional(),
       imageDataUrl: imageDataUrlSchema.optional(),
+      iconText: z.string().min(1, 'アイコンの文字を指定しない場合は、項目ごと省略してください').optional(),
       note: z.string().optional(),
     })
   ),

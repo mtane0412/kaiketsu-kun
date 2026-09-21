@@ -10,6 +10,7 @@
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
+import { personIconText } from './person-icon';
 import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
 import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
@@ -49,6 +50,8 @@ export type SpeakerGroup = {
   label: string;
   /** 発言者の人物に登録された画像です。 */
   imageDataUrl?: string;
+  /** 発言者の人物の、画像が無い場合にアイコンへ表示する1文字です。ユーザーの推測には載りません。 */
+  iconText?: string;
   claims: ClaimView[];
 };
 
@@ -131,6 +134,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     kind: 'person',
     label: person.name,
     imageDataUrl: person.imageDataUrl,
+    iconText: personIconText(person),
     claims: claimViews.filter(
       (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personIds.includes(person.id)
     ),
@@ -221,6 +225,8 @@ export type RelatedEntity = {
   id: Id;
   name: string;
   imageDataUrl?: string;
+  /** 画像が無い場合にアイコンへ表示する1文字です。人物にだけ載ります。 */
+  iconText?: string;
   /** 対象のエンティティのメモが、このエンティティに言及しているかどうかです。 */
   mentions: boolean;
   /** このエンティティのメモが、対象のエンティティに言及しているかどうかです。 */
@@ -259,6 +265,7 @@ export function findRelatedEntities(target: Case, kind: MentionKind, id: Id): Re
 
     const related: RelatedEntity = { kind: item.kind, id: item.entity.id, name: item.entity.name, mentions, mentionedBy };
     if (item.entity.imageDataUrl !== undefined) related.imageDataUrl = item.entity.imageDataUrl;
+    if (item.kind === 'person') related.iconText = personIconText(item.entity);
     return [related];
   });
 }

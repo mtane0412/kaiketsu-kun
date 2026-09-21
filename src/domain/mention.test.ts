@@ -234,7 +234,29 @@ describe('resolveContent', () => {
 
     const segments = resolveContent(`${formatMention(持ち主)}が${formatMention(別荘)}にいた。`, 案件);
 
-    expect(segments[0]).toEqual({ type: 'mention', kind: 'person', id: 'person-owner', label: '別荘の持ち主', imageDataUrl: 持ち主の画像 });
+    expect(segments[0]).toEqual({
+      type: 'mention',
+      kind: 'person',
+      id: 'person-owner',
+      label: '別荘の持ち主',
+      imageDataUrl: 持ち主の画像,
+      iconText: '別',
+    });
+    expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
+  });
+
+  it('人物のメンションには、アイコンの文字を載せる（場所のメンションには載せない）', () => {
+    // 前提: 別荘の持ち主にはアイコンの文字「主」を指定してあり、画像は無い
+    const 案件 = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-owner' ? { ...person, iconText: '主' } : person
+      ),
+    };
+
+    const segments = resolveContent(`${formatMention(持ち主)}が${formatMention(別荘)}にいた。`, 案件);
+
+    expect(segments[0]).toEqual({ type: 'mention', kind: 'person', id: 'person-owner', label: '別荘の持ち主', iconText: '主' });
     expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
   });
 });

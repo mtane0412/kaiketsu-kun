@@ -371,3 +371,83 @@ describe('エンティティの画像の表示', () => {
     expect(imageSources(見出し)).toEqual([住人の画像]);
   });
 });
+
+describe('人物のアイコンの表示', () => {
+  /**
+   * 要素の中にある文字のアイコンの文字を、表示順に返します。名前の隣に添えるアイコンは装飾のため、role では探せません。
+   * 文字は CSS で描画するため、要素の中身ではなく data-icon-text 属性に入っています。
+   */
+  function iconTexts(element: Element | null): (string | null)[] {
+    return [...(element?.querySelectorAll('[data-icon-text]') ?? [])].map((icon) => icon.getAttribute('data-icon-text'));
+  }
+
+  it('画像の無い人物は、名前の先頭の文字をアイコンにして、発言者と本文のメンションに添える（場所には添えない）', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+
+    // 発言者（隣家の住人）、本文のメンション（別荘の持ち主）、言及の欄（別荘の持ち主）の順。湖畔の別荘（場所）には何も表示しない
+    expect(iconTexts(住人の証言)).toEqual(['隣', '別', '別']);
+  });
+
+  it('アイコンの文字を指定した人物は、名前の先頭の文字ではなく、指定した文字をアイコンにする', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-neighbor' ? { ...person, iconText: '住' } : person
+      ),
+    };
+    render(<TimelineView target={案件} />);
+
+    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+
+    expect(iconTexts(住人の証言)[0]).toBe('住');
+  });
+
+  it('画像を登録した人物は、文字のアイコンではなく画像を表示する', () => {
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-neighbor' ? { ...person, imageDataUrl: 'data:image/jpeg;base64,住人' } : person
+      ),
+    };
+    render(<TimelineView target={案件} />);
+
+    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+
+    // 発言者（隣家の住人）は画像になるため、文字のアイコンは別荘の持ち主の2つだけが残る
+    expect(iconTexts(住人の証言)).toEqual(['別', '別']);
+  });
+
+  it('証言カードの言及の欄は、言及している人物のアイコンを並べ、名前はアイコンの説明として持つ', () => {
+    // 前提: ユーザーの推測は、管理人・隣家の住人・別荘の持ち主の3人に言及している
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const 推測 = screen.getByText(/金銭の問題があった可能性/).closest('li');
+    if (!推測) throw new Error('ユーザーの推測のカードが見つかりません');
+    const 言及している人物 = within(within(推測).getByRole('list', { name: '言及している人物' })).getAllByRole('img');
+
+    expect(言及している人物.map((icon) => icon.getAttribute('aria-label'))).toEqual(['管理人', '隣家の住人', '別荘の持ち主']);
+    expect(言及している人物.flatMap((icon) => iconTexts(icon))).toEqual(['管', '隣', '別']);
+  });
+
+  it('言及の欄のアイコンを選ぶと、その人物を開く', async () => {
+    const user = userEvent.setup();
+    const onOpenEntity = vi.fn();
+    render(<TimelineView target={sampleFictionalCase} onOpenEntity={onOpenEntity} />);
+
+    const 推測 = screen.getByText(/金銭の問題があった可能性/).closest('li');
+    if (!推測) throw new Error('ユーザーの推測のカードが見つかりません');
+    await user.click(within(within(推測).getByRole('list', { name: '言及している人物' })).getByRole('button', { name: '隣家の住人' }));
+
+    expect(onOpenEntity).toHaveBeenCalledWith('person', 'person-neighbor');
+  });
+
+  it('証言者別ビューの見出しに、画像の無い発言者の文字のアイコンを表示する', () => {
+    render(<SpeakerView target={sampleFictionalCase} />);
+
+    const 見出し = within(screen.getByRole('region', { name: '隣家の住人' })).getByRole('heading', { name: /隣家の住人/ });
+
+    expect(iconTexts(見出し)).toEqual(['隣']);
+  });
+});

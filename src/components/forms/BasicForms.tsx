@@ -1,6 +1,7 @@
 /**
  * 人物・場所の入力フォーム
  *
+ * 人物には、画像が無い場合にアイコンへ表示する1文字を指定できます（省略した場合は名前の先頭の文字。src/domain/person-icon.ts を参照）。
  * メモには「@」で他の人物・場所を書けます（メンション。形式は src/domain/mention.ts を参照）。
  * メモのメンションは、エンティティ同士の関連の元になります。未登録の名前は候補の一覧から新規作成でき、
  * 新しいエンティティは編集中のエンティティと同時に保存します。
@@ -21,6 +22,7 @@ import {
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
+import { firstCharacter } from '@/domain/person-icon';
 import type { Coordinates, Person, Place } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
@@ -91,6 +93,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
   const [name, setName] = useState(initial?.name ?? '');
   const [aliases, setAliases] = useState(initial?.aliases?.join('、') ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
+  const [iconText, setIconText] = useState(initial?.iconText ?? '');
   const { field: noteField, note, newEntries } = useNoteField('person', initial);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +107,9 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
     const person: Person = { id: initial?.id ?? nanoid(), name: name.trim() };
     if (aliasList.length > 0) person.aliases = aliasList;
     if (imageDataUrl) person.imageDataUrl = imageDataUrl;
+    // アイコンに入るのは1文字のため、先頭の1文字だけを保存する
+    const iconCharacter = firstCharacter(iconText);
+    if (iconCharacter) person.iconText = iconCharacter;
     if (note) person.note = note;
 
     try {
@@ -120,6 +126,12 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
       <TextField label="名前" value={name} onChange={setName} required />
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
       <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
+      <TextField
+        label="アイコンの文字（1文字。画像が無い場合に表示）"
+        value={iconText}
+        onChange={setIconText}
+        placeholder="未入力の場合は名前の先頭の文字"
+      />
       {noteField}
       <FormError message={error} />
       <SubmitButton label="人物を保存" />

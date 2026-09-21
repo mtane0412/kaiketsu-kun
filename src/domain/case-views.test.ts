@@ -148,6 +148,13 @@ describe('人物の画像', () => {
     expect(groups.find((group) => group.key === 'person:person-neighbor')?.imageDataUrl).toBe(住人の画像);
     expect(groups.find((group) => group.key === 'user')?.imageDataUrl).toBeUndefined();
   });
+
+  it('証言者別ビューのグループに、その人物のアイコンの文字を載せる（ユーザーの推測には載せない）', () => {
+    const groups = groupClaimsBySpeaker(案件);
+
+    expect(groups.find((group) => group.key === 'person:person-neighbor')?.iconText).toBe('隣');
+    expect(groups.find((group) => group.key === 'user')?.iconText).toBeUndefined();
+  });
 });
 
 describe('findRelatedEntities', () => {
@@ -172,8 +179,8 @@ describe('findRelatedEntities', () => {
     const related = findRelatedEntities(メモで関連付けた案件, 'person', 'person-owner');
 
     expect(related).toEqual([
-      { kind: 'person', id: 'person-neighbor', name: '隣家の住人', mentions: false, mentionedBy: true },
-      { kind: 'person', id: 'person-caretaker', name: '管理人', mentions: true, mentionedBy: false },
+      { kind: 'person', id: 'person-neighbor', name: '隣家の住人', iconText: '隣', mentions: false, mentionedBy: true },
+      { kind: 'person', id: 'person-caretaker', name: '管理人', iconText: '管', mentions: true, mentionedBy: false },
       { kind: 'place', id: 'place-villa', name: '湖畔の別荘', mentions: true, mentionedBy: false },
     ]);
   });
@@ -183,7 +190,7 @@ describe('findRelatedEntities', () => {
     const related = findRelatedEntities(メモで関連付けた案件, 'place', 'place-villa');
 
     expect(related).toEqual([
-      { kind: 'person', id: 'person-owner', name: '別荘の持ち主', mentions: false, mentionedBy: true },
+      { kind: 'person', id: 'person-owner', name: '別荘の持ち主', iconText: '別', mentions: false, mentionedBy: true },
     ]);
   });
 
@@ -207,6 +214,13 @@ describe('findRelatedEntities', () => {
     const 別荘との関連 = findRelatedEntities(案件, 'person', 'person-owner').find((item) => item.id === 'place-villa');
 
     expect(別荘との関連?.imageDataUrl).toBe(画像);
+  });
+
+  it('関連する人物にはアイコンの文字を載せ、関連する場所には載せない', () => {
+    const 関連 = findRelatedEntities(メモで関連付けた案件, 'person', 'person-owner');
+
+    expect(関連.find((item) => item.id === 'person-caretaker')?.iconText).toBe('管');
+    expect(関連.find((item) => item.id === 'place-villa')?.iconText).toBeUndefined();
   });
 
   it('自分自身へのメンションは、関連に含めない', () => {

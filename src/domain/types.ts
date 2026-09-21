@@ -64,6 +64,11 @@ export type Person = {
   aliases?: string[];
   /** 縮小済みの画像（data URL）です。顔写真のほか、組織のロゴや紙面の画像も入ります。 */
   imageDataUrl?: string;
+  /**
+   * 画像が無い場合にアイコンへ表示する1文字です。省略した場合は、名前の先頭の文字を表示します。
+   * 表示する文字の決定は src/domain/person-icon.ts を参照してください。
+   */
+  iconText?: string;
   /** メモです。他の人物・場所へのメンション（src/domain/mention.ts）を含められます。 */
   note?: string;
 };
