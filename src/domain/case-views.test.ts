@@ -8,6 +8,7 @@ import {
   buildPersonDetail,
   buildPlaceDetail,
   buildTimeline,
+  claimLabelOf,
   findRelatedEntities,
   groupClaimsBySpeaker,
   groupStopsByPlace,
@@ -52,6 +53,17 @@ describe('buildTimeline', () => {
     };
 
     expect(() => buildTimeline(壊れた案件)).toThrow('場所が見つかりません: place-missing');
+  });
+});
+
+describe('claimLabelOf', () => {
+  it('見出しの無い証言の名前には、本文の日時のメンションを含めない（日時は時系列の並びで分かるため）', () => {
+    // 前提: 隣家の住人の証言は、本文の先頭に日時のメンション（1998年8月12日 21:00）を持つ
+    const 隣家の証言 = buildTimeline(sampleFictionalCase).items.find(
+      (item) => item.view.claim.id === 'claim-neighbor'
+    )!;
+
+    expect(claimLabelOf(隣家の証言.view)).toBe('ごろ、@湖畔の別荘の明かりがついていて、…');
   });
 });
 

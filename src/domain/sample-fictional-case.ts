@@ -9,8 +9,8 @@
  * - 組織（県警）・記録装置（防犯カメラ）・媒体（新聞、書籍）を、人物と同じく発言しうる主体として扱えること
  * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、経由（viaPersonIds）で表せること
  *
- * 証言の本文（content）は、人物・場所への参照を `@[表示名](種類:ID)` の形式で含みます。
- * 各証言の placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
+ * 証言の本文（content）は、人物・場所・日時への参照を `@[表示名](種類:ID)` の形式で含みます。
+ * 各証言の placeId・mentionedPersonIds・when は、本文からの導出結果（src/domain/mention.ts）と一致させています。
  */
 import type { Case } from './types';
 
@@ -41,8 +41,8 @@ export const sampleFictionalCase: Case = {
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       locator: '社会面',
-      content: 
-        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。',
+      content:
+        '@[1998年8月12日 21:00](date:1998-08-12T21:00)ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。',
       mentionedPersonIds: ['person-owner'],
       when: '1998-08-12T21:00',
       placeId: 'place-villa',
@@ -52,8 +52,8 @@ export const sampleFictionalCase: Case = {
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
       viaPersonIds: ['person-book'],
       locator: '第3章 112ページ',
-      content: 
-        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。',
+      content:
+        '@[1998年8月12日 19:00](date:1998-08-12T19:00)に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。',
       mentionedPersonIds: ['person-owner'],
       when: '1998-08-12T19:00',
       placeId: 'place-villa',
@@ -64,7 +64,7 @@ export const sampleFictionalCase: Case = {
       viaPersonIds: ['person-police', 'person-newspaper'],
       locator: '社会面',
       content:
-        '夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。',
+        '@[1998年8月12日 20:10](date:1998-08-12T20:10)ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。',
       mentionedPersonIds: ['person-owner'],
       when: '1998-08-12T20:10',
     },

@@ -32,7 +32,7 @@ describe('PersonDetail', () => {
 
     // 前提: 隣家の住人は「夜9時ごろ」の証言を述べ、ユーザーの推測から言及されている
     const 述べた証言 = screen.getByRole('region', { name: 'この人物が述べた証言' });
-    expect(within(述べた証言).getByRole('link', { name: /夜9時ごろ/ })).toHaveAttribute('href', '/claims/claim-neighbor');
+    expect(within(述べた証言).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute('href', '/claims/claim-neighbor');
 
     const 言及している証言 = screen.getByRole('region', { name: 'この人物に言及している証言' });
     expect(within(言及している証言).getByRole('link', { name: /管理人の証言は事件の20年後/ })).toHaveAttribute(
@@ -69,7 +69,7 @@ describe('PersonDetail', () => {
 
     expect(screen.getByRole('link', { name: '人物の詳細を閉じる' })).toHaveAttribute('href', '/?tab=map');
     const 述べた証言 = screen.getByRole('region', { name: 'この人物が述べた証言' });
-    expect(within(述べた証言).getByRole('link', { name: /夜9時ごろ/ })).toHaveAttribute(
+    expect(within(述べた証言).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute(
       'href',
       '/claims/claim-neighbor?tab=map'
     );

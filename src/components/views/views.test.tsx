@@ -27,12 +27,12 @@ describe('TimelineView', () => {
 
     const 時系列 = screen.getByRole('list', { name: '時系列' });
     const 本文の並び = within(時系列)
-      .getAllByText(/夜7時に見回り|夜8時10分ごろ、|夜9時ごろ、|連絡が取れなくなっている|金銭の問題があった可能性/)
+      .getAllByText(/見回りをしたとき|車が別荘の方向へ走る|明かりがついていて|連絡が取れなくなっている|金銭の問題があった可能性/)
       .map((element) => element.textContent);
     expect(本文の並び).toEqual([
-      expect.stringContaining('夜7時に見回り'),
-      expect.stringContaining('夜8時10分ごろ、'),
-      expect.stringContaining('夜9時ごろ、'),
+      expect.stringContaining('見回りをしたとき'),
+      expect.stringContaining('車が別荘の方向へ走る'),
+      expect.stringContaining('明かりがついていて'),
       expect.stringContaining('連絡が取れなくなっている'),
       expect.stringContaining('金銭の問題があった可能性'),
     ]);
@@ -65,8 +65,10 @@ describe('TimelineView', () => {
     };
     render(<TimelineView target={案件} />);
 
-    const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li')!;
-    expect(隣家の証言).toHaveTextContent('夜9時ごろ、@湖畔の別荘の明かりがついていて、庭に@湖畔荘のオーナーの姿が見えた。');
+    const 隣家の証言 = screen.getByText(/明かりがついていて/).closest('li')!;
+    expect(隣家の証言).toHaveTextContent(
+      '@1998年8月12日 21:00ごろ、@湖畔の別荘の明かりがついていて、庭に@湖畔荘のオーナーの姿が見えた。'
+    );
     expect(隣家の証言).not.toHaveTextContent('person:person-owner');
   });
 
@@ -107,7 +109,7 @@ describe('TimelineView', () => {
   it('見出しの無い証言は、本文を折りたたまずに表示する', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const 本文 = screen.getByText(/夜9時ごろ、/);
+    const 本文 = screen.getByText(/明かりがついていて/);
     expect(本文.closest('details')).toBeNull();
   });
 
@@ -158,10 +160,10 @@ describe('TimelineView への書き足し', () => {
     expect(useCaseStore.getState().currentCase.claims.at(-1)?.when).toBeUndefined();
     const 時系列 = screen.getByRole('list', { name: '時系列' });
     const 本文の並び = within(時系列)
-      .getAllByText(/夜7時に見回り|見慣れない車|金銭の問題があった可能性/)
+      .getAllByText(/見回りをしたとき|見慣れない車|金銭の問題があった可能性/)
       .map((element) => element.textContent);
     expect(本文の並び).toEqual([
-      expect.stringContaining('夜7時に見回り'),
+      expect.stringContaining('見回りをしたとき'),
       expect.stringContaining('見慣れない車'),
       expect.stringContaining('金銭の問題があった可能性'),
     ]);
@@ -171,7 +173,7 @@ describe('TimelineView への書き足し', () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
 
-    await user.click(screen.getByRole('button', { name: /^「夜7時に見回りをしたとき.*」の前に書き足す$/ }));
+    await user.click(screen.getByRole('button', { name: /^「.*見回りをしたとき.*」の前に書き足す$/ }));
     await user.type(screen.getByLabelText('内容'), '持ち主は8月の初めに別荘へ来たらしい。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
@@ -245,7 +247,7 @@ describe('TimelineView への書き足し', () => {
     // 前提: メンションからたどった先でも、時系列のタブに戻れるようにする
     render(<StoreBoard />);
 
-    const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li')!;
+    const 隣家の証言 = screen.getByText(/明かりがついていて/).closest('li')!;
     expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
   });
 });
@@ -255,7 +257,7 @@ describe('SpeakerView', () => {
     render(<SpeakerView target={sampleFictionalCase} />);
 
     const 管理人 = screen.getByRole('region', { name: '管理人' });
-    expect(within(管理人).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
+    expect(within(管理人).getByText(/見回りをしたとき/)).toBeInTheDocument();
     // 発言者名はグループの見出しと重複するため示さないが、経由は証言ごとに示す
     expect(within(管理人).getByText('（湖畔の夏 20年目の証言（架空の書籍） による）')).toBeInTheDocument();
 
@@ -297,7 +299,7 @@ describe('エンティティの画像の表示', () => {
   it('時系列の証言カードに、発言者の画像と、本文のメンションの画像を表示する', () => {
     render(<TimelineView target={画像付きの案件} />);
 
-    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+    const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
     // 発言者（隣家の住人）、本文のメンション（湖畔の別荘）の順。画像の無い別荘の持ち主には何も表示しない
     expect(imageSources(住人の証言)).toEqual([住人の画像, 別荘の画像]);
@@ -330,7 +332,7 @@ describe('人物のアイコンの表示', () => {
   it('画像の無い人物は、名前の先頭の文字をアイコンにして、発言者と本文のメンションに添える（場所には添えない）', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+    const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
     // 発言者（隣家の住人）、本文のメンション（別荘の持ち主）、言及の欄（別荘の持ち主）の順。湖畔の別荘（場所）には何も表示しない
     expect(iconTexts(住人の証言)).toEqual(['隣', '別', '別']);
@@ -345,7 +347,7 @@ describe('人物のアイコンの表示', () => {
     };
     render(<TimelineView target={案件} />);
 
-    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+    const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
     expect(iconTexts(住人の証言)[0]).toBe('住');
   });
@@ -359,7 +361,7 @@ describe('人物のアイコンの表示', () => {
     };
     render(<TimelineView target={案件} />);
 
-    const 住人の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
+    const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
     // 発言者（隣家の住人）は画像になるため、文字のアイコンは別荘の持ち主の2つだけが残る
     expect(iconTexts(住人の証言)).toEqual(['別', '別']);

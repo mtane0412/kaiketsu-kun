@@ -18,18 +18,21 @@ beforeEach(() => {
 });
 
 describe('ClaimDetail', () => {
-  it('証言の内容と日時を、1つのフォームで編集できる', async () => {
+  it('証言の内容を1つのフォームで編集でき、本文の日時のメンションを保持する', async () => {
     const user = userEvent.setup();
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    // 検証: ボード上の入力欄と違い、日時の欄を最初から表示する
-    expect(screen.getByLabelText('日時（任意）')).toHaveValue('1998-08-12T21:00');
+    // 検証: 日時は専用の欄ではなく、本文のメンションとして読み込む
+    expect(screen.getByLabelText('内容')).toHaveValue(
+      '@1998年8月12日 21:00ごろ、@湖畔の別荘の明かりがついていて、庭に@別荘の持ち主の姿が見えた。'
+    );
 
     await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-neighbor');
     expect(保存後?.content).toContain('窓は開いていた。');
+    expect(保存後?.when).toBe('1998-08-12T21:00');
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
   });
 
@@ -49,7 +52,7 @@ describe('ClaimDetail', () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute('href', '/claims/claim-caretaker');
     expect(links[0]).toHaveTextContent('管理人');
-    expect(links[0]).toHaveTextContent(/夜7時に見回りをしたとき/);
+    expect(links[0]).toHaveTextContent(/見回りをしたとき/);
   });
 
   it('この証言が触れている発言者・経由・言及・場所を、人物・場所の詳細へのリンクにする', () => {

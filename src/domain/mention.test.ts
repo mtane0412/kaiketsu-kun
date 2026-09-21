@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   claimToDraft,
   contentToDraft,
+  dateMentionOf,
   contentToPlainText,
   deriveClaimLinks,
   draftToContent,
@@ -23,6 +24,7 @@ const 隣家の住人: DraftMention = { kind: 'person', id: 'person-neighbor', l
 const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label: '管理人' };
 const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
 const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
+const 夜7時 = dateMentionOf('1998-08-12T19:00');
 
 describe('parseContent', () => {
   it('本文を、文字列とメンションの並びに分解する', () => {
@@ -73,6 +75,53 @@ describe('deriveClaimLinks', () => {
 
     expect(links.placeId).toBe('place-villa');
     expect(links.mentionedPersonIds).toEqual(['person-owner']);
+  });
+});
+
+describe('日時のメンション', () => {
+  it('時刻参照から、日本語の表示名を持つ日時のメンションを作る', () => {
+    expect(夜7時).toEqual({ kind: 'date', id: '1998-08-12T19:00', label: '1998年8月12日 19:00' });
+  });
+
+  it('本文の最初の日時のメンションから、証言が述べる日時を導出する', () => {
+    const 夜9時 = dateMentionOf('1998-08-12T21:00');
+    const content = `${formatMention(夜7時)}に見回りをしたが、${formatMention(夜9時)}には戻らなかった。`;
+
+    expect(deriveClaimLinks(content).when).toBe('1998-08-12T19:00');
+  });
+
+  it('日時のメンションが無い本文からは、日時を導出しない', () => {
+    const content = `庭に${formatMention(持ち主)}の姿が見えた。`;
+
+    expect(deriveClaimLinks(content)).not.toHaveProperty('when');
+  });
+
+  it('日時のメンションの表示名は、保存済みの表示名ではなく時刻参照から組み立て直す', () => {
+    // 前提: 以前の版の表示名「1998-08-12T19:00」がトークンに残っている
+    const 古い表示名の本文 = '@[1998-08-12T19:00](date:1998-08-12T19:00)に見回りをした。';
+
+    expect(resolveContent(古い表示名の本文, sampleFictionalCase)[0]).toEqual({
+      type: 'mention',
+      kind: 'date',
+      id: '1998-08-12T19:00',
+      label: '1998年8月12日 19:00',
+    });
+  });
+
+  it('日時の欄に入力していた頃の証言は、日時を本文の末尾のメンションとして補う（編集で日時を失わないため）', () => {
+    const 日時の欄に入力した証言: Claim = {
+      id: 'claim-legacy-when',
+      speaker: { kind: 'person', personIds: ['person-caretaker'] },
+      viaPersonIds: [],
+      content: '見回りをしたとき、別荘は真っ暗だった。',
+      mentionedPersonIds: [],
+      when: '1998-08-12T19:00',
+    };
+
+    const draft = claimToDraft(日時の欄に入力した証言, sampleFictionalCase);
+
+    expect(draft.text).toBe('見回りをしたとき、別荘は真っ暗だった。 @1998年8月12日 19:00');
+    expect(deriveClaimLinks(draftToContent(draft)).when).toBe('1998-08-12T19:00');
   });
 });
 

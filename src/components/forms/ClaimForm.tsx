@@ -7,11 +7,12 @@
  * 本文が長い証言には、本文を要約する見出しを任意で付けられます。見出しはメンションに対応せず、参照の導出には使いません。
  * 誰の発言か、誰を経由して伝わったかは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。
  * 新規登録でも編集でも選べます。発言者を選ばない証言は、ユーザーの推測です。
- * 本文から導出できない項目（日時）は「詳細」にまとめています。
+ * 日時も本文に書きます。「@」に続けて日時を書くと候補を示し、選ぶと日時のメンションになります
+ * （受け付ける表記は src/domain/date-input.ts を参照してください）。
  * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
- * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
+ * 書けるようにするためです）。本文から読み取った参照の一覧と、書き方の案内を表示しません。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
  *
  * initial を渡すと編集、省略すると新規登録になります。
@@ -22,7 +23,7 @@
 
 import { nanoid } from 'nanoid';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { DATE_MENTION_LABEL, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   claimToDraft,
   deriveClaimLinks,
@@ -32,17 +33,14 @@ import {
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
-import { isValidTimeRef } from '@/domain/time-ref';
 import { timelineKeyOf } from '@/domain/timeline-order';
+import { formatTimeRef } from '@/domain/time-ref';
 import type { Claim } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
-
-/** 日時の入力欄に示す、受け付ける表記の例です。 */
-const TIME_REF_FORMAT_EXAMPLES = '1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00';
 
 /**
  * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
@@ -60,13 +58,11 @@ type ClaimFormProps = {
   autoFocus?: boolean;
   /** 見出しと本文の欄・「発言者」・投稿ボタンだけを表示するかどうかです。 */
   compact?: boolean;
-  /** 日時が未入力でも「詳細（日時）」を開いておくかどうかです。証言の詳細ページで、日時の欄を探さずに入力できるようにします。 */
-  expandDetails?: boolean;
   /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
   actions?: ReactNode;
 };
 
-export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expandDetails, actions }: ClaimFormProps) {
+export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
@@ -78,10 +74,8 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
-  const [when, setWhen] = useState(initial?.when ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
   const content = draftToContent({ ...draft, text: draft.text.trim() });
@@ -90,6 +84,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
   /** 本文から読み取れた参照です。読み取れなかった項目は含めません。 */
   const summaryItems = [
+    { term: DATE_MENTION_LABEL, description: links.when && formatTimeRef(links.when) },
     { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
   ].filter((item) => item.description);
@@ -107,12 +102,6 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
-    const trimmedWhen = when.trim();
-    if (trimmedWhen && !isValidTimeRef(trimmedWhen)) {
-      setError(`日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で入力してください`);
-      return;
-    }
-
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
     const claim: Claim = {
       id: initial?.id ?? nanoid(),
@@ -123,7 +112,6 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
     };
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
-    if (trimmedWhen) claim.when = trimmedWhen;
 
     // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
     const usedIds = new Set([
@@ -176,16 +164,17 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
         required
         autoFocus={autoFocus}
         hideLabel={compact}
+        withDate
         placeholder={
           compact
-            ? '分かったことを書く（「@」で人物・場所。誰の発言かは下の「発言者」で選ぶ）'
-            : '例: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
+            ? '分かったことを書く（「@」で人物・場所・日時。誰の発言かは下の「発言者」で選ぶ）'
+            : '例: @1998-08-12T21:00 ごろ、@湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
         }
       />
       {!compact && (
         <>
         <p className="text-xs text-slate-500">
-          「@」で人物・場所を参照します。未登録の名前はその場で作成できます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない証言は、ユーザーの推測です。
+          「@」で人物・場所・日時を書きます。未登録の名前はその場で作成でき、日時は「@1998-08-12」「@1998年8月12日19時」のように書くと候補に出ます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない証言は、ユーザーの推測です。
         </p>
         {summaryItems.length > 0 && (
           <dl
@@ -200,19 +189,6 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
             ))}
           </dl>
         )}
-        <details open={expandDetails || hasDetails} className="rounded border border-slate-200 p-2">
-          <summary className="cursor-pointer text-xs font-medium text-slate-600">
-            詳細（日時）
-          </summary>
-          <div className="mt-2 space-y-3">
-            <TextField
-              label="日時（任意）"
-              value={when}
-              onChange={setWhen}
-              placeholder={`証言が述べる出来事の日時（${TIME_REF_FORMAT_EXAMPLES}）`}
-            />
-          </div>
-        </details>
         </>
       )}
       <FormError message={error} />

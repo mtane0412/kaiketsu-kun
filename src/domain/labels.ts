@@ -4,6 +4,9 @@
  */
 import type { MentionKind } from './mention';
 
+/** 日時のメンション（案件のエンティティではなく、日時そのものを指すメンション）の表示名です。 */
+export const DATE_MENTION_LABEL = '日時';
+
 /** メンションで参照できるエンティティの種類の表示名です。 */
 export const MENTION_KIND_LABELS: Record<MentionKind, string> = {
   person: '人物',

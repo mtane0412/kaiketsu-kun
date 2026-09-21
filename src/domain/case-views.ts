@@ -108,10 +108,18 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
 /** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
 const CLAIM_LABEL_LENGTH = 20;
 
-/** 証言の名前（見出し、見出しが無ければ本文の冒頭）を返します。ボタンやリンクの名前と、読み上げに使います。 */
+/**
+ * 証言の名前（見出し、見出しが無ければ本文の冒頭）を返します。ボタンやリンクの名前と、読み上げに使います。
+ *
+ * 注意: 本文の日時のメンションは名前に含めません。日時は時系列の並びと、カードの上の表示で分かるため、
+ * 短い名前の文字数を日時で使ってしまうと、証言を見分けにくくなるためです。
+ */
 export function claimLabelOf(view: ClaimView): string {
   if (view.claim.title) return view.claim.title;
-  const text = view.contentSegments.map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`)).join('');
+  const text = view.contentSegments
+    .filter((segment) => segment.type !== 'mention' || segment.kind !== 'date')
+    .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
+    .join('');
   return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
 }
 

@@ -36,7 +36,7 @@ describe('CaseBoard', () => {
     renderBoard();
 
     expect(await screen.findByDisplayValue('湖畔の別荘失踪事件（架空）')).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/夜9時ごろ、/)).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/明かりがついていて/)).toBeInTheDocument();
     // 入力はボードへの書き足しに一本化したため、入力専用のタブは持たない
     expect(screen.queryByRole('tab', { name: '入力' })).not.toBeInTheDocument();
 
@@ -71,7 +71,7 @@ describe('CaseBoard', () => {
   it('ボード上のメンションは、その人物・場所の詳細ページへのリンクになる（オーバーレイでは開かない）', async () => {
     renderBoard();
 
-    const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
+    const 隣家の証言 = (await screen.findByText(/明かりがついていて/)).closest('li')!;
     expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
     expect(screen.queryByRole('complementary', { name: '登録済みの一覧' })).not.toBeInTheDocument();
   });
@@ -79,7 +79,7 @@ describe('CaseBoard', () => {
   it('証言のカードは、その証言の詳細ページへのリンクになる（編集の導線は詳細ページに一本化している）', async () => {
     renderBoard();
 
-    const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
+    const 隣家の証言 = (await screen.findByText(/明かりがついていて/)).closest('li')!;
     expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-neighbor');
     expect(within(隣家の証言).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
     expect(within(隣家の証言).queryByRole('button', { name: 'この証言の詳細' })).not.toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('CaseBoard', () => {
     renderBoard();
 
     const 一覧 = await screen.findByRole('region', { name: '地図に表示できない証言' });
-    const 隣家の証言 = within(一覧).getByText(/夜9時ごろ、/).closest('li')!;
+    const 隣家の証言 = within(一覧).getByText(/明かりがついていて/).closest('li')!;
     expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-neighbor?tab=map');
   });
 
@@ -114,8 +114,8 @@ describe('CaseBoard', () => {
       expect(within(詳細).getByText('隣家の住人の証言の詳細')).toBeInTheDocument();
 
       const 時系列 = screen.getByRole('list', { name: '時系列' });
-      const 隣家の証言 = within(時系列).getByText(/夜9時ごろ、/).closest('li')!;
-      const 管理人の証言 = within(時系列).getByText(/夜7時に見回りをしたとき/).closest('li')!;
+      const 隣家の証言 = within(時系列).getByText(/明かりがついていて/).closest('li')!;
+      const 管理人の証言 = within(時系列).getByText(/見回りをしたとき/).closest('li')!;
       expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('aria-current', 'true');
       expect(within(管理人の証言).getByRole('link', { name: /を開く$/ })).not.toHaveAttribute('aria-current');
     });
@@ -173,7 +173,7 @@ describe('CaseBoard', () => {
       renderBoard(<p>隣家の住人の詳細</p>);
 
       const 時系列 = await screen.findByRole('list', { name: '時系列' });
-      const 隣家の証言 = within(時系列).getByText(/夜9時ごろ、/).closest('li')!;
+      const 隣家の証言 = within(時系列).getByText(/明かりがついていて/).closest('li')!;
       expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).not.toHaveAttribute('aria-current');
     });
   });

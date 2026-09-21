@@ -57,7 +57,7 @@ describe('ClaimForm', () => {
     await user.type(screen.getByLabelText('内容'), 'あての新聞が残っていた。');
     await chooseSpeakers(user, ['隣家の住人']);
     await chooseVia(user, ['架空日報 朝刊']);
-    await user.type(screen.getByLabelText('日時（任意）'), '1998-08-13');
+    await typeAndChoose(user, ' @1998-08-13', '日時 1998年8月13日');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     // 検証: 発言者と経由は本文に書かず、「発言者」で選んだ人物を保存する
@@ -65,7 +65,7 @@ describe('ClaimForm', () => {
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       content:
-        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。',
+        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。 @[1998年8月13日](date:1998-08-13)',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
       when: '1998-08-13',
@@ -176,16 +176,45 @@ describe('ClaimForm', () => {
     expect(lastSavedClaim()).toMatchObject({ speaker: { kind: 'user' }, viaPersonIds: [] });
   });
 
-  it('解釈できない日時を入力した場合は、エラーを示して保存しない', async () => {
-    const user = userEvent.setup();
-    render(<ClaimForm onDone={vi.fn()} />);
+  describe('日時の「@」での入力', () => {
+    it('「@」に続けて日時を書くと候補に示し、選ぶと本文のメンションとして日時を保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
 
-    await user.type(screen.getByLabelText('内容'), '日時の書き方を間違えた推測。');
-    await user.type(screen.getByLabelText('日時（任意）'), '1998年8月');
-    await user.click(screen.getByRole('button', { name: '証言を保存' }));
+      await typeAndChoose(user, '@1998/8/12T19:00', '日時 1998年8月12日 19:00');
+      await user.type(screen.getByLabelText('内容'), 'に見回りをした。');
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('日時');
-    expect(useCaseStore.getState().currentCase.claims).toEqual(sampleFictionalCase.claims);
+      expect(lastSavedClaim()).toMatchObject({
+        content: '@[1998年8月12日 19:00](date:1998-08-12T19:00)に見回りをした。',
+        when: '1998-08-12T19:00',
+      });
+    });
+
+    it('日時として解釈できない語では、日時の候補を示さない', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await user.type(screen.getByLabelText('内容'), '@8月12日');
+
+      expect(screen.queryByRole('option', { name: /^日時/ })).not.toBeInTheDocument();
+    });
+
+    it('日時を入力する専用の欄を持たない（日時は本文に書く）', () => {
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      expect(screen.queryByLabelText('日時（任意）')).not.toBeInTheDocument();
+      expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
+    });
+
+    it('本文から読み取った日時を、参照の一覧に示す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      await typeAndChoose(user, '@1998-08-12', '日時 1998年8月12日');
+
+      expect(screen.getByLabelText('本文から読み取った参照')).toHaveTextContent('日時1998年8月12日');
+    });
   });
 
   it('証言に真偽の評価を付ける入力欄を持たない', () => {
@@ -543,21 +572,6 @@ describe('ClaimForm のキーボード操作', () => {
     expect(onDone).toHaveBeenCalledOnce();
   });
 
-  describe('日時の欄を開いた表示（expandDetails）', () => {
-    it('日時が未入力でも、「詳細（日時）」を開いた状態で表示する', () => {
-      // 前提: 証言の詳細ページでは、日時の欄を探さずに入力できるよう、最初から開いておく
-      render(<ClaimForm expandDetails onDone={vi.fn()} />);
-
-      expect(screen.getByText('詳細（日時）').closest('details')).toHaveAttribute('open');
-    });
-
-    it('指定しない場合、日時が未入力の証言では「詳細（日時）」を閉じておく', () => {
-      render(<ClaimForm onDone={vi.fn()} />);
-
-      expect(screen.getByText('詳細（日時）').closest('details')).not.toHaveAttribute('open');
-    });
-  });
-
   describe('ボード上の簡易表示（compact）', () => {
     it('本文の1欄と投稿ボタンだけを表示し、日時・ソース内の位置の入力欄を表示しない', () => {
       render(<ClaimForm compact onDone={vi.fn()} />);
@@ -565,7 +579,6 @@ describe('ClaimForm のキーボード操作', () => {
       expect(screen.getByLabelText('内容')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '書き足す' })).toBeInTheDocument();
       expect(screen.queryByText(/詳細/)).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('日時（任意）')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('ソース内の位置')).not.toBeInTheDocument();
     });
 
@@ -576,7 +589,7 @@ describe('ClaimForm のキーボード操作', () => {
     });
 
     it('本文だけを編集しても、入力済みの日時・ソース内の位置を保持する', async () => {
-      // 前提: 管理人の証言は、日時「1998-08-12T19:00」、位置「第3章 112ページ」を持つ
+      // 前提: 管理人の証言は、本文に日時のメンション（1998-08-12T19:00）と、位置「第3章 112ページ」を持つ
       const user = userEvent.setup();
       const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
       render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);

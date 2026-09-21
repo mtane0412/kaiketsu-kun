@@ -169,6 +169,20 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
   });
 
+  it('本文に解釈できない日時のメンションを含む証言を拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      claims: [
+        {
+          ...sampleFictionalCase.claims[0],
+          content: '@[1998年8月32日](date:1998-08-32)に別荘を訪ねた。',
+        },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('日時を解釈できません: 1998-08-32');
+  });
+
   it('日時を区間で持っていた頃のデータは、最も早い時点を日時として受け付ける', () => {
     // 前提: 以前の版では、日時を { text, earliest, latest, order } の形で持っていた
     const 旧データ = {

@@ -3,6 +3,8 @@
  *
  * 「@」を入力すると候補の一覧を開き、登録済みのエンティティを名前と別名で絞り込みます。
  * 一致する名前が無い種類については「新規作成」の選択肢を示します。
+ * withDate を指定した入力欄（証言の本文）では、「@」に続けて日時を書くと、日時のメンションの候補も示します
+ * （受け付ける表記は src/domain/date-input.ts を参照してください）。
  * 登録済みの名前を正確に入力して空白で区切った場合は、候補を選ばなくてもメンションとして確定します。
  * 入力欄には `@表示名` の素の文字列を表示し、確定したメンションは value.mentions に保持します
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
@@ -19,15 +21,18 @@
 'use client';
 
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { parseDateInput } from '@/domain/date-input';
+import { DATE_MENTION_LABEL, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   MENTION_KINDS,
+  dateMentionOf,
   findMentionQuery,
   parseDraft,
   type ClaimDraft,
   type ContentSegment,
   type DraftMention,
   type MentionKind,
+  type SegmentKind,
 } from '@/domain/mention';
 
 /** 候補として示す登録済みのエンティティです。keywords には別名など、絞り込みに使う表示名以外の語を指定します。 */
@@ -40,9 +45,10 @@ const MAX_EXISTING_OPTIONS = 8;
  * ハイライト層でメンションにつける背景色です。
  * 注意: 文字の位置が textarea とずれるため、余白や文字の太さなど文字組みを変える指定は加えないでください。
  */
-const MENTION_HIGHLIGHT_STYLES: Record<MentionKind, string> = {
+const MENTION_HIGHLIGHT_STYLES: Record<SegmentKind, string> = {
   person: 'bg-sky-100',
   place: 'bg-emerald-100',
+  date: 'bg-amber-100',
 };
 
 /** textarea とハイライト層で一致させる文字組み（枠線の幅・余白・文字の大きさ・折り返し）の指定です。 */
@@ -55,8 +61,13 @@ function segmentLength(segment: ContentSegment): number {
 
 type MentionOption = { type: 'existing'; mention: DraftMention } | { type: 'create'; kind: MentionKind; name: string };
 
-/** 検索語に対する選択肢を、登録済みのエンティティ、新規作成の順に並べて返します。 */
-function buildOptions(query: string, candidates: MentionCandidate[]): MentionOption[] {
+/**
+ * 検索語に対する選択肢を、日時、登録済みのエンティティ、新規作成の順に並べて返します。
+ * 日時の選択肢は、withDate を指定した入力欄で、検索語を日時として解釈できた場合にだけ示します。
+ */
+function buildOptions(query: string, candidates: MentionCandidate[], withDate: boolean): MentionOption[] {
+  const when = withDate ? parseDateInput(query) : null;
+  const date: MentionOption[] = when === null ? [] : [{ type: 'existing', mention: dateMentionOf(when) }];
   const normalizedQuery = query.toLowerCase();
   const existing = candidates
     .filter((candidate) =>
@@ -73,7 +84,7 @@ function buildOptions(query: string, candidates: MentionCandidate[]): MentionOpt
   const creatable = MENTION_KINDS.filter(
     (kind) => !candidates.some((candidate) => candidate.kind === kind && candidate.label === query)
   ).map((kind): MentionOption => ({ type: 'create', kind, name: query }));
-  return [...existing, ...creatable];
+  return [...date, ...existing, ...creatable];
 }
 
 type MentionTextareaProps = {
@@ -88,6 +99,8 @@ type MentionTextareaProps = {
   autoFocus?: boolean;
   /** ラベルを画面に表示せず、読み上げだけに使うかどうかです。 */
   hideLabel?: boolean;
+  /** 「@」に続けて書いた日時を、日時のメンションの候補として示すかどうかです。 */
+  withDate?: boolean;
 };
 
 export function MentionTextarea({
@@ -100,6 +113,7 @@ export function MentionTextarea({
   placeholder,
   autoFocus,
   hideLabel,
+  withDate = false,
 }: MentionTextareaProps) {
   const id = useId();
   const listboxId = useId();
@@ -128,7 +142,7 @@ export function MentionTextarea({
     value.mentions.map((mention) => mention.label)
   );
   const query = found !== null && found.start !== dismissedStart ? found : null;
-  const options = query === null ? [] : buildOptions(query.query, candidates);
+  const options = query === null ? [] : buildOptions(query.query, candidates, withDate);
   const isOpen = query !== null && options.length > 0;
   // 先頭が登録済みのエンティティの場合だけ、矢印キーで選ばなくても先頭を選択中とする。
   // 新規作成の選択肢しか無い場合に既定で選択すると、メールアドレスの「@」の後のEnterキーなどで
@@ -305,7 +319,7 @@ export function MentionTextarea({
               {option.type === 'existing' ? (
                 <>
                   <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-600">
-                    {MENTION_KIND_LABELS[option.mention.kind]}
+                    {option.mention.kind === 'date' ? DATE_MENTION_LABEL : MENTION_KIND_LABELS[option.mention.kind]}
                   </span>{' '}
                   {option.mention.label}
                 </>

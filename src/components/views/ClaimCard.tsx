@@ -21,15 +21,15 @@
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
-import type { MentionKind } from '@/domain/mention';
+import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
-import { formatTimeRef } from '@/domain/time-ref';
 import { EntityAvatar } from '../EntityAvatar';
 import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
 
-const MENTION_STYLES: Record<MentionKind, string> = {
+const MENTION_STYLES: Record<SegmentKind, string> = {
   person: 'bg-sky-100 text-sky-800',
   place: 'bg-emerald-100 text-emerald-800',
+  date: 'bg-amber-100 text-amber-800',
 };
 
 /** カード全体に広げたリンクの当たり判定より手前に置く要素のクラスです。 */
@@ -60,6 +60,11 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
       {view.contentSegments.map((segment, index) =>
         segment.type !== 'mention' ? (
           segment.text
+        ) : segment.kind === 'date' ? (
+          // 日時は案件のエンティティではないため、開く先が無い。リンクにせず、色だけを人物・場所とそろえる
+          <span key={index} className={`rounded px-0.5 ${MENTION_STYLES.date}`}>
+            @{segment.label}
+          </span>
         ) : (
           <Link
             key={index}
@@ -113,12 +118,6 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
       )}
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-slate-500">
-        {claim.when && (
-          <>
-            <dt>述べる日時</dt>
-            <dd>{formatTimeRef(claim.when)}</dd>
-          </>
-        )}
         {view.place && (
           <>
             <dt>述べる場所</dt>

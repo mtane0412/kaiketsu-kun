@@ -133,9 +133,9 @@ describe('EntryPanel', () => {
     const 一覧 = screen.getByRole('list', { name: '登録済みの証言' });
 
     // 前提: 管理人の証言は書籍を経由し、防犯カメラの記録は県警と架空日報を経由している
-    const 管理人の証言 = within(一覧).getByText(/^夜7時に見回りをしたとき/).closest('li')!;
+    const 管理人の証言 = within(一覧).getByText(/見回りをしたとき/).closest('li')!;
     expect(管理人の証言).toHaveTextContent('管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
-    const 防犯カメラの記録 = within(一覧).getByText(/^夜8時10分ごろ/).closest('li')!;
+    const 防犯カメラの記録 = within(一覧).getByText(/車が別荘の方向へ走る/).closest('li')!;
     expect(防犯カメラの記録).toHaveTextContent('県道の防犯カメラ（県警 → 架空日報 朝刊 による）');
     // 発言者を選んでいない証言は、ユーザーの推測として示す
     const 推測 = within(一覧).getByText(/^@管理人の証言は事件の20年後/).closest('li')!;
@@ -157,7 +157,7 @@ describe('EntryPanel', () => {
     const 一覧 = screen.getByRole('list', { name: '登録済みの証言' });
 
     expect(within(一覧).getByText('夜9時に持ち主を庭で見た')).toBeInTheDocument();
-    expect(within(一覧).queryByText(/^夜9時ごろ、/)).not.toBeInTheDocument();
+    expect(within(一覧).queryByText(/明かりがついていて/)).not.toBeInTheDocument();
   });
 
   it('登録済みの証言の編集を選ぶと、フォームに内容を読み込み、取り消しで新規登録に戻る', async () => {
@@ -165,10 +165,10 @@ describe('EntryPanel', () => {
     render(<EntryPanel />);
 
     await user.click(screen.getByRole('tab', { name: /証言/ }));
-    await user.click(screen.getByRole('button', { name: /^夜7時に見回りをしたとき.*を編集/ }));
+    await user.click(screen.getByRole('button', { name: /見回りをしたとき.*を編集/ }));
 
     expect(screen.getByLabelText('内容')).toHaveValue(
-      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。'
+      '@1998年8月12日 19:00に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。'
     );
 
     // 検証: 発言者と経由は本文ではなく「発言者」に読み込む

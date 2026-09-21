@@ -172,10 +172,18 @@ export function findCaseViolations(target: Case): string[] {
     }
   };
 
-  /** 文章（証言の本文、エンティティのメモ）のトークンが指すエンティティを検証します。 */
+  /**
+   * 文章（証言の本文、エンティティのメモ）のトークンを検証します。
+   * 人物・場所のメンションは参照先が案件内に存在すること、日時のメンションは日時として解釈できることを確かめます。
+   */
   const checkMentions = (content: string) => {
     for (const segment of parseContent(content)) {
-      if (segment.type === 'mention') check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
+      if (segment.type !== 'mention') continue;
+      if (segment.kind === 'date') {
+        if (!isValidTimeRef(segment.id)) violations.push(`日時を解釈できません: ${segment.id}`);
+        continue;
+      }
+      check(mentionTargets[segment.kind].ids, segment.id, mentionTargets[segment.kind].name);
     }
   };
 
