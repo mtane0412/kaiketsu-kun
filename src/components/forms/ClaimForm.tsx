@@ -58,7 +58,7 @@ type ClaimFormProps = {
   autoFocus?: boolean;
   /** 見出しと本文の欄・「発言者」・投稿ボタンだけを表示するかどうかです。 */
   compact?: boolean;
-  /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
+  /** ボタンの行の左端に置く要素です（「やめる」「この証言を削除」など）。「発言者」と投稿ボタンは右端にまとめます。 */
   actions?: ReactNode;
 };
 
@@ -193,13 +193,13 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       )}
       <FormError message={error} />
       <div className="flex items-center justify-end gap-3">
+        {actions}
         <SpeakerPicker
           value={speaker}
           onChange={setSpeaker}
           persons={candidates.filter((candidate) => candidate.kind === 'person')}
           onCreatePerson={(name) => handleCreate('person', name)}
         />
-        {actions}
         <SubmitButton label={compact && !initial ? '書き足す' : '証言を保存'} />
       </div>
     </form>

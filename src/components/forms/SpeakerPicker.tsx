@@ -159,7 +159,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   };
 
   return (
-    <div ref={containerRef} onKeyDown={handleContainerKeyDown} className="relative mr-auto min-w-0">
+    <div ref={containerRef} onKeyDown={handleContainerKeyDown} className="relative min-w-0">
       <button
         ref={toggleRef}
         type="button"

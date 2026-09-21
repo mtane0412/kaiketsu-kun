@@ -5,6 +5,8 @@
  * 証言1件の編集（見出し・本文・発言者・日時）と削除を、この1か所で行います。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
+ * 並びは、証言の見出し → 関連する証言への導線 → 編集フォームの順です。詳細の目的は「連想しながらたどる」ことのため、
+ * 縦に長い編集フォームが導線を押し下げ、最初の表示で目に入らなくなることを避けています。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
  *
  * 注意: ケースに無い証言のIDが渡された場合（URLの直接入力、削除済みの証言）は、見つからないことを表示します。
@@ -96,31 +98,15 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
     <div className="space-y-6">
       {closeLink}
 
-      <section aria-label="証言の編集" className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-lg font-semibold">{claimLabelOf(view)}</h2>
-        <ClaimForm
-          initial={view.claim}
-          onDone={() => setIsSaved(true)}
-          actions={
-            <div className="mr-auto">
-              <DeleteConfirmButton
-                label="この証言を削除"
-                title="この証言を削除しますか？"
-                description="この証言をケースから削除します。この操作は取り消せません。"
-                onConfirm={handleDelete}
-              />
-            </div>
-          }
-        />
-        {isSaved && (
-          <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
-            保存しました
-          </p>
-        )}
-        <div className="mt-2">
-          <FormError message={deleteError} />
-        </div>
-      </section>
+      <h2 className="text-lg font-semibold">{claimLabelOf(view)}</h2>
+
+      {(previous || next) && (
+        <nav aria-label="時系列の前後の証言" className="space-y-2">
+          <h3 className="text-sm font-semibold">時系列の前後</h3>
+          {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" />}
+          {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
+        </nav>
+      )}
 
       {mentionedEntities.length > 0 && (
         <nav aria-label={MENTIONED_ENTITIES_LABEL} className="space-y-2">
@@ -140,14 +126,6 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
               </li>
             ))}
           </ul>
-        </nav>
-      )}
-
-      {(previous || next) && (
-        <nav aria-label="時系列の前後の証言" className="space-y-2">
-          <h3 className="text-sm font-semibold">時系列の前後</h3>
-          {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" />}
-          {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
         </nav>
       )}
 
@@ -175,6 +153,32 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           </section>
         );
       })}
+
+      <section aria-label="証言の編集" className="rounded-lg border bg-card p-4">
+        <h3 className="mb-3 text-sm font-semibold">証言の編集</h3>
+        <ClaimForm
+          initial={view.claim}
+          onDone={() => setIsSaved(true)}
+          actions={
+            <div className="mr-auto">
+              <DeleteConfirmButton
+                label="この証言を削除"
+                title="この証言を削除しますか？"
+                description="この証言をケースから削除します。この操作は取り消せません。"
+                onConfirm={handleDelete}
+              />
+            </div>
+          }
+        />
+        {isSaved && (
+          <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
+            保存しました
+          </p>
+        )}
+        <div className="mt-2">
+          <FormError message={deleteError} />
+        </div>
+      </section>
     </div>
   );
 }

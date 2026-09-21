@@ -37,6 +37,32 @@ describe('ClaimDetail', () => {
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
   });
 
+  it('関連する証言への導線を、証言の編集フォームより前に置く', () => {
+    // 検証: 詳細を開いた最初の表示で、たどる先がフォームに押し下げられていないこと
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    const 触れている先 = screen.getByRole('navigation', { name: 'この証言が触れている人物・場所' });
+    const 他の証言 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    const 編集 = screen.getByRole('region', { name: '証言の編集' });
+
+    for (const 導線 of [前後, 触れている先, 他の証言]) {
+      expect(導線.compareDocumentPosition(編集)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+  });
+
+  it('「この証言を削除」を、「発言者」と「証言を保存」より前に置く', () => {
+    // 検証: 削除が「発言者」と「証言を保存」の中間に浮かないよう、行の左端に置くこと
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 削除 = screen.getByRole('button', { name: 'この証言を削除' });
+    const 発言者 = screen.getByRole('button', { name: /^発言者:/ });
+    const 保存 = screen.getByRole('button', { name: '証言を保存' });
+
+    expect(削除.compareDocumentPosition(発言者)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(発言者.compareDocumentPosition(保存)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('時系列の前後の証言へのリンクを表示する', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 

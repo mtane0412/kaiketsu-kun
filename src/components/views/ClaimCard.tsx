@@ -17,6 +17,8 @@
  *
  * 注意: リンクの当たり判定をカード全体に広げています（リンクの after 疑似要素）。カードの中で操作できる要素
  * （メンション・言及のアイコン・「本文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
+ * 本文も同じく手前に置いています。カード全体がリンクだと本文をドラッグして選択・コピーできないためで、
+ * 本文の上での押下は詳細を開きません（詳細は、本文以外のどこを押しても開きます）。
  */
 'use client';
 
@@ -67,7 +69,8 @@ export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
 
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
-    <p className="whitespace-pre-line text-foreground">
+    // 本文はリンクの当たり判定より手前に置く（カード全体がリンクだと、本文をドラッグして選択・コピーできないため）
+    <p className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground`}>
       {view.contentSegments.map((segment, index) =>
         segment.type !== 'mention' ? (
           segment.text
