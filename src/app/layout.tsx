@@ -7,7 +7,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'testimony-board',
-  description: '誰が何を述べたかを起点に、出来事・人物・場所を時系列で整理する調査ボード',
+  description: '誰が何を述べたかを起点に、人物・場所を時系列で整理する調査ボード',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

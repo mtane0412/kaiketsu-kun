@@ -1,17 +1,17 @@
 /**
  * 型定義の書き心地を確かめるための架空の案件サンプル
  *
- * このファイルの人物・場所・出来事・資料はすべて架空です。
+ * このファイルの人物・場所・資料はすべて架空です。
  * 次の5点が型で表現できることを確認する目的で作成しています。
- * - 同じ出来事について、2人の証言が述べる時刻が食い違うこと
- * - 出来事が起きた時点と、証言が述べられた時点が別の時間軸であること
+ * - 同じ事柄について、2人の証言が述べる時刻が食い違うこと（食い違いは判定せず、時系列に並べて読み手が見比べます）
+ * - 証言が述べる内容の時点と、証言が述べられた時点が別の時間軸であること
  * - 報道の地の文を、媒体（新聞）の発言として扱えること
- * - ユーザーの推測を証言と区別し、関係の根拠として参照できること
+ * - ユーザーの推測を人物の発言と区別し、関係の根拠として参照できること
  * - 組織（県警）・記録装置（防犯カメラ）・媒体（新聞、書籍）を、人物と同じく発言しうる主体として扱えること
  * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、経由（viaPersonIds）で表せること
  *
- * 主張の本文（content）は、人物・場所・出来事への参照を `@[表示名](種類:ID)` の形式で含みます。
- * 各主張の eventId・placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
+ * 証言の本文（content）は、人物・場所への参照を `@[表示名](種類:ID)` の形式で含みます。
+ * 各証言の placeId・mentionedPersonIds は、本文からの導出結果（src/domain/mention.ts）と一致させています。
  */
 import type { Case } from './types';
 
@@ -28,21 +28,14 @@ export const sampleFictionalCase: Case = {
     { id: 'person-book', name: '湖畔の夏 20年目の証言（架空の書籍）', note: '媒体です。2018年に刊行されました。' },
   ],
   places: [{ id: 'place-villa', name: '湖畔の別荘' }],
-  events: [
-    {
-      id: 'event-last-seen',
-      title: '持ち主が最後に目撃された',
-    },
-  ],
   claims: [
     {
       id: 'claim-report',
       speaker: { kind: 'person', personIds: ['person-newspaper'] },
       viaPersonIds: [],
       locator: '社会面',
-      content: '@[別荘の持ち主](person:person-owner)は12日夜から連絡が取れなくなっている。@[持ち主が最後に目撃された](event:event-last-seen)',
+      content: '@[別荘の持ち主](person:person-owner)は12日夜から連絡が取れなくなっている。',
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
-      eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
     },
     {
@@ -51,9 +44,8 @@ export const sampleFictionalCase: Case = {
       viaPersonIds: ['person-newspaper'],
       locator: '社会面',
       content: 
-        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。@[持ち主が最後に目撃された](event:event-last-seen)',
+        '夜9時ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。',
       statedAt: { text: '1998年8月13日', earliest: '1998-08-13' },
-      eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜9時ごろ', earliest: '1998-08-12T20:30', latest: '1998-08-12T21:30' },
       placeId: 'place-villa',
@@ -64,9 +56,8 @@ export const sampleFictionalCase: Case = {
       viaPersonIds: ['person-book'],
       locator: '第3章 112ページ',
       content: 
-        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。@[持ち主が最後に目撃された](event:event-last-seen)',
+        '夜7時に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。',
       statedAt: { text: '2018年', earliest: '2018-01-01', latest: '2018-12-31' },
-      eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜7時', earliest: '1998-08-12T19:00' },
       placeId: 'place-villa',
@@ -77,9 +68,8 @@ export const sampleFictionalCase: Case = {
       viaPersonIds: ['person-police', 'person-newspaper'],
       locator: '社会面',
       content:
-        '夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。@[持ち主が最後に目撃された](event:event-last-seen)',
+        '夜8時10分ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。',
       statedAt: { text: '1998年8月14日', earliest: '1998-08-14' },
-      eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
       when: { text: '8月12日 夜8時10分ごろ', earliest: '1998-08-12T20:00', latest: '1998-08-12T20:20' },
     },
@@ -110,5 +100,11 @@ export const sampleFictionalCase: Case = {
       basisClaimIds: ['claim-user-guess'],
     },
   ],
-  timelineOrder: ['event:event-last-seen', 'claim:claim-user-guess'],
+  timelineOrder: [
+    'claim:claim-caretaker',
+    'claim:claim-police-camera',
+    'claim:claim-neighbor',
+    'claim:claim-report',
+    'claim:claim-user-guess',
+  ],
 };

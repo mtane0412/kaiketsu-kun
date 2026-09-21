@@ -20,7 +20,6 @@ function hasAnyData(target: Case): boolean {
   return (
     target.persons.length +
       target.places.length +
-      target.events.length +
       target.claims.length +
       target.relationships.length >
     0

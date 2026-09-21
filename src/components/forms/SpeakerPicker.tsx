@@ -1,5 +1,5 @@
 /**
- * 主張の発言者と経由を選ぶボタンと、その選択肢のパネル
+ * 証言の発言者と経由を選ぶボタンと、その選択肢のパネル
  *
  * 投稿ボタンの横に「発言者: ○○」のボタンを置き、押すと選択肢のパネルを開きます。パネルには2つの欄があります。
  * - 発言者: 内容を述べた人物です。複数人が同じことを述べたと伝えられている場合は、全員を選びます。
@@ -23,7 +23,7 @@ export type SpeakerDraft = { personIds: Id[]; viaPersonIds: Id[] };
 /** 発言者・経由として選べる人物です。 */
 export type SpeakerPersonOption = { id: Id; label: string };
 
-/** 保存済みの主張の発言者と経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。 */
+/** 保存済みの証言の発言者と経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。 */
 export function speakerToDraft(claim: Pick<Claim, 'speaker' | 'viaPersonIds'> | undefined): SpeakerDraft {
   return {
     personIds: claim?.speaker.kind === 'person' ? claim.speaker.personIds : [],

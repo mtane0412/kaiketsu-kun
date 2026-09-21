@@ -19,13 +19,13 @@ beforeEach(() => {
 });
 
 describe('upsert', () => {
-  it('新しいIDの主張を追加する', () => {
+  it('新しいIDの証言を追加する', () => {
     useCaseStore.getState().upsert('claims', 新しい証言);
 
     expect(useCaseStore.getState().currentCase.claims).toHaveLength(sampleFictionalCase.claims.length + 1);
   });
 
-  it('既存のIDの主張は、追加せずに置き換える', () => {
+  it('既存のIDの証言は、追加せずに置き換える', () => {
     useCaseStore.getState().upsert('claims', { ...sampleFictionalCase.claims[1]!, locator: '社会面 3段目' });
 
     const claims = useCaseStore.getState().currentCase.claims;
@@ -33,7 +33,7 @@ describe('upsert', () => {
     expect(claims.find((claim) => claim.id === 'claim-neighbor')?.locator).toBe('社会面 3段目');
   });
 
-  it('存在しない人物を参照する主張はエラーにし、案件を変更しない', () => {
+  it('存在しない人物を参照する証言はエラーにし、案件を変更しない', () => {
     const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
 
     expect(() => useCaseStore.getState().upsert('claims', 不正な証言)).toThrow(
@@ -44,7 +44,7 @@ describe('upsert', () => {
 });
 
 describe('upsertMany', () => {
-  it('新しい人物と、その人物に言及する主張を、1回の検証でまとめて追加する', () => {
+  it('新しい人物と、その人物に言及する証言を、1回の検証でまとめて追加する', () => {
     const 郵便配達員 = { id: 'person-postman', name: '郵便配達員' };
     const 配達員への言及: Claim = { ...新しい証言, mentionedPersonIds: ['person-postman'] };
 
@@ -73,14 +73,14 @@ describe('upsertMany', () => {
 });
 
 describe('remove', () => {
-  it('どこからも参照されていない主張を削除する', () => {
+  it('どこからも参照されていない証言を削除する', () => {
     useCaseStore.getState().remove('claims', 'claim-report');
 
     const ids = useCaseStore.getState().currentCase.claims.map((claim) => claim.id);
     expect(ids).not.toContain('claim-report');
   });
 
-  it('主張の経由としてだけ参照されている人物（媒体）も削除できず、案件を変更しない', () => {
+  it('証言の経由としてだけ参照されている人物（媒体）も削除できず、案件を変更しない', () => {
     // 前提: 書籍「湖畔の夏」は、管理人の証言の経由としてだけ参照されている（発言者でも、本文のメンションでもない）
     expect(() => useCaseStore.getState().remove('persons', 'person-book')).toThrow(
       '他のデータから参照されているため削除できません'
@@ -88,7 +88,7 @@ describe('remove', () => {
     expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
   });
 
-  it('主張から参照されている人物は削除できず、案件を変更しない', () => {
+  it('証言から参照されている人物は削除できず、案件を変更しない', () => {
     expect(() => useCaseStore.getState().remove('persons', 'person-owner')).toThrow(
       '他のデータから参照されているため削除できません'
     );
@@ -156,7 +156,7 @@ describe('ブラウザへの保存', () => {
 });
 
 describe('時系列ボードの並び順', () => {
-  /** 警察の捜索（8月15日）についての、出来事に束ねていない主張です。 */
+  /** 警察の捜索（8月15日）についての証言です。 */
   const 捜索の推測: Claim = {
     id: 'claim-police-search',
     speaker: { kind: 'user' },
@@ -167,14 +167,20 @@ describe('時系列ボードの並び順', () => {
   };
 
   it('項目を動かすと、並び順を保存する', () => {
-    // 前提: サンプルの並びは、出来事「持ち主が最後に目撃された」→ ユーザーの推測（日時なし）
+    // 前提: サンプルの並びは、管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測（日時なし）
     useCaseStore.getState().moveTimelineItem('claim:claim-user-guess', 0);
 
-    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual(['claim:claim-user-guess', 'event:event-last-seen']);
+    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
+      'claim:claim-user-guess',
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-report',
+    ]);
   });
 
   it('日時と矛盾する位置へは動かせず、案件を変更しない', () => {
-    // 前提: 出来事の束は8月12日、捜索の推測は8月15日について述べている
+    // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている
     useCaseStore.getState().upsert('claims', 捜索の推測);
     const 変更前 = useCaseStore.getState().currentCase;
 
@@ -182,35 +188,20 @@ describe('時系列ボードの並び順', () => {
     expect(useCaseStore.getState().currentCase).toBe(変更前);
   });
 
-  it('主張に日時を入力して現在の位置と矛盾した場合は、最も近い矛盾しない位置へ動かす', () => {
-    // 前提: 並びは 出来事の束（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
+  it('証言に日時を入力して現在の位置と矛盾した場合は、最も近い矛盾しない位置へ動かす', () => {
+    // 前提: 並びは サンプルの証言（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
     useCaseStore.getState().upsert('claims', 捜索の推測);
-    useCaseStore.getState().moveTimelineItem('claim:claim-police-search', 2);
 
-    // 末尾の捜索の推測の日時を、出来事の束より前の「8月10日」に直す
+    // 末尾の捜索の推測の日時を、サンプルの証言より前の「8月10日」に直す
     useCaseStore.getState().upsert('claims', { ...捜索の推測, when: { text: '8月10日', earliest: '1998-08-10' } });
 
     expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
       'claim:claim-police-search',
-      'event:event-last-seen',
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-report',
       'claim:claim-user-guess',
-    ]);
-  });
-
-  it('出来事に束ねた主張の日時を直して、束の位置が矛盾した場合は、束を動かす', () => {
-    // 前提: 並びは 出来事の束（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
-    useCaseStore.getState().upsert('claims', 捜索の推測);
-    const 束ねた主張 = sampleFictionalCase.claims.filter((claim) => claim.eventId === 'event-last-seen');
-
-    // 束ねた主張が述べる日時を、すべて捜索より後の「8月20日」に直す
-    for (const claim of 束ねた主張) {
-      if (claim.when) useCaseStore.getState().upsert('claims', { ...claim, when: { text: '8月20日', earliest: '1998-08-20' } });
-    }
-
-    expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
-      'claim:claim-user-guess',
-      'claim:claim-police-search',
-      'event:event-last-seen',
     ]);
   });
 });

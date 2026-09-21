@@ -1,5 +1,5 @@
 /**
- * 人物・場所・出来事の入力フォーム
+ * 人物・場所の入力フォーム
  *
  * どのフォームも、initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
@@ -9,7 +9,7 @@
 
 import { nanoid } from 'nanoid';
 import { useState, type FormEvent } from 'react';
-import type { Event, Person, Place } from '@/domain/types';
+import type { Person, Place } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 
@@ -93,40 +93,6 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
       <TextField label="メモ" value={note} onChange={setNote} multiline />
       <FormError message={error} />
       <SubmitButton label="場所を保存" />
-    </form>
-  );
-}
-
-export function EventForm({ initial, onDone }: FormProps<Event>) {
-  const upsert = useCaseStore((state) => state.upsert);
-  const [title, setTitle] = useState(initial?.title ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-
-    const next: Event = { id: initial?.id ?? nanoid(), title: title.trim() };
-    if (description.trim()) next.description = description.trim();
-
-    try {
-      upsert('events', next);
-    } catch (caught) {
-      setError(toMessage(caught));
-      return;
-    }
-    onDone();
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <TextField label="タイトル" value={title} onChange={setTitle} required />
-      <TextField label="メモ" value={description} onChange={setDescription} multiline />
-      <p className="text-xs text-slate-500">
-        出来事は、同じ事柄についての主張を束ねるラベルです。日時・場所・人物は、束ねた主張から導出して表示します。
-      </p>
-      <FormError message={error} />
-      <SubmitButton label="出来事を保存" />
     </form>
   );
 }

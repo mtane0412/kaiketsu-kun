@@ -42,24 +42,13 @@ describe('EntryPanel', () => {
     });
   });
 
-  it('出来事を、タイトルとメモだけで登録する', async () => {
-    // 出来事は主張を束ねるラベルであり、日時・場所・人物は束ねた主張から導出するため、入力欄を持たない
-    const user = userEvent.setup();
+  it('種類の選択肢に「出来事」は無い（語られる出来事は、すべて誰かの証言として書く）', () => {
     render(<EntryPanel />);
 
-    await user.click(screen.getByRole('tab', { name: /出来事/ }));
-    await user.type(screen.getByLabelText('タイトル'), '警察が別荘を捜索した');
-    await user.type(screen.getByLabelText('メモ'), '捜索の範囲は資料によって異なる');
-    await user.click(screen.getByRole('button', { name: '出来事を保存' }));
-
-    expect(useCaseStore.getState().currentCase.events.at(-1)).toEqual({
-      id: expect.any(String),
-      title: '警察が別荘を捜索した',
-      description: '捜索の範囲は資料によって異なる',
-    });
+    expect(screen.queryByRole('tab', { name: /出来事/ })).not.toBeInTheDocument();
   });
 
-  it('主張から参照されている人物を削除しようとすると、理由を示して削除しない', async () => {
+  it('証言から参照されている人物を削除しようとすると、理由を示して削除しない', async () => {
     const user = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<EntryPanel />);
@@ -71,24 +60,24 @@ describe('EntryPanel', () => {
     expect(useCaseStore.getState().currentCase.persons).toHaveLength(sampleFictionalCase.persons.length);
   });
 
-  it('主張の一覧に、誰の発言かと、誰を経由して伝わったかを示す', async () => {
+  it('証言の一覧に、誰の発言かと、誰を経由して伝わったかを示す', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);
 
-    await user.click(screen.getByRole('tab', { name: /主張/ }));
-    const 一覧 = screen.getByRole('list', { name: '登録済みの主張' });
+    await user.click(screen.getByRole('tab', { name: /証言/ }));
+    const 一覧 = screen.getByRole('list', { name: '登録済みの証言' });
 
     // 前提: 管理人の証言は書籍を経由し、防犯カメラの記録は県警と架空日報を経由している
     const 管理人の証言 = within(一覧).getByText(/^夜7時に見回りをしたとき/).closest('li')!;
     expect(管理人の証言).toHaveTextContent('管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
     const 防犯カメラの記録 = within(一覧).getByText(/^夜8時10分ごろ/).closest('li')!;
     expect(防犯カメラの記録).toHaveTextContent('県道の防犯カメラ（県警 → 架空日報 朝刊 による）');
-    // 発言者を選んでいない主張は、ユーザーの推測として示す
+    // 発言者を選んでいない証言は、ユーザーの推測として示す
     const 推測 = within(一覧).getByText(/^@管理人の証言は事件の20年後/).closest('li')!;
     expect(推測).toHaveTextContent('ユーザーの推測');
   });
 
-  it('見出しのある主張は、主張の一覧に本文の冒頭ではなく見出しを表示する', async () => {
+  it('見出しのある証言は、証言の一覧に本文の冒頭ではなく見出しを表示する', async () => {
     // 前提: 隣家の住人の証言に見出しが付いている
     useCaseStore.getState().replaceCase({
       ...sampleFictionalCase,
@@ -99,22 +88,22 @@ describe('EntryPanel', () => {
     const user = userEvent.setup();
     render(<EntryPanel />);
 
-    await user.click(screen.getByRole('tab', { name: /主張/ }));
-    const 一覧 = screen.getByRole('list', { name: '登録済みの主張' });
+    await user.click(screen.getByRole('tab', { name: /証言/ }));
+    const 一覧 = screen.getByRole('list', { name: '登録済みの証言' });
 
     expect(within(一覧).getByText('夜9時に持ち主を庭で見た')).toBeInTheDocument();
     expect(within(一覧).queryByText(/^夜9時ごろ、/)).not.toBeInTheDocument();
   });
 
-  it('登録済みの主張の編集を選ぶと、フォームに内容を読み込み、取り消しで新規登録に戻る', async () => {
+  it('登録済みの証言の編集を選ぶと、フォームに内容を読み込み、取り消しで新規登録に戻る', async () => {
     const user = userEvent.setup();
     render(<EntryPanel />);
 
-    await user.click(screen.getByRole('tab', { name: /主張/ }));
+    await user.click(screen.getByRole('tab', { name: /証言/ }));
     await user.click(screen.getByRole('button', { name: /^夜7時に見回りをしたとき.*を編集/ }));
 
     expect(screen.getByLabelText('内容')).toHaveValue(
-      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。@持ち主が最後に目撃された'
+      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。'
     );
 
     // 検証: 発言者と経由は本文ではなく「発言者」に読み込む

@@ -1,7 +1,7 @@
 /**
- * 主張の入力フォームのテスト
+ * 証言の入力フォームのテスト
  *
- * 本文に「@」でメンションを書き、出来事・場所・言及している人物を本文から導出することと、
+ * 本文に「@」でメンションを書き、場所・言及している人物を本文から導出することと、
  * 発言者と経由（発言者の話を伝えた人物や媒体）を、投稿ボタンの横の「発言者」から選ぶことを検証します。
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
@@ -41,32 +41,31 @@ async function chooseVia(user: UserEvent, personNames: string[]) {
   for (const name of personNames) await user.click(within(経由欄).getByRole('checkbox', { name }));
 }
 
-/** 最後に保存された主張を返します。 */
+/** 最後に保存された証言を返します。 */
 function lastSavedClaim() {
   return useCaseStore.getState().currentCase.claims.at(-1);
 }
 
 describe('ClaimForm', () => {
-  it('登録済みの場所・人物・出来事を「@」で選び、本文から参照を導出して保存する', async () => {
+  it('登録済みの場所・人物を「@」で選び、本文から参照を導出して保存する', async () => {
     const user = userEvent.setup();
     const onDone = vi.fn();
     render(<ClaimForm onDone={onDone} />);
 
     await typeAndChoose(user, '翌朝、@湖畔', '場所 湖畔の別荘');
     await typeAndChoose(user, 'の郵便受けに@持ち主', '人物 別荘の持ち主');
-    await typeAndChoose(user, 'あての新聞が残っていた。@最後に', '出来事 持ち主が最後に目撃された');
+    await user.type(screen.getByLabelText('内容'), 'あての新聞が残っていた。');
     await chooseSpeakers(user, ['隣家の住人']);
     await chooseVia(user, ['架空日報 朝刊']);
     await user.type(screen.getByLabelText('証言が述べる日時：最も早い時点'), '1998-08-13');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     // 検証: 発言者と経由は本文に書かず、「発言者」で選んだ人物を保存する
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       content:
-        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。@[持ち主が最後に目撃された](event:event-last-seen)',
-      eventId: 'event-last-seen',
+        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
       when: { text: '1998-08-13', earliest: '1998-08-13' },
@@ -80,7 +79,7 @@ describe('ClaimForm', () => {
 
     await typeAndChoose(user, '@隣家', '人物 隣家の住人');
     await user.type(screen.getByLabelText('内容'), ': 時刻を勘違いしているのではないか。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'user' },
@@ -98,14 +97,14 @@ describe('ClaimForm', () => {
     expect(screen.getByRole('option', { name: '人物 管理人' })).toBeInTheDocument();
   });
 
-  it('未登録の名前は、種類を選んで新規作成し、主張と同時に保存する', async () => {
+  it('未登録の名前は、種類を選んで新規作成し、証言と同時に保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
 
     await typeAndChoose(user, '@湖畔駅', '「湖畔駅」を場所として新規作成');
     await typeAndChoose(user, 'で@郵便配達員', '「郵便配達員」を人物として新規作成');
     await user.type(screen.getByLabelText('内容'), 'が持ち主を見かけたらしい。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const { places, persons } = useCaseStore.getState().currentCase;
     const 湖畔駅 = places.find((place) => place.name === '湖畔駅');
@@ -124,6 +123,16 @@ describe('ClaimForm', () => {
     expect(screen.queryByRole('option', { name: /ソース/ })).not.toBeInTheDocument();
   });
 
+  it('メンションの種類に「出来事」は無い（語られる出来事は、すべて誰かの証言として書く）', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('内容'), '@最後の目撃');
+
+    expect(screen.getByRole('option', { name: '「最後の目撃」を人物として新規作成' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /出来事/ })).not.toBeInTheDocument();
+  });
+
   it('新規作成した名前を本文から消した場合は、そのエンティティを保存しない', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
@@ -131,7 +140,7 @@ describe('ClaimForm', () => {
     await typeAndChoose(user, '@郵便配達員', '「郵便配達員」を人物として新規作成');
     await user.clear(screen.getByLabelText('内容'));
     await user.type(screen.getByLabelText('内容'), '配達の時刻を調べたい。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()?.content).toBe('配達の時刻を調べたい。');
     expect(useCaseStore.getState().currentCase.persons).toEqual(sampleFictionalCase.persons);
@@ -154,7 +163,7 @@ describe('ClaimForm', () => {
     expect(screen.queryByLabelText('本文から読み取った参照')).not.toBeInTheDocument();
   });
 
-  it('発言者を選ばない主張は、ユーザーの推測として保存する', async () => {
+  it('発言者を選ばない証言は、ユーザーの推測として保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
 
@@ -162,7 +171,7 @@ describe('ClaimForm', () => {
     expect(screen.getByRole('button', { name: '発言者: なし（ユーザーの推測）' })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('内容'), '時刻の勘違いではないか。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({ speaker: { kind: 'user' }, viaPersonIds: [] });
   });
@@ -173,26 +182,26 @@ describe('ClaimForm', () => {
 
     await user.type(screen.getByLabelText('内容'), '日時の書き方を間違えた推測。');
     await user.type(screen.getByLabelText('述べられた時点：最も早い時点'), '1998年8月');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('述べられた時点');
     expect(useCaseStore.getState().currentCase.claims).toEqual(sampleFictionalCase.claims);
   });
 
-  it('主張に真偽の評価を付ける入力欄を持たない', () => {
-    // 発表者が警察であっても内容が真実とは限らないため、主張には「信頼できる」などの評価を付けない
+  it('証言に真偽の評価を付ける入力欄を持たない', () => {
+    // 発表者が警察であっても内容が真実とは限らないため、証言には「信頼できる」などの評価を付けない
     render(<ClaimForm onDone={vi.fn()} />);
 
     expect(screen.queryByLabelText('評価')).not.toBeInTheDocument();
   });
 
-  it('既存の主張を編集すると、同じIDのまま置き換える', async () => {
+  it('既存の証言を編集すると、同じIDのまま置き換える', async () => {
     const user = userEvent.setup();
     const 隣家の証言 = sampleFictionalCase.claims[1]!;
     render(<ClaimForm initial={隣家の証言} onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), ' 門は開いていた。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     // 検証: 入力欄を廃止した「資料内の位置」（locator）を含め、触れていない項目は変わらない
     const { claims } = useCaseStore.getState().currentCase;
@@ -209,7 +218,7 @@ describe('ClaimForm', () => {
 
     await user.type(screen.getByLabelText('見出し（任意）'), '  Zによる恐喝事件があった  ');
     await user.type(screen.getByLabelText('内容'), 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     // 検証: 見出しは前後の空白を取り除いて保存し、本文には混ぜない
     expect(lastSavedClaim()).toMatchObject({
@@ -218,18 +227,18 @@ describe('ClaimForm', () => {
     });
   });
 
-  it('見出しを入力しない主張は、見出しの項目を持たない', async () => {
+  it('見出しを入力しない証言は、見出しの項目を持たない', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '門は開いていた。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     // 検証: JSONの書き出しと読み込みで形が変わらないよう、空の見出しはキーごと持たせない
     expect(lastSavedClaim()).not.toHaveProperty('title');
   });
 
-  it('既存の主張を編集するときは、保存済みの見出しを示し、消すと見出しの項目を取り除く', async () => {
+  it('既存の証言を編集するときは、保存済みの見出しを示し、消すと見出しの項目を取り除く', async () => {
     // 前提: 隣家の住人の証言に見出しが付いている
     const user = userEvent.setup();
     const 見出し付きの証言 = { ...sampleFictionalCase.claims[1]!, title: '夜9時に持ち主を庭で見た' };
@@ -237,7 +246,7 @@ describe('ClaimForm', () => {
 
     expect(screen.getByLabelText('見出し（任意）')).toHaveValue('夜9時に持ち主を庭で見た');
     await user.clear(screen.getByLabelText('見出し（任意）'));
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 見出し付きの証言.id);
     expect(保存後).not.toHaveProperty('title');
@@ -263,7 +272,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     expect(screen.getByRole('button', { name: '発言者: 隣家の住人、管理人（架空日報 朝刊 による）' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
@@ -283,7 +292,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     expect(screen.getByRole('button', { name: '発言者: 県道の防犯カメラ（架空日報 朝刊 → 県警 による）' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()?.viaPersonIds).toEqual(['person-newspaper', 'person-police']);
   });
@@ -294,7 +303,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.type(screen.getByLabelText('内容'), '捜索は13日の朝に始まった。');
     await chooseSpeakers(user, ['架空日報 朝刊']);
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-newspaper'] },
@@ -302,7 +311,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     });
   });
 
-  it('未登録の人物は「人物を追加」から新規作成して発言者にでき、主張と同時に保存する', async () => {
+  it('未登録の人物は「人物を追加」から新規作成して発言者にでき、証言と同時に保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
 
@@ -315,7 +324,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     expect(within(screen.getByRole('group', { name: '発言者' })).getByRole('checkbox', { name: '郵便配達員' })).toBeChecked();
     expect(screen.getByLabelText('発言者に人物を追加')).toHaveValue('');
 
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 郵便配達員 = useCaseStore.getState().currentCase.persons.find((person) => person.name === '郵便配達員');
     expect(郵便配達員).toBeDefined();
@@ -329,7 +338,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     await user.type(screen.getByLabelText('内容'), '持ち主とは挨拶をする程度の付き合いだった。');
     await chooseSpeakers(user, ['管理人']);
     await user.type(screen.getByLabelText('経由に人物を追加'), '週刊架空{Enter}');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 週刊架空 = useCaseStore.getState().currentCase.persons.find((person) => person.name === '週刊架空');
     expect(週刊架空).toBeDefined();
@@ -348,7 +357,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     expect(within(発言者欄).getAllByRole('checkbox', { name: '管理人' })).toHaveLength(1);
   });
 
-  it('「人物を追加」でのEnterキーは人物の追加だけを行い、主張を保存しない（日本語入力の変換確定では追加もしない）', async () => {
+  it('「人物を追加」でのEnterキーは人物の追加だけを行い、証言を保存しない（日本語入力の変換確定では追加もしない）', async () => {
     const user = userEvent.setup();
     const onDone = vi.fn();
     render(<ClaimForm onDone={onDone} />);
@@ -373,7 +382,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     await openSpeakerPanel(user);
     await user.type(screen.getByLabelText('発言者に人物を追加'), '郵便配達員{Enter}');
     await chooseSpeakers(user, ['郵便配達員']);
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()?.speaker).toEqual({ kind: 'user' });
     expect(useCaseStore.getState().currentCase.persons).toEqual(sampleFictionalCase.persons);
@@ -386,13 +395,13 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.type(screen.getByLabelText('内容'), '誰の話かを選び忘れた。');
     await chooseVia(user, ['架空日報 朝刊']);
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('発言者を選んでください');
     expect(useCaseStore.getState().currentCase).toEqual(sampleFictionalCase);
   });
 
-  it('既存の主張を編集するときは、保存済みの発言者と経由を示し、あとから変えられる', async () => {
+  it('既存の証言を編集するときは、保存済みの発言者と経由を示し、あとから変えられる', async () => {
     // 前提: 隣家の証言は、発言者が「隣家の住人」、経由が「架空日報 朝刊」
     const user = userEvent.setup();
     const 隣家の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-neighbor')!;
@@ -401,7 +410,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     expect(screen.getByRole('button', { name: '発言者: 隣家の住人（架空日報 朝刊 による）' })).toBeInTheDocument();
 
     await chooseSpeakers(user, ['管理人']);
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-neighbor');
     expect(保存後).toEqual({ ...隣家の証言, speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] } });
@@ -462,7 +471,7 @@ describe('ClaimForm のキーボード操作', () => {
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '@管理人 は何かを隠しているのではないか。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
       content: '@[管理人](person:person-caretaker) は何かを隠しているのではないか。',
@@ -476,7 +485,7 @@ describe('ClaimForm のキーボード操作', () => {
 
     // メールアドレスの「@」でも候補は開くが、矢印キーで選んでいないためEnterキーでは確定しない
     await user.type(screen.getByLabelText('内容'), '連絡先は info@example.co.jp{Enter}と書かれていた。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()?.content).toBe('連絡先は info@example.co.jp\nと書かれていた。');
     expect(useCaseStore.getState().currentCase.persons).toEqual(sampleFictionalCase.persons);
@@ -488,7 +497,7 @@ describe('ClaimForm のキーボード操作', () => {
 
     // 「郵便配達員」に一致する登録済みのエンティティは無く、下矢印キーで先頭の「人物として新規作成」を選ぶ
     await user.type(screen.getByLabelText('内容'), '@郵便配達員{ArrowDown}{Enter}が何かを見たのではないか。');
-    await user.click(screen.getByRole('button', { name: '主張を保存' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const 郵便配達員 = useCaseStore.getState().currentCase.persons.find((person) => person.name === '郵便配達員');
     expect(lastSavedClaim()?.mentionedPersonIds).toEqual([郵便配達員?.id]);
@@ -505,46 +514,20 @@ describe('ClaimForm のキーボード操作', () => {
   });
 
   describe('ボード上の位置から決まる初期値（defaults）', () => {
-    it('出来事の束の中で書いた主張は、本文に「@出来事」を書かなくても、その出来事に束ねて保存する', async () => {
-      const user = userEvent.setup();
-      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
-
-      await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
-
-      // 参照は本文から導出する規則を保つため、出来事のメンションを本文の末尾に補う
-      expect(lastSavedClaim()).toMatchObject({
-        speaker: { kind: 'user' },
-        content: '別荘の電話は12日の夜から不通だった。 @[持ち主が最後に目撃された](event:event-last-seen)',
-        eventId: 'event-last-seen',
-      });
-    });
-
-    it('本文に別の出来事を「@」で書いた場合は、本文の出来事を優先する', async () => {
-      const user = userEvent.setup();
-      useCaseStore.getState().upsert('events', { id: 'event-search', title: '警察が別荘を捜索した' });
-      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
-
-      await typeAndChoose(user, '捜索は半日で終わった。@警察が', '出来事 警察が別荘を捜索した');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
-
-      expect(lastSavedClaim()).toMatchObject({ eventId: 'event-search' });
-    });
-
-    it('ボードの項目と項目の間で書いた場合は、書いた位置に主張を並べる', async () => {
-      // 前提: サンプルの並びは 出来事「持ち主が最後に目撃された」→ ユーザーの推測。その間（1番目）で書く
+    it('ボードの項目と項目の間で書いた場合は、書いた位置に証言を並べる', async () => {
+      // 前提: サンプルの並びの先頭は、管理人の証言 → 防犯カメラの記録。その間（1番目）で書く
       const user = userEvent.setup();
       render(<ClaimForm defaults={{ insertIndex: 1 }} onDone={vi.fn()} />);
 
       await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
       // 日時は付けず、並び順だけで位置を表す
       expect(lastSavedClaim()?.when).toBeUndefined();
-      expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
-        'event:event-last-seen',
+      expect(useCaseStore.getState().currentCase.timelineOrder.slice(0, 3)).toEqual([
+        'claim:claim-caretaker',
         `claim:${lastSavedClaim()?.id}`,
-        'claim:claim-user-guess',
+        'claim:claim-police-camera',
       ]);
     });
   });
@@ -584,7 +567,7 @@ describe('ClaimForm のキーボード操作', () => {
       render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);
 
       await user.type(screen.getByLabelText('内容'), ' 玄関は施錠されていた。');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
       const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-caretaker');
       expect(保存後?.content).toContain('玄関は施錠されていた。');

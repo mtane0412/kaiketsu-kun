@@ -2,18 +2,17 @@
  * 案件データから時系列ビュー・証言者別ビューを導出するロジック
  *
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
- * 時系列の骨格は主張です。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まり、
- * 出来事は同じ事柄についての主張を束ねるラベルとして、束ねた主張から日時・場所・人物を導出します。
- * 食い違いは、特定の見立てとの比較ではなく、同じ出来事に束ねた主張同士の比較で判定します。
- * 参照先（出来事・人物・場所）が見つからない場合は、データ破損として例外を投げます。
+ * 時系列ボードには証言だけを並べます。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
+ * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { resolveContent, type ContentSegment } from './mention';
-import { compareTimeRef, isTimeConflict } from './time-ref';
+import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
-import type { Case, Claim, Event, Id, Person, Place, TimeRef } from './types';
+import type { Case, Claim, Id, Person, Place } from './types';
 
-/** 表示用に参照先を解決した主張です。 */
+/** 表示用に参照先を解決した証言です。 */
 export type ClaimView = {
   claim: Claim;
   /** 本文を文字列とメンションに分解したものです。メンションの表示名はエンティティの現在の名前です。 */
@@ -21,37 +20,17 @@ export type ClaimView = {
   speakerLabel: string;
   /** 発言者の発言をユーザーに伝えた人物です。伝えた順に並びます。 */
   viaPersons: Person[];
-  event?: Event;
-  /** この主張が述べる場所です。 */
+  /** この証言が述べる場所です。 */
   place?: Place;
   mentionedPersons: Person[];
-  /** 同じ出来事に束ねた他の主張と、述べる時刻が食い違っているかどうかです。 */
-  hasTimeConflict: boolean;
-  /** 同じ出来事に束ねた他の主張と、述べる場所が異なるかどうかです。 */
-  hasPlaceConflict: boolean;
 };
 
-/**
- * 時系列ボードの1項目です。
- *
- * - event: 出来事の束。when・places・persons は束ねた主張から導出した値です。
- * - claim: 出来事に束ねていない主張。
- */
-export type TimelineItem =
-  | {
-      kind: 'event';
-      /** 並び順の中でこの項目を識別するキーです。 */
-      key: TimelineKey;
-      event: Event;
-      /** 束ねた主張が述べる日時のうち、最も早いものです。見出しに表示します。 */
-      when?: TimeRef;
-      /** 束ねた主張が述べる場所です（重複なし）。 */
-      places: Place[];
-      /** 束ねた主張が言及している人物です（重複なし）。 */
-      persons: Person[];
-      claims: ClaimView[];
-    }
-  | { kind: 'claim'; key: TimelineKey; when?: TimeRef; view: ClaimView };
+/** 時系列ボードの1項目（証言）です。 */
+export type TimelineItem = {
+  /** 並び順の中でこの項目を識別するキーです。 */
+  key: TimelineKey;
+  view: ClaimView;
+};
 
 /** 時系列ビュー全体です。 */
 export type Timeline = {
@@ -84,7 +63,7 @@ export function formatViaLabel(viaNames: string[]): string {
   return viaNames.length > 0 ? `（${viaNames.join(' → ')} による）` : '';
 }
 
-/** 主張の発言者の表示名を返します。複数の人物は「、」でつなぎ、発言者がいない主張はユーザーの推測とします。 */
+/** 証言の発言者の表示名を返します。複数の人物は「、」でつなぎ、発言者がいない証言はユーザーの推測とします。 */
 function speakerLabelOf(target: Case, claim: Claim): string {
   return claim.speaker.kind === 'person'
     ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物').name).join('、')
@@ -92,100 +71,48 @@ function speakerLabelOf(target: Case, claim: Claim): string {
 }
 
 /**
- * 主張が誰の発言で、誰を経由して伝わったかを、1行の文字列で返します。
- * 例「県道の防犯カメラ（県警 → 架空日報 朝刊 による）」。一覧のように、カードを使わずに主張を並べる箇所で使用します。
+ * 証言が誰の発言で、誰を経由して伝わったかを、1行の文字列で返します。
+ * 例「県道の防犯カメラ（県警 → 架空日報 朝刊 による）」。一覧のように、カードを使わずに証言を並べる箇所で使用します。
  */
 export function describeClaimAttribution(target: Case, claim: Claim): string {
   const viaNames = claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物').name);
   return `${speakerLabelOf(target, claim)}${formatViaLabel(viaNames)}`;
 }
 
-/** 主張の参照先を解決し、同じ出来事に束ねた他の主張との食い違いを判定します。 */
+/** 証言の参照先を解決します。 */
 function toClaimView(target: Case, claim: Claim): ClaimView {
-  const event = claim.eventId === undefined ? undefined : findOrThrow(target.events, claim.eventId, '出来事');
   const place = claim.placeId === undefined ? undefined : findOrThrow(target.places, claim.placeId, '場所');
-
-
-  const siblings =
-    claim.eventId === undefined
-      ? []
-      : target.claims.filter((other) => other.eventId === claim.eventId && other.id !== claim.id);
 
   return {
     claim,
     contentSegments: resolveContent(claim.content, target),
     speakerLabel: speakerLabelOf(target, claim),
     viaPersons: claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
-    event,
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
-    hasTimeConflict: siblings.some((other) => isTimeConflict(claim.when, other.when)),
-    hasPlaceConflict:
-      claim.placeId !== undefined &&
-      siblings.some((other) => other.placeId !== undefined && other.placeId !== claim.placeId),
   };
 }
 
-/** 主張を、述べられた時点の早い順に並べます。 */
+/** 証言を、述べられた時点の早い順に並べます。 */
 function sortByStatedAt(claims: ClaimView[]): ClaimView[] {
   return [...claims].sort((a, b) => compareTimeRef(a.claim.statedAt, b.claim.statedAt));
 }
 
-/** 時刻参照が、並べ替えに使える情報（earliest または order）を持つかどうかを返します。 */
-function isSortable(ref: TimeRef | undefined): boolean {
-  return ref?.earliest !== undefined || ref?.order !== undefined;
-}
-
-/** 重複を除いた配列を返します。順序は最初に現れた順です。 */
-function unique<T>(items: T[]): T[] {
-  return [...new Set(items)];
-}
-
-/** 出来事と、その出来事に束ねた主張から、ボードの項目を組み立てます。 */
-function toEventItem(event: Event, claims: ClaimView[]): TimelineItem {
-  // 述べる日時の早い順。日時が同じ、または日時を述べない主張同士は、述べられた時点の早い順
-  const sorted = [...claims].sort(
-    (a, b) => compareTimeRef(a.claim.when, b.claim.when) || compareTimeRef(a.claim.statedAt, b.claim.statedAt)
-  );
-  return {
-    kind: 'event',
-    key: timelineKeyOf('event', event.id),
-    event,
-    when: sorted.map((view) => view.claim.when).find(isSortable),
-    places: unique(sorted.flatMap((view) => (view.place ? [view.place] : []))),
-    persons: unique(sorted.flatMap((view) => view.mentionedPersons)),
-    claims: sorted,
-  };
-}
-
-/**
- * 時系列ビューを組み立てます。
- * 出来事の束と、出来事に束ねていない主張を、案件の並び順（resolveTimelineOrder）のとおりに並べます。
- * 主張が1件も無い出来事も、書き足す先として項目にします。
- */
+/** 時系列ビューを組み立てます。証言を、案件の並び順（resolveTimelineOrder）のとおりに並べます。 */
 export function buildTimeline(target: Case): Timeline {
-  const claimViews = target.claims.map((claim) => toClaimView(target, claim));
-
-  const all: TimelineItem[] = [
-    ...target.events.map((event) =>
-      toEventItem(
-        event,
-        claimViews.filter((view) => view.claim.eventId === event.id)
-      )
-    ),
-    ...claimViews
-      .filter((view) => view.claim.eventId === undefined)
-      .map((view): TimelineItem => ({ kind: 'claim', key: timelineKeyOf('claim', view.claim.id), when: view.claim.when, view })),
-  ];
-  const itemByKey = new Map(all.map((item) => [item.key, item]));
-
+  const itemByKey = new Map(
+    target.claims.map((claim): [TimelineKey, TimelineItem] => {
+      const key = timelineKeyOf(claim.id);
+      return [key, { key, view: toClaimView(target, claim) }];
+    })
+  );
   return { items: resolveTimelineOrder(target).flatMap((key) => itemByKey.get(key) ?? []) };
 }
 
 /**
  * 証言者別ビューを組み立てます。
  * 人物（案件への登録順）、ユーザーの推測の順にグループを並べます。
- * 主張が1件も無い発言者のグループは作りません。複数の人物が述べた主張は、それぞれの人物のグループに入れます。
+ * 証言が1件も無い発言者のグループは作りません。複数の人物が述べた証言は、それぞれの人物のグループに入れます。
  * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {

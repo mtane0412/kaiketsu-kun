@@ -21,7 +21,6 @@ const 隣家の住人: DraftMention = { kind: 'person', id: 'person-neighbor', l
 const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label: '管理人' };
 const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
 const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
-const 目撃: DraftMention = { kind: 'event', id: 'event-last-seen', label: '持ち主が最後に目撃された' };
 
 describe('parseContent', () => {
   it('本文を、文字列とメンションの並びに分解する', () => {
@@ -48,14 +47,10 @@ describe('contentToPlainText', () => {
 });
 
 describe('deriveClaimLinks', () => {
-  it('本文のメンションから、出来事・場所・言及している人物を導出する（発言者と経由は本文から導出しない）', () => {
-    const content = [
-      `夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`,
-      `${formatMention(目撃)}`,
-    ].join('');
+  it('本文のメンションから、場所・言及している人物を導出する（発言者と経由は本文から導出しない）', () => {
+    const content = `夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`;
 
     expect(deriveClaimLinks(content)).toEqual({
-      eventId: 'event-last-seen',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
     });
@@ -149,39 +144,36 @@ describe('parseDraft', () => {
 });
 
 describe('claimToDraft', () => {
-  it('サンプルのすべての主張は、下書きに変換して保存し直しても本文と参照が変わらない', () => {
+  it('サンプルのすべての証言は、下書きに変換して保存し直しても本文と参照が変わらない', () => {
     for (const claim of sampleFictionalCase.claims) {
       const content = draftToContent(claimToDraft(claim, sampleFictionalCase));
       const links = deriveClaimLinks(content);
 
       expect(content).toBe(claim.content);
-      expect(links.eventId).toBe(claim.eventId);
       expect(links.placeId).toBe(claim.placeId);
       expect(links.mentionedPersonIds).toEqual(claim.mentionedPersonIds);
     }
   });
 
-  it('メンション導入前の主張は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
+  it('メンション導入前の証言は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
     // 発言者と経由は入力欄の「発言者」で扱うため、本文には補わない
-    const 旧形式の主張: Claim = {
+    const 旧形式の証言: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       content: '庭に持ち主の姿が見えた。',
-      eventId: 'event-last-seen',
       mentionedPersonIds: ['person-owner'],
       placeId: 'place-villa',
     };
 
-    const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
+    const draft = claimToDraft(旧形式の証言, sampleFictionalCase);
 
     expect(draft.text).toBe(
-      '庭に持ち主の姿が見えた。 @別荘の持ち主 @持ち主が最後に目撃された @湖畔の別荘'
+      '庭に持ち主の姿が見えた。 @別荘の持ち主 @湖畔の別荘'
     );
     expect(deriveClaimLinks(draftToContent(draft))).toEqual({
-      eventId: 旧形式の主張.eventId,
-      placeId: 旧形式の主張.placeId,
-      mentionedPersonIds: 旧形式の主張.mentionedPersonIds,
+      placeId: 旧形式の証言.placeId,
+      mentionedPersonIds: 旧形式の証言.mentionedPersonIds,
     });
   });
 });

@@ -1,38 +1,36 @@
 /**
  * 時系列ボードの並び順（相対関係）と、日時との整合性
  *
- * ボードの項目（出来事の束、出来事に束ねていない主張）の位置は、日時ではなく、
- * 案件が持つ並び順（Case.timelineOrder）で決まります。日時（Claim.when）は任意の付加情報です。
- * ただし、日時を持つ項目同士は、日時と矛盾する順には並べられません。
+ * ボードの項目（証言）の位置は、日時ではなく、案件が持つ並び順（Case.timelineOrder）で決まります。
+ * 日時（Claim.when）は任意の付加情報です。ただし、日時を持つ項目同士は、日時と矛盾する順には並べられません。
  *
  * 矛盾の定義: 前にある項目の日時の区間が、後ろにある項目の区間より完全に後であること。
  * 区間が重なる項目同士は、どちらの順でも矛盾としません。日時を持たない項目は、どこにでも置けます。
- * 出来事の束の区間は、束ねた主張が述べる日時の全体（最も早い始まりから最も遅い終わりまで）です。
  */
-import { compareTimeRef, toInterval, type Interval } from './time-ref';
-import type { Case, Id, TimeRef } from './types';
+import { toInterval, type Interval } from './time-ref';
+import type { Case, Id } from './types';
 
-/** ボードの項目を識別するキーです。'event:出来事のID' または 'claim:主張のID' の形です。 */
+/**
+ * ボードの項目を識別するキーです。'claim:証言のID' の形です。
+ * 注意: 接頭辞は、出来事の束（'event:出来事のID'）もボードの項目だった頃の名残です。保存済みの並び順をそのまま読めるよう残しています。
+ */
 export type TimelineKey = string;
 
-/** ボードの項目のキーを作ります。 */
-export function timelineKeyOf(kind: 'event' | 'claim', id: Id): TimelineKey {
-  return `${kind}:${id}`;
+/** 証言のボード上のキーを作ります。 */
+export function timelineKeyOf(claimId: Id): TimelineKey {
+  return `claim:${claimId}`;
 }
 
-/** ボードの項目のキーを、案件への登録順（出来事、出来事に束ねていない主張の順）で返します。 */
-function boardKeys(target: Pick<Case, 'events' | 'claims'>): TimelineKey[] {
-  return [
-    ...target.events.map((event) => timelineKeyOf('event', event.id)),
-    ...target.claims.filter((claim) => claim.eventId === undefined).map((claim) => timelineKeyOf('claim', claim.id)),
-  ];
+/** ボードの項目のキーを、案件への登録順で返します。 */
+function boardKeys(target: Pick<Case, 'claims'>): TimelineKey[] {
+  return target.claims.map((claim) => timelineKeyOf(claim.id));
 }
 
 /**
  * ボードの項目の並び順を返します。
  *
  * 保存した並び順（Case.timelineOrder）のうち、現在もボードの項目であるキーを先に並べ、
- * 載っていない項目（位置を決めずに書き足した主張など）を、末尾に登録順で並べます。
+ * 載っていない項目（位置を決めずに書き足した証言など）を、末尾に登録順で並べます。
  */
 export function resolveTimelineOrder(target: Case): TimelineKey[] {
   const onBoard = boardKeys(target);
@@ -42,21 +40,10 @@ export function resolveTimelineOrder(target: Case): TimelineKey[] {
   return [...listed, ...onBoard.filter((key) => !listedKeys.has(key))];
 }
 
-/** 複数の区間の全体（最も早い始まりから最も遅い終わりまで）を返します。区間が1つも無い場合は null を返します。 */
-function hullOf(intervals: Interval[]): Interval | null {
-  if (intervals.length === 0) return null;
-  return {
-    start: Math.min(...intervals.map((interval) => interval.start)),
-    end: Math.max(...intervals.map((interval) => interval.end)),
-  };
-}
-
 /** ボードの項目が持つ日時の区間を返します。日時を持たない項目は null を返します。 */
 function intervalOf(target: Case, key: TimelineKey): Interval | null {
-  const claims = target.claims.filter(
-    (claim) => timelineKeyOf('claim', claim.id) === key || (claim.eventId !== undefined && timelineKeyOf('event', claim.eventId) === key)
-  );
-  return hullOf(claims.flatMap((claim) => (claim.when ? (toInterval(claim.when) ?? []) : [])));
+  const when = target.claims.find((claim) => timelineKeyOf(claim.id) === key)?.when;
+  return when ? toInterval(when) : null;
 }
 
 /**
@@ -118,37 +105,4 @@ export function settleTimelineItems(target: Case, keys: TimelineKey[]): Timeline
     order = moved(order, key, nearest);
   }
   return order;
-}
-
-/** 時刻参照が、並び順を持たない頃の時系列に並べるための情報（earliest または order）を持つかどうかを返します。 */
-function isLegacySortable(ref: TimeRef | undefined): boolean {
-  return ref?.earliest !== undefined || ref?.order !== undefined;
-}
-
-/**
- * 並び順（Case.timelineOrder）を持たない頃のデータの、当時の表示順を返します。読み込み時の変換に使用します。
- *
- * 当時の位置は主張が述べる日時で決まっていました。日時を持つ項目を早い順に、次に並び順の数値（TimeRef.order）だけを
- * 持つ項目を小さい順に、最後にどちらも持たない項目を、出来事、主張（述べられた時点の早い順）の順で並べます。
- * 出来事の束の位置は、束ねた主張が述べる日時のうち最も早いものです。
- */
-export function legacyTimelineOrder(target: Pick<Case, 'events' | 'claims'>): TimelineKey[] {
-  const items = [
-    ...target.events.map((event) => ({
-      key: timelineKeyOf('event', event.id),
-      when: target.claims
-        .filter((claim) => claim.eventId === event.id)
-        .map((claim) => claim.when)
-        .sort(compareTimeRef)
-        .find(isLegacySortable),
-    })),
-    ...target.claims
-      .filter((claim) => claim.eventId === undefined)
-      .sort((a, b) => compareTimeRef(a.statedAt, b.statedAt))
-      .map((claim) => ({ key: timelineKeyOf('claim', claim.id), when: claim.when })),
-  ];
-  return [
-    ...items.filter((item) => isLegacySortable(item.when)).sort((a, b) => compareTimeRef(a.when, b.when)),
-    ...items.filter((item) => !isLegacySortable(item.when)),
-  ].map((item) => item.key);
 }

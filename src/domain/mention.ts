@@ -1,13 +1,13 @@
 /**
- * メンション（主張の本文中の @ によるエンティティ参照）
+ * メンション（証言の本文中の @ によるエンティティ参照）
  *
- * 主張の本文（Claim.content）は、人物・場所・出来事への参照を
+ * 証言の本文（Claim.content）は、人物・場所への参照を
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
- * Claim の eventId・placeId・mentionedPersonIds は、このトークンから導出します。
+ * Claim の placeId・mentionedPersonIds は、このトークンから導出します。
  * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
  * 導出の規則:
- * - 出来事・場所は、それぞれ最初のメンションを採用します。
+ * - 場所は、最初のメンションを採用します。
  * - 人物のメンションは、言及している人物です。
  *
  * 以前の版では、本文の先頭を「@人物:」と書くとその人物を発言者として導出していました。
@@ -19,10 +19,10 @@
 import type { Case, Claim, Id, Speaker } from './types';
 
 /** メンションで参照できるエンティティの種類です。 */
-export type MentionKind = 'person' | 'place' | 'event';
+export type MentionKind = 'person' | 'place';
 
 /** メンションの種類の一覧です。新規作成の選択肢は、この順序で表示します。 */
-export const MENTION_KINDS: MentionKind[] = ['person', 'place', 'event'];
+export const MENTION_KINDS: MentionKind[] = ['person', 'place'];
 
 /** 本文を分解した1要素です。 */
 export type ContentSegment =
@@ -34,10 +34,10 @@ export type DraftMention = { kind: MentionKind; id: Id; label: string };
 /** 入力欄の状態です。text 中の「@表示名」のうち、mentions に登録されたものだけがメンションになります。 */
 export type ClaimDraft = { text: string; mentions: DraftMention[] };
 
-/** 本文のトークンから導出した、主張の参照です。 */
-export type ClaimLinks = Pick<Claim, 'eventId' | 'placeId' | 'mentionedPersonIds'>;
+/** 本文のトークンから導出した、証言の参照です。 */
+export type ClaimLinks = Pick<Claim, 'placeId' | 'mentionedPersonIds'>;
 
-const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place|event):([^)\s]+)\)/g;
+const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place):([^)\s]+)\)/g;
 /**
  * 以前の版の発言者の記法です。本文の先頭に人物のメンションを空白または読点で区切って並べ、コロン（: または ：）で閉じます。
  */
@@ -71,8 +71,6 @@ function findEntityName(target: Case, kind: MentionKind, id: Id): string | undef
       return target.persons.find((person) => person.id === id)?.name;
     case 'place':
       return target.places.find((place) => place.id === id)?.name;
-    case 'event':
-      return target.events.find((event) => event.id === id)?.title;
   }
 }
 
@@ -95,12 +93,10 @@ export function contentToPlainText(content: string, target: Case): string {
     .join('');
 }
 
-/** 本文のトークンから、主張の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
+/** 本文のトークンから、証言の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
 export function deriveClaimLinks(content: string): ClaimLinks {
   const mentions = parseContent(content).filter((segment) => segment.type === 'mention');
-  const firstIdOf = (kind: MentionKind) => mentions.find((mention) => mention.kind === kind)?.id;
-  const eventId = firstIdOf('event');
-  const placeId = firstIdOf('place');
+  const placeId = mentions.find((mention) => mention.kind === 'place')?.id;
 
   // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
   const links: ClaimLinks = {
@@ -108,7 +104,6 @@ export function deriveClaimLinks(content: string): ClaimLinks {
       ...new Set(mentions.filter((mention) => mention.kind === 'person').map((mention) => mention.id)),
     ],
   };
-  if (eventId !== undefined) links.eventId = eventId;
   if (placeId !== undefined) links.placeId = placeId;
   return links;
 }
@@ -169,9 +164,9 @@ export function draftToContent(draft: ClaimDraft): string {
 }
 
 /**
- * 保存済みの主張を下書きに変換します。
+ * 保存済みの証言を下書きに変換します。
  *
- * メンション導入前に保存された主張は、参照を項目（eventId など）にだけ持ち、本文にトークンを持ちません。
+ * メンション導入前に保存された証言は、参照を項目（placeId など）にだけ持ち、本文にトークンを持ちません。
  * そのまま編集して保存すると参照が失われるため、本文から導出できない参照を、末尾にメンションとして補います。
  * 発言者と経由は入力欄の「発言者」で扱うため、本文には補いません。
  */
@@ -187,13 +182,12 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
     ...claim.mentionedPersonIds
       .filter((id) => !derived.mentionedPersonIds.includes(id))
       .map((id): [MentionKind, Id] => ['person', id]),
-    ['event', derived.eventId === undefined ? claim.eventId : undefined],
     ['place', derived.placeId === undefined ? claim.placeId : undefined],
   ];
   for (const [kind, id] of missing) {
     if (id === undefined) continue;
     const label = findEntityName(target, kind, id);
-    if (label === undefined) throw new Error(`主張が存在しない参照を持っています: ${kind}:${id}`);
+    if (label === undefined) throw new Error(`証言が存在しない参照を持っています: ${kind}:${id}`);
     mentions.push({ kind, id, label });
     text += ` @${label}`;
   }

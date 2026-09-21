@@ -1,21 +1,19 @@
 /**
  * 時系列ビュー（ホワイトボード）
  *
- * 出来事の束と、出来事に束ねていない主張を、案件の並び順（相対関係）のとおりに縦に並べます。
+ * 証言を、案件の並び順（相対関係）のとおりに縦に並べます。
  * 日時は任意の付加情報で、位置は決めません。項目はつまみをドラッグして（キーボードではつまみの上で
  * スペースキー → 矢印キー → スペースキー）前後に動かせます。ただし、日時を持つ項目は、
  * 日時と矛盾する位置には動かせません（規則は src/domain/timeline-order.ts を参照）。
  *
  * 入力欄を別の画面に分けず、ボード上の書き足したい位置に入力欄（BoardComposer）を開きます。
- * 書いた位置は、次の規則で主張の初期値になります。
- * - 出来事の束の中: その出来事に束ねた主張になります。
+ * 書いた位置は、次の規則で証言の初期値になります。
  * - 項目の前: 日時は付けず、並び順のその位置に並べます。
  * - 「ボードに書き足す」: 並び順の末尾に並べます。
  *
- * 出来事の見出しには、束ねた主張から導出した日時・場所・言及されている人物を表示し、
- * 同じ出来事に束ねた他の主張と食い違う主張には食い違いの表示を付けます。
- * 入力欄は本文の1欄だけです。日時は、主張の「詳細」（onOpenClaimDetails）から編集します。
- * 本文のメンションと出来事の見出しは、エンティティの編集を開く導線（onOpenEntity）です。
+ * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 日時は、証言の「詳細」（onOpenClaimDetails）から編集します。
+ * 本文のメンションは、エンティティの編集を開く導線（onOpenEntity）です。
  */
 'use client';
 
@@ -41,7 +39,7 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
 
-/** 出来事に束ねていない主張の名前として使う、本文の冒頭の文字数です。 */
+/** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
 const ITEM_LABEL_LENGTH = 20;
 
 const DRAG_INSTRUCTIONS =
@@ -50,22 +48,20 @@ const DRAG_INSTRUCTIONS =
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
   | { type: 'free' }
-  | { type: 'event'; eventId: Id }
   /** 時系列の index 番目の項目の前です。 */
   | { type: 'before'; index: number }
   | { type: 'edit'; claimId: Id };
 
 type TimelineViewProps = {
   target: Case;
-  /** 本文のメンションや出来事の見出しが選ばれたときに呼び出します。 */
+  /** 本文のメンションが選ばれたときに呼び出します。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 主張の「詳細」が選ばれたときに呼び出します。日時を編集する導線です。 */
+  /** 証言の「詳細」が選ばれたときに呼び出します。日時を編集する導線です。 */
   onOpenClaimDetails?: (claimId: Id) => void;
 };
 
-/** ボードの項目の名前（出来事のタイトル、主張の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
+/** ボードの項目の名前（証言の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
 function labelOf(item: TimelineItem): string {
-  if (item.kind === 'event') return item.event.title;
   if (item.view.claim.title) return item.view.claim.title;
   const text = item.view.contentSegments
     .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
@@ -164,7 +160,7 @@ export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: Timel
     onDragCancel: ({ active }) => `「${labelOfKey(active.id)}」を動かすのをやめました。`,
   };
 
-  /** 主張1件を表示します。編集中の主張は、その場で入力欄に置き換えます。 */
+  /** 証言1件を表示します。編集中の証言は、その場で入力欄に置き換えます。 */
   const renderClaim = (view: ClaimView) =>
     composer?.type === 'edit' && composer.claimId === view.claim.id ? (
       <li key={view.claim.id}>
@@ -175,66 +171,19 @@ export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: Timel
         key={view.claim.id}
         view={view}
         showSpeaker
-        showEvent={false}
         onOpenEntity={onOpenEntity}
         onEdit={() => setComposer({ type: 'edit', claimId: view.claim.id })}
         onOpenDetails={onOpenClaimDetails && (() => onOpenClaimDetails(view.claim.id))}
       />
     );
 
-  /** ボードの1項目（出来事の束、または出来事に束ねていない主張）を表示します。 */
-  const renderItem = (item: TimelineItem) => {
-    const whenLabel = item.when && <p className="mb-1 text-xs font-medium text-sky-700">{item.when.text}</p>;
-
-    if (item.kind === 'claim') {
-      return (
-        <>
-          {whenLabel}
-          <ul>{renderClaim(item.view)}</ul>
-        </>
-      );
-    }
-
-    const { event } = item;
-    return (
-      <article aria-label={event.title}>
-        <header className="mb-2">
-          {whenLabel}
-          <h3 className="flex items-baseline gap-2 text-base font-semibold text-slate-900">
-            {event.title}
-            {onOpenEntity && (
-              <button
-                type="button"
-                aria-label={`「${event.title}」を編集`}
-                onClick={() => onOpenEntity('event', event.id)}
-                className="text-xs font-normal text-sky-700 hover:underline"
-              >
-                編集
-              </button>
-            )}
-          </h3>
-          <p className="text-xs text-slate-500">
-            {[item.places.map((place) => place.name).join('、'), item.persons.map((person) => person.name).join('、')]
-              .filter(Boolean)
-              .join(' ／ ')}
-          </p>
-          {event.description && <p className="mt-1 text-sm text-slate-700">{event.description}</p>}
-        </header>
-        <ul className="space-y-2">
-          {item.claims.map(renderClaim)}
-          <li>
-            {composer?.type === 'event' && composer.eventId === event.id ? (
-              <BoardComposer defaults={{ eventId: event.id }} onClose={closeComposer} />
-            ) : (
-              <AddButton label={`「${event.title}」に書き足す`} onClick={() => setComposer({ type: 'event', eventId: event.id })}>
-                ＋ この出来事に書き足す
-              </AddButton>
-            )}
-          </li>
-        </ul>
-      </article>
-    );
-  };
+  /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
+  const renderItem = ({ view }: TimelineItem) => (
+    <>
+      {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
+      <ul>{renderClaim(view)}</ul>
+    </>
+  );
 
   /**
    * 時系列の index 番目の項目の前の差し込み口を表示します。

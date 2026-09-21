@@ -1,11 +1,11 @@
 /**
- * 主張1件の表示
+ * 証言1件の表示
  *
  * 時系列ビューと証言者別ビューで共有します。
- * ユーザーの推測は、証言と見分けられるよう破線の枠と「推測」の表示で区別します。
+ * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
- * 見出しのある主張は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
- * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと主張の編集・詳細ボタンを表示します。
+ * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
+ * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
  */
 import { formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
@@ -14,24 +14,21 @@ import type { Id } from '@/domain/types';
 const MENTION_STYLES: Record<MentionKind, string> = {
   person: 'bg-sky-100 text-sky-800',
   place: 'bg-emerald-100 text-emerald-800',
-  event: 'bg-amber-100 text-amber-800',
 };
 
 type ClaimCardProps = {
   view: ClaimView;
   /** 発言者名を表示するかどうかです。証言者別ビューではグループ見出しと重複するため非表示にします。 */
   showSpeaker: boolean;
-  /** 対象の出来事名を表示するかどうかです。時系列ビューでは出来事の下に並ぶため非表示にします。 */
-  showEvent: boolean;
   /** 本文のメンションが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 主張の編集ボタンが選ばれたときに呼び出します。 */
+  /** 証言の編集ボタンが選ばれたときに呼び出します。 */
   onEdit?: () => void;
-  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
+  /** 証言の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
   onOpenDetails?: () => void;
 };
 
-export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, onOpenDetails }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetails }: ClaimCardProps) {
   const { claim } = view;
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
@@ -69,20 +66,14 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
         {view.viaPersons.length > 0 && (
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
         )}
-        {view.hasTimeConflict && (
-          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と時刻が食い違う</span>
-        )}
-        {view.hasPlaceConflict && (
-          <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">他の主張と場所が食い違う</span>
-        )}
         <span className="ml-auto flex gap-2">
           {onEdit && (
-            <button type="button" aria-label="この主張を編集" onClick={onEdit} className="text-sky-700 hover:underline">
+            <button type="button" aria-label="この証言を編集" onClick={onEdit} className="text-sky-700 hover:underline">
               編集
             </button>
           )}
           {onOpenDetails && (
-            <button type="button" aria-label="この主張の詳細" onClick={onOpenDetails} className="text-sky-700 hover:underline">
+            <button type="button" aria-label="この証言の詳細" onClick={onOpenDetails} className="text-sky-700 hover:underline">
               詳細
             </button>
           )}
@@ -102,12 +93,6 @@ export function ClaimCard({ view, showSpeaker, showEvent, onOpenEntity, onEdit, 
       )}
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-slate-500">
-        {showEvent && view.event && (
-          <>
-            <dt>出来事</dt>
-            <dd>{view.event.title}</dd>
-          </>
-        )}
         {claim.when && (
           <>
             <dt>述べる日時</dt>
