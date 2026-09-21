@@ -1,16 +1,16 @@
 /**
  * 出来事（Event）を持っていた頃のデータの変換
  *
- * 以前の版では、同じ事柄についての主張を「出来事」に束ね、時系列ボードには出来事の束と、束ねていない主張を並べていました。
- * 出来事は廃止し、ボードには主張だけを並べます。読み込み時（parseCase）に、次のとおり変換します。
+ * 以前の版では、同じ事柄についての証言を「出来事」に束ね、時系列ボードには出来事の束と、束ねていない証言を並べていました。
+ * 出来事は廃止し、ボードには証言だけを並べます。読み込み時（parseCase）に、次のとおり変換します。
  *
- * - 並び順の中の出来事の束（'event:出来事のID'）は、その位置に、束ねていた主張を当時の束の中の表示順で並べます。
- *   束を解いた結果、日時と矛盾する並びになった主張は、呼び出し側（parseCase）が矛盾しない位置へ動かします。
- * - 主張が束ねる出来事（eventId）は取り除きます。
+ * - 並び順の中の出来事の束（'event:出来事のID'）は、その位置に、束ねていた証言を当時の束の中の表示順で並べます。
+ *   束を解いた結果、日時と矛盾する並びになった証言は、呼び出し側（parseCase）が矛盾しない位置へ動かします。
+ * - 証言が束ねる出来事（eventId）は取り除きます。
  * - 本文の末尾の「@出来事」は、束ねる先を指定するための書き方だったため取り除きます。
  *   文中の「@出来事」は、出来事のタイトルの文字に戻します。
  *
- * 注意: 出来事のメモ（description）と、主張を1件も束ねていない出来事は、変換先が無いため引き継ぎません。
+ * 注意: 出来事のメモ（description）と、証言を1件も束ねていない出来事は、変換先が無いため引き継ぎません。
  */
 import { compareTimeRef } from './time-ref';
 import { timelineKeyOf, type TimelineKey } from './timeline-order';
@@ -19,7 +19,7 @@ import type { Claim, Id, TimeRef } from './types';
 /** 廃止した出来事です。 */
 export type LegacyEvent = { id: Id; title: string };
 
-/** 出来事に束ねることができた頃の主張です。 */
+/** 出来事に束ねることができた頃の証言です。 */
 export type LegacyClaim = Claim & { eventId?: Id };
 
 type LegacyData = {
@@ -42,7 +42,7 @@ function isLegacySortable(ref: TimeRef | undefined): boolean {
   return ref?.earliest !== undefined || ref?.order !== undefined;
 }
 
-/** 出来事の束の中の、当時の表示順（述べる日時の早い順、同じなら述べられた時点の早い順）で、束ねていた主張を返します。 */
+/** 出来事の束の中の、当時の表示順（述べる日時の早い順、同じなら述べられた時点の早い順）で、束ねていた証言を返します。 */
 function bundledClaims(claims: LegacyClaim[], eventId: Id): LegacyClaim[] {
   return claims
     .filter((claim) => claim.eventId === eventId)
@@ -50,11 +50,11 @@ function bundledClaims(claims: LegacyClaim[], eventId: Id): LegacyClaim[] {
 }
 
 /**
- * 並び順（timelineOrder）を持たない頃のデータの、当時の表示順を返します。要素は 'event:出来事のID' または 'claim:主張のID' です。
+ * 並び順（timelineOrder）を持たない頃のデータの、当時の表示順を返します。要素は 'event:出来事のID' または 'claim:証言のID' です。
  *
- * 当時の位置は主張が述べる日時で決まっていました。日時を持つ項目を早い順に、次に並び順の数値（TimeRef.order）だけを
- * 持つ項目を小さい順に、最後にどちらも持たない項目を、出来事、主張（述べられた時点の早い順）の順で並べます。
- * 出来事の束の位置は、束ねた主張が述べる日時のうち最も早いものです。
+ * 当時の位置は証言が述べる日時で決まっていました。日時を持つ項目を早い順に、次に並び順の数値（TimeRef.order）だけを
+ * 持つ項目を小さい順に、最後にどちらも持たない項目を、出来事、証言（述べられた時点の早い順）の順で並べます。
+ * 出来事の束の位置は、束ねた証言が述べる日時のうち最も早いものです。
  */
 function legacyTimelineOrder(events: LegacyEvent[], claims: LegacyClaim[]): string[] {
   const items = [
@@ -81,12 +81,12 @@ function stripEventMentions(content: string, events: LegacyEvent[]): string {
   const toTitles = (text: string) => text.replaceAll(EVENT_TOKEN_PATTERN, (_token, label: string, id: Id) => titleOf(id, label));
 
   const stripped = toTitles(content.replace(TRAILING_EVENT_TOKENS_PATTERN, ''));
-  // 本文が出来事へのメンションだけだった主張は、本文が空にならないよう、タイトルの文字に戻す
+  // 本文が出来事へのメンションだけだった証言は、本文が空にならないよう、タイトルの文字に戻す
   return stripped.trim() === '' ? toTitles(content) : stripped;
 }
 
 /**
- * 出来事を持っていた頃のデータを、主張だけを並べる現在の形に変換します。
+ * 出来事を持っていた頃のデータを、証言だけを並べる現在の形に変換します。
  * 変換の必要が無いデータは、そのままの内容で返します（並び順を持たない頃のデータには、当時の表示順を補います）。
  */
 export function migrateLegacyEvents(data: LegacyData): { claims: Claim[]; timelineOrder: TimelineKey[] } {

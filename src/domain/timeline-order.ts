@@ -1,7 +1,7 @@
 /**
  * 時系列ボードの並び順（相対関係）と、日時との整合性
  *
- * ボードの項目（主張）の位置は、日時ではなく、案件が持つ並び順（Case.timelineOrder）で決まります。
+ * ボードの項目（証言）の位置は、日時ではなく、案件が持つ並び順（Case.timelineOrder）で決まります。
  * 日時（Claim.when）は任意の付加情報です。ただし、日時を持つ項目同士は、日時と矛盾する順には並べられません。
  *
  * 矛盾の定義: 前にある項目の日時の区間が、後ろにある項目の区間より完全に後であること。
@@ -11,12 +11,12 @@ import { toInterval, type Interval } from './time-ref';
 import type { Case, Id } from './types';
 
 /**
- * ボードの項目を識別するキーです。'claim:主張のID' の形です。
+ * ボードの項目を識別するキーです。'claim:証言のID' の形です。
  * 注意: 接頭辞は、出来事の束（'event:出来事のID'）もボードの項目だった頃の名残です。保存済みの並び順をそのまま読めるよう残しています。
  */
 export type TimelineKey = string;
 
-/** 主張のボード上のキーを作ります。 */
+/** 証言のボード上のキーを作ります。 */
 export function timelineKeyOf(claimId: Id): TimelineKey {
   return `claim:${claimId}`;
 }
@@ -30,7 +30,7 @@ function boardKeys(target: Pick<Case, 'claims'>): TimelineKey[] {
  * ボードの項目の並び順を返します。
  *
  * 保存した並び順（Case.timelineOrder）のうち、現在もボードの項目であるキーを先に並べ、
- * 載っていない項目（位置を決めずに書き足した主張など）を、末尾に登録順で並べます。
+ * 載っていない項目（位置を決めずに書き足した証言など）を、末尾に登録順で並べます。
  */
 export function resolveTimelineOrder(target: Case): TimelineKey[] {
   const onBoard = boardKeys(target);

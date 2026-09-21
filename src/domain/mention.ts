@@ -1,7 +1,7 @@
 /**
- * メンション（主張の本文中の @ によるエンティティ参照）
+ * メンション（証言の本文中の @ によるエンティティ参照）
  *
- * 主張の本文（Claim.content）は、人物・場所への参照を
+ * 証言の本文（Claim.content）は、人物・場所への参照を
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
  * Claim の placeId・mentionedPersonIds は、このトークンから導出します。
  * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
@@ -34,7 +34,7 @@ export type DraftMention = { kind: MentionKind; id: Id; label: string };
 /** 入力欄の状態です。text 中の「@表示名」のうち、mentions に登録されたものだけがメンションになります。 */
 export type ClaimDraft = { text: string; mentions: DraftMention[] };
 
-/** 本文のトークンから導出した、主張の参照です。 */
+/** 本文のトークンから導出した、証言の参照です。 */
 export type ClaimLinks = Pick<Claim, 'placeId' | 'mentionedPersonIds'>;
 
 const TOKEN_PATTERN = /@\[([^\]]*)\]\((person|place):([^)\s]+)\)/g;
@@ -93,7 +93,7 @@ export function contentToPlainText(content: string, target: Case): string {
     .join('');
 }
 
-/** 本文のトークンから、主張の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
+/** 本文のトークンから、証言の参照を導出します。規則はこのファイル冒頭のコメントを参照してください。 */
 export function deriveClaimLinks(content: string): ClaimLinks {
   const mentions = parseContent(content).filter((segment) => segment.type === 'mention');
   const placeId = mentions.find((mention) => mention.kind === 'place')?.id;
@@ -164,9 +164,9 @@ export function draftToContent(draft: ClaimDraft): string {
 }
 
 /**
- * 保存済みの主張を下書きに変換します。
+ * 保存済みの証言を下書きに変換します。
  *
- * メンション導入前に保存された主張は、参照を項目（placeId など）にだけ持ち、本文にトークンを持ちません。
+ * メンション導入前に保存された証言は、参照を項目（placeId など）にだけ持ち、本文にトークンを持ちません。
  * そのまま編集して保存すると参照が失われるため、本文から導出できない参照を、末尾にメンションとして補います。
  * 発言者と経由は入力欄の「発言者」で扱うため、本文には補いません。
  */
@@ -187,7 +187,7 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   for (const [kind, id] of missing) {
     if (id === undefined) continue;
     const label = findEntityName(target, kind, id);
-    if (label === undefined) throw new Error(`主張が存在しない参照を持っています: ${kind}:${id}`);
+    if (label === undefined) throw new Error(`証言が存在しない参照を持っています: ${kind}:${id}`);
     mentions.push({ kind, id, label });
     text += ` @${label}`;
   }

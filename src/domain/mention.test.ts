@@ -144,7 +144,7 @@ describe('parseDraft', () => {
 });
 
 describe('claimToDraft', () => {
-  it('サンプルのすべての主張は、下書きに変換して保存し直しても本文と参照が変わらない', () => {
+  it('サンプルのすべての証言は、下書きに変換して保存し直しても本文と参照が変わらない', () => {
     for (const claim of sampleFictionalCase.claims) {
       const content = draftToContent(claimToDraft(claim, sampleFictionalCase));
       const links = deriveClaimLinks(content);
@@ -155,9 +155,9 @@ describe('claimToDraft', () => {
     }
   });
 
-  it('メンション導入前の主張は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
+  it('メンション導入前の証言は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
     // 発言者と経由は入力欄の「発言者」で扱うため、本文には補わない
-    const 旧形式の主張: Claim = {
+    const 旧形式の証言: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
@@ -166,14 +166,14 @@ describe('claimToDraft', () => {
       placeId: 'place-villa',
     };
 
-    const draft = claimToDraft(旧形式の主張, sampleFictionalCase);
+    const draft = claimToDraft(旧形式の証言, sampleFictionalCase);
 
     expect(draft.text).toBe(
       '庭に持ち主の姿が見えた。 @別荘の持ち主 @湖畔の別荘'
     );
     expect(deriveClaimLinks(draftToContent(draft))).toEqual({
-      placeId: 旧形式の主張.placeId,
-      mentionedPersonIds: 旧形式の主張.mentionedPersonIds,
+      placeId: 旧形式の証言.placeId,
+      mentionedPersonIds: 旧形式の証言.mentionedPersonIds,
     });
   });
 });

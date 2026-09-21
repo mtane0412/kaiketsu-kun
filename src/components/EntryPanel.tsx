@@ -1,7 +1,7 @@
 /**
  * 登録済みの一覧（台帳）
  *
- * 人物・場所・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
+ * 人物・場所・証言のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
  * 一覧の「編集」を選ぶとフォームが編集に切り替わり、「削除」は他のデータから参照されている場合に
  * 理由を示して中止します。
  *
@@ -33,7 +33,7 @@ function truncate(text: string): string {
 type Section = {
   key: EntryKey;
   label: string;
-  /** 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（主張の発言者と経由）。 */
+  /** 一覧に表示する要素のIDと表示名を返します。caption は、表示名の上に小さく添える補足です（証言の発言者と経由）。 */
   listItems: (target: Case) => { id: Id; label: string; caption?: string }[];
   /** 入力フォームを描画します。editingId が null の場合は新規登録です。 */
   renderForm: (target: Case, editingId: Id | null, onDone: () => void) => ReactNode;
@@ -58,7 +58,7 @@ const SECTIONS: Section[] = [
   },
   {
     key: 'claims',
-    label: '主張',
+    label: '証言',
     listItems: (target) =>
       target.claims.map((claim) => ({
         id: claim.id,

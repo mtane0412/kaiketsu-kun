@@ -15,7 +15,7 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(sampleFictionalCase))).toEqual(sampleFictionalCase);
   });
 
-  it('主張の見出しを保持して受け付ける', () => {
+  it('証言の見出しを保持して受け付ける', () => {
     // 前提: 隣家の住人の証言に、長い本文を要約する見出しを付けている
     const 案件 = {
       ...sampleFictionalCase,
@@ -30,7 +30,7 @@ describe('parseCase', () => {
   });
 
   it('並び順を持たない頃に保存したデータは、当時の表示順（日時の早い順）を並び順として補って受け付ける', () => {
-    // 前提: 以前の版では、ボード上の位置を主張が述べる日時から決めており、timelineOrder を保存していなかった
+    // 前提: 以前の版では、ボード上の位置を証言が述べる日時から決めており、timelineOrder を保存していなかった
     const { timelineOrder: _並び順, ...並び順の無い案件 } = sampleFictionalCase;
     const 並び順の無い旧データ = {
       ...並び順の無い案件,
@@ -46,7 +46,7 @@ describe('parseCase', () => {
       ],
     };
 
-    // 検証: 日時を持つ主張を早い順に、次に日時を持たない主張を述べられた時点の早い順に並べる
+    // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言を述べられた時点の早い順に並べる
     expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
       'claim:claim-arrival',
       'claim:claim-caretaker',
@@ -57,7 +57,7 @@ describe('parseCase', () => {
     ]);
   });
 
-  it('出来事に主張を束ねていた頃のデータは、束を解いて主張だけを並べる形に変換して受け付ける', () => {
+  it('出来事に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換して受け付ける', () => {
     // 前提: 以前の版では、隣家の住人と管理人の証言を、出来事「持ち主が最後に目撃された」に束ねていた
     const 出来事を持つ旧データ = {
       ...sampleFictionalCase,
@@ -72,7 +72,7 @@ describe('parseCase', () => {
 
     const 読み込み後 = parseCase(toJsonData(出来事を持つ旧データ));
 
-    // 検証: 束の位置に、束ねていた主張が述べる日時の早い順（管理人の夜7時 → 隣家の住人の夜9時ごろ）で並ぶ。
+    // 検証: 束の位置に、束ねていた証言が述べる日時の早い順（管理人の夜7時 → 隣家の住人の夜9時ごろ）で並ぶ。
     // 束の前にあった防犯カメラの記録（夜8時10分ごろ）は、束を解くと管理人の夜7時より前にあって日時と矛盾するため、矛盾しない位置へ動かす
     expect(読み込み後.timelineOrder).toEqual([
       'claim:claim-caretaker',
@@ -85,8 +85,8 @@ describe('parseCase', () => {
     expect(読み込み後.claims).toEqual(sampleFictionalCase.claims);
   });
 
-  it('評価を廃止する前に保存したデータは、主張の評価を取り除いて受け付ける', () => {
-    // 前提: 以前の版では、主張ごとに assessment（信頼できる・疑わしい・未検証）を保存していた
+  it('評価を廃止する前に保存したデータは、証言の評価を取り除いて受け付ける', () => {
+    // 前提: 以前の版では、証言ごとに assessment（信頼できる・疑わしい・未検証）を保存していた
     const 評価付きの旧データ = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, assessment: 'credible' })),
@@ -127,14 +127,14 @@ describe('parseCase', () => {
       timelineOrder: [...sampleFictionalCase.timelineOrder, 'claim:claim-newspaper-left'],
     };
 
-    const 読み込んだ主張 = parseCase(toJsonData(旧データ)).claims.at(-1);
+    const 読み込んだ証言 = parseCase(toJsonData(旧データ)).claims.at(-1);
 
     // 検証: 発言者は項目に残り、本文からは記法だけが消える
-    expect(読み込んだ主張?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
-    expect(読み込んだ主張?.content).toBe('郵便受けに新聞が残っていた。');
+    expect(読み込んだ証言?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
+    expect(読み込んだ証言?.content).toBe('郵便受けに新聞が残っていた。');
   });
 
-  it('人物の発言者が1人もいない主張を拒否する', () => {
+  it('人物の発言者が1人もいない証言を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: [] } }],
@@ -143,7 +143,7 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
   });
 
-  it('発言者の1人が存在しない人物である主張を拒否する', () => {
+  it('発言者の1人が存在しない人物である証言を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
       claims: [
@@ -155,9 +155,9 @@ describe('parseCase', () => {
   });
 
   it('必須の項目が欠けているデータを拒否する', () => {
-    const 主張一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
+    const 証言一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
 
-    expect(() => parseCase(toJsonData(主張一覧が無いデータ))).toThrow('案件データの形式が正しくありません');
+    expect(() => parseCase(toJsonData(証言一覧が無いデータ))).toThrow('案件データの形式が正しくありません');
   });
 
   it('解釈できない時刻表記を拒否する', () => {
@@ -181,7 +181,7 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('latest が earliest より前です');
   });
 
-  it('経由が存在しない人物を参照している主張を拒否する', () => {
+  it('経由が存在しない人物を参照している証言を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[1], viaPersonIds: ['person-unknown'] }],
@@ -190,7 +190,7 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
-  it('ユーザーの推測に経由を指定した主張を拒否する', () => {
+  it('ユーザーの推測に経由を指定した証言を拒否する', () => {
     // 経由は「誰かの発言を誰が伝えたか」を表すため、発言者がいないユーザーの推測には付けられない
     const 推測 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-user-guess')!;
     const データ = {
@@ -201,7 +201,7 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('ユーザーの推測に経由は指定できません: claim-user-guess');
   });
 
-  it('存在しない人物を参照している主張を拒否する', () => {
+  it('存在しない人物を参照している証言を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[0], mentionedPersonIds: ['person-unknown'] }],
@@ -210,7 +210,7 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
-  it('本文のメンションが存在しない場所を参照している主張を拒否する', () => {
+  it('本文のメンションが存在しない場所を参照している証言を拒否する', () => {
     // 2つ目以降の場所のメンションは placeId に現れないため、本文のトークン自体を検証する必要がある
     const データ = {
       ...sampleFictionalCase,
@@ -226,13 +226,13 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
   });
 
-  it('存在しない主張を根拠にしている関係を拒否する', () => {
+  it('存在しない証言を根拠にしている関係を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0], basisClaimIds: ['claim-unknown'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない主張を参照しています: claim-unknown');
+    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない証言を参照しています: claim-unknown');
   });
 });
 

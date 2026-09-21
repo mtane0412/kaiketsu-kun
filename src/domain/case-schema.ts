@@ -4,10 +4,10 @@
  * JSONから読み込んだデータは型の保証が無いため、次の3点を検証してから Case として扱います。
  * 1. 形式（必須項目と値の型）
  * 2. 時刻表記（earliest / latest が解釈でき、区間が逆転していないこと）
- * 3. 参照の整合性（IDの参照先と、主張の本文のメンションの参照先が案件内に存在すること）と、経由の規則
+ * 3. 参照の整合性（IDの参照先と、証言の本文のメンションの参照先が案件内に存在すること）と、経由の規則
  *
  * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
- * 出来事（Event）に主張を束ねていた頃のデータは、束を解いて主張だけを並べる形に変換します（src/domain/legacy-events.ts）。
+ * 出来事（Event）に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換します（src/domain/legacy-events.ts）。
  * 発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除きます（発言者は speaker に保存済みです）。
  * ソース（Source）を人物とは別の種類で持っていた頃のデータは、ソースを人物に統合します（migrateLegacySources）。
  *
@@ -175,7 +175,7 @@ export function findCaseViolations(target: Case): string[] {
   for (const relationship of target.relationships) {
     check(personIds, relationship.fromPersonId, '人物');
     check(personIds, relationship.toPersonId, '人物');
-    relationship.basisClaimIds.forEach((id) => check(claimIds, id, '主張'));
+    relationship.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));
   }
   return violations;
 }
@@ -282,7 +282,7 @@ export function parseCase(data: unknown): Case {
   const { sources: _legacySources, events, timelineOrder, ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
   let parsed: Case = { ...current, persons, ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }) };
-  // 束は束ねた主張の日時の全体を区間としていたため、束を解くと、束の前後にあった主張と日時が矛盾する並びになる場合がある
+  // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある
   if (events && events.length > 0) {
     parsed = { ...parsed, timelineOrder: settleTimelineItems(parsed, parsed.timelineOrder) };
   }

@@ -7,8 +7,8 @@ import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
 describe('buildTimeline', () => {
-  it('主張を、案件の並び順（timelineOrder）のとおりに並べる', () => {
-    // 前提: ボード上の位置は日時ではなく並び順で決まる。並び順に載っていない主張（架空日報の記述・ユーザーの推測）は末尾に登録順で並ぶ
+  it('証言を、案件の並び順（timelineOrder）のとおりに並べる', () => {
+    // 前提: ボード上の位置は日時ではなく並び順で決まる。並び順に載っていない証言（架空日報の記述・ユーザーの推測）は末尾に登録順で並ぶ
     const 案件: Case = {
       ...sampleFictionalCase,
       timelineOrder: ['claim:claim-neighbor', 'claim:claim-caretaker', 'claim:claim-police-camera'],
@@ -26,7 +26,7 @@ describe('buildTimeline', () => {
     expect(items[0]?.key).toBe('claim:claim-neighbor');
   });
 
-  it('主張の参照先（発言者・経由・場所・言及している人物）を解決する', () => {
+  it('証言の参照先（発言者・経由・場所・言及している人物）を解決する', () => {
     const 防犯カメラの記録 = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-police-camera')?.view;
     const 隣家の証言 = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
 
@@ -36,7 +36,7 @@ describe('buildTimeline', () => {
     expect(隣家の証言?.mentionedPersons.map((person) => person.name)).toEqual(['別荘の持ち主']);
   });
 
-  it('主張が存在しない場所を参照している場合はエラーにする', () => {
+  it('証言が存在しない場所を参照している場合はエラーにする', () => {
     const 壊れた案件: Case = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[0]!, placeId: 'place-missing' }],
@@ -72,7 +72,7 @@ describe('groupClaimsBySpeaker', () => {
     ]);
   });
 
-  it('同じ発言者の主張を、述べられた時点の早い順に並べる', () => {
+  it('同じ発言者の証言を、述べられた時点の早い順に並べる', () => {
     const 案件: Case = {
       ...sampleFictionalCase,
       claims: [
@@ -93,7 +93,7 @@ describe('groupClaimsBySpeaker', () => {
     expect(管理人?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-early', 'claim-caretaker']);
   });
 
-  it('複数の人物が述べた主張は、それぞれの人物のグループに入れ、発言者名を全員分つなげて示す', () => {
+  it('複数の人物が述べた証言は、それぞれの人物のグループに入れ、発言者名を全員分つなげて示す', () => {
     // 前提: 1つの記事が、隣家の住人と管理人の2人が同じことを述べたと伝えている
     const 案件: Case = {
       ...sampleFictionalCase,
@@ -118,7 +118,7 @@ describe('groupClaimsBySpeaker', () => {
     expect(管理人?.claims.find((item) => item.claim.id === 'claim-two-speakers')?.speakerLabel).toBe('隣家の住人、管理人');
   });
 
-  it('主張に、経由した人物を伝えた順に添える', () => {
+  it('証言に、経由した人物を伝えた順に添える', () => {
     const 防犯カメラ = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
 
     expect(防犯カメラ?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);

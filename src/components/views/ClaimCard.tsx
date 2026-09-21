@@ -1,11 +1,11 @@
 /**
- * 主張1件の表示
+ * 証言1件の表示
  *
  * 時系列ビューと証言者別ビューで共有します。
- * ユーザーの推測は、証言と見分けられるよう破線の枠と「推測」の表示で区別します。
+ * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
- * 見出しのある主張は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
- * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと主張の編集・詳細ボタンを表示します。
+ * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
+ * onOpenEntity を渡すとメンションがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
  */
 import { formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
@@ -22,9 +22,9 @@ type ClaimCardProps = {
   showSpeaker: boolean;
   /** 本文のメンションが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 主張の編集ボタンが選ばれたときに呼び出します。 */
+  /** 証言の編集ボタンが選ばれたときに呼び出します。 */
   onEdit?: () => void;
-  /** 主張の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
+  /** 証言の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
   onOpenDetails?: () => void;
 };
 
@@ -68,12 +68,12 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
         )}
         <span className="ml-auto flex gap-2">
           {onEdit && (
-            <button type="button" aria-label="この主張を編集" onClick={onEdit} className="text-sky-700 hover:underline">
+            <button type="button" aria-label="この証言を編集" onClick={onEdit} className="text-sky-700 hover:underline">
               編集
             </button>
           )}
           {onOpenDetails && (
-            <button type="button" aria-label="この主張の詳細" onClick={onOpenDetails} className="text-sky-700 hover:underline">
+            <button type="button" aria-label="この証言の詳細" onClick={onOpenDetails} className="text-sky-700 hover:underline">
               詳細
             </button>
           )}

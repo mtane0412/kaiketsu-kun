@@ -1,18 +1,18 @@
 /**
  * 時系列ビュー（ホワイトボード）
  *
- * 主張を、案件の並び順（相対関係）のとおりに縦に並べます。
+ * 証言を、案件の並び順（相対関係）のとおりに縦に並べます。
  * 日時は任意の付加情報で、位置は決めません。項目はつまみをドラッグして（キーボードではつまみの上で
  * スペースキー → 矢印キー → スペースキー）前後に動かせます。ただし、日時を持つ項目は、
  * 日時と矛盾する位置には動かせません（規則は src/domain/timeline-order.ts を参照）。
  *
  * 入力欄を別の画面に分けず、ボード上の書き足したい位置に入力欄（BoardComposer）を開きます。
- * 書いた位置は、次の規則で主張の初期値になります。
+ * 書いた位置は、次の規則で証言の初期値になります。
  * - 項目の前: 日時は付けず、並び順のその位置に並べます。
  * - 「ボードに書き足す」: 並び順の末尾に並べます。
  *
- * 主張同士の食い違いは判定しません。並んだ主張を見比べて判断するのは読み手です。
- * 日時は、主張の「詳細」（onOpenClaimDetails）から編集します。
+ * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 日時は、証言の「詳細」（onOpenClaimDetails）から編集します。
  * 本文のメンションは、エンティティの編集を開く導線（onOpenEntity）です。
  */
 'use client';
@@ -39,7 +39,7 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
 
-/** 見出しの無い主張の名前として使う、本文の冒頭の文字数です。 */
+/** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
 const ITEM_LABEL_LENGTH = 20;
 
 const DRAG_INSTRUCTIONS =
@@ -56,11 +56,11 @@ type TimelineViewProps = {
   target: Case;
   /** 本文のメンションが選ばれたときに呼び出します。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 主張の「詳細」が選ばれたときに呼び出します。日時を編集する導線です。 */
+  /** 証言の「詳細」が選ばれたときに呼び出します。日時を編集する導線です。 */
   onOpenClaimDetails?: (claimId: Id) => void;
 };
 
-/** ボードの項目の名前（主張の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
+/** ボードの項目の名前（証言の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
 function labelOf(item: TimelineItem): string {
   if (item.view.claim.title) return item.view.claim.title;
   const text = item.view.contentSegments
@@ -160,7 +160,7 @@ export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: Timel
     onDragCancel: ({ active }) => `「${labelOfKey(active.id)}」を動かすのをやめました。`,
   };
 
-  /** 主張1件を表示します。編集中の主張は、その場で入力欄に置き換えます。 */
+  /** 証言1件を表示します。編集中の証言は、その場で入力欄に置き換えます。 */
   const renderClaim = (view: ClaimView) =>
     composer?.type === 'edit' && composer.claimId === view.claim.id ? (
       <li key={view.claim.id}>
@@ -177,7 +177,7 @@ export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: Timel
       />
     );
 
-  /** ボードの1項目（主張）を表示します。述べる日時を持つ主張は、カードの上に日時を示します。 */
+  /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
   const renderItem = ({ view }: TimelineItem) => (
     <>
       {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
