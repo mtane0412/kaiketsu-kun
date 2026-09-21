@@ -8,7 +8,7 @@ import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
-import { PersonDetail, PlaceDetail } from './EntityDetail';
+import { NewPersonDetail, NewPlaceDetail, PersonDetail, PlaceDetail } from './EntityDetail';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
@@ -141,5 +141,45 @@ describe('PlaceDetail', () => {
 
     expect(screen.getByRole('heading', { name: '場所が見つかりません' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '場所の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside');
+  });
+});
+
+describe('NewPersonDetail・NewPlaceDetail', () => {
+  it('人物を新しく登録し、保存するとその人物の詳細へ移る', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation('/cases/case-lakeside/new/person');
+    render(<NewPersonDetail />);
+
+    const 登録 = screen.getByRole('region', { name: '人物の登録' });
+    await user.type(within(登録).getByLabelText('名前'), '通報した釣り人');
+    await user.click(within(登録).getByRole('button', { name: '人物を保存' }));
+
+    const 登録した人物 = openedCase().persons.find((person) => person.name === '通報した釣り人');
+    expect(登録した人物).toBeDefined();
+    // 検証: 保存した直後から、そのまま編集・削除を続けられるよう、登録した人物の詳細へ移る
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/persons/${登録した人物!.id}`);
+  });
+
+  it('人物の登録では、削除のボタンを表示しない', () => {
+    resetMockNavigation('/cases/case-lakeside/new/person');
+    render(<NewPersonDetail />);
+
+    // 前提: まだ保存していないため、削除できる対象が無い
+    expect(screen.queryByRole('button', { name: 'この人物を削除' })).not.toBeInTheDocument();
+  });
+
+  it('場所を新しく登録し、保存するとその場所の詳細へ移る', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation('/cases/case-lakeside/new/place?tab=map');
+    render(<NewPlaceDetail />);
+
+    const 登録 = screen.getByRole('region', { name: '場所の登録' });
+    await user.type(within(登録).getByLabelText('名前'), '桟橋');
+    await user.click(within(登録).getByRole('button', { name: '場所を保存' }));
+
+    const 登録した場所 = openedCase().places.find((place) => place.name === '桟橋');
+    expect(登録した場所).toBeDefined();
+    // 検証: 戻り先の表示（?tab=map）も引き継ぐ
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/places/${登録した場所!.id}?tab=map`);
   });
 });
