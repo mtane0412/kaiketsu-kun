@@ -1,8 +1,8 @@
 /**
- * 案件データから時系列ビュー・証言者別ビュー・エンティティ同士の関連を導出するロジック
+ * ケースデータから時系列ビュー・証言者別ビュー・エンティティ同士の関連を導出するロジック
  *
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
- * 時系列ボードには証言だけを並べます。ボード上の位置は案件の並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
+ * 時系列ボードには証言だけを並べます。ボード上の位置はケースの並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 地図ビューは、時系列の並び順のうち、座標のある場所を述べる証言だけをたどります（buildMapTrail）。
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
@@ -40,7 +40,7 @@ export type TimelineItem = {
 
 /** 時系列ビュー全体です。 */
 export type Timeline = {
-  /** 案件の並び順のとおりに並べた項目です。 */
+  /** ケースの並び順のとおりに並べた項目です。 */
   items: TimelineItem[];
 };
 
@@ -133,7 +133,7 @@ function sortByTimelineOrder(target: Case, claims: ClaimView[]): ClaimView[] {
   return [...claims].sort((a, b) => indexOf(a) - indexOf(b));
 }
 
-/** 時系列ビューを組み立てます。証言を、案件の並び順（resolveTimelineOrder）のとおりに並べます。 */
+/** 時系列ビューを組み立てます。証言を、ケースの並び順（resolveTimelineOrder）のとおりに並べます。 */
 export function buildTimeline(target: Case): Timeline {
   const itemByKey = new Map(
     target.claims.map((claim): [TimelineKey, TimelineItem] => {
@@ -146,7 +146,7 @@ export function buildTimeline(target: Case): Timeline {
 
 /**
  * 証言者別ビューを組み立てます。
- * 人物（案件への登録順）、ユーザーの推測の順にグループを並べます。
+ * 人物（ケースへの登録順）、ユーザーの推測の順にグループを並べます。
  * 証言が1件も無い発言者のグループは作りません。複数の人物が述べた証言は、それぞれの人物のグループに入れます。
  * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
  * グループの中の証言は、時系列ボードの並び順で並べます。
@@ -326,7 +326,7 @@ function personIdsOf(claim: Claim): Id[] {
  *
  * 証言から連想して次の証言へ進めるよう、時系列の前後の証言と、同じ人物・場所に触れている他の証言をまとめます。
  * グループは、発言者・経由した人物・言及している人物・場所の順に並べます。他の証言が無いエンティティのグループは作りません。
- * 注意: 案件に無いIDを渡すと undefined を返します。URLの直接入力や、削除済みの証言のURLを開いた場合に、
+ * 注意: ケースに無いIDを渡すと undefined を返します。URLの直接入力や、削除済みの証言のURLを開いた場合に、
  * 呼び出し側が「見つからない」表示を出すためです。
  */
 export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undefined {
@@ -400,7 +400,7 @@ function withoutEmptyGroups(groups: EntityClaimGroup[]): EntityClaimGroup[] {
  *
  * 証言から人物へ、人物から別の証言へとたどれるよう、この人物が述べた証言・経由して伝わった証言・
  * 言及している証言を、時系列の並び順（buildTimeline）で逆引きします。
- * 注意: 案件に無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
+ * 注意: ケースに無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
  */
 export function buildPersonDetail(target: Case, personId: Id): PersonDetail | undefined {
   const person = target.persons.find((candidate) => candidate.id === personId);
@@ -434,7 +434,7 @@ export function buildPersonDetail(target: Case, personId: Id): PersonDetail | un
  *
  * 証言から場所へ、場所から別の証言へとたどれるよう、この場所を述べている証言を、
  * 時系列の並び順（buildTimeline）で逆引きします。
- * 注意: 案件に無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
+ * 注意: ケースに無いIDを渡すと undefined を返します。呼び出し側が「見つからない」表示を出すためです。
  */
 export function buildPlaceDetail(target: Case, placeId: Id): PlaceDetail | undefined {
   const place = target.places.find((candidate) => candidate.id === placeId);

@@ -1,5 +1,5 @@
 /**
- * 読み込んだ案件データの検証（形式・日時の表記・参照の整合性）のテスト
+ * 読み込んだケースデータの検証（形式・日時の表記・参照の整合性）のテスト
  */
 import { describe, expect, it } from 'vitest';
 import { parseCase } from './case-schema';
@@ -11,29 +11,29 @@ function toJsonData(value: unknown): unknown {
 }
 
 describe('parseCase', () => {
-  it('正しい案件データをそのまま受け付ける', () => {
+  it('正しいケースデータをそのまま受け付ける', () => {
     expect(parseCase(toJsonData(sampleFictionalCase))).toEqual(sampleFictionalCase);
   });
 
   it('証言の見出しを保持して受け付ける', () => {
     // 前提: 隣家の住人の証言に、長い本文を要約する見出しを付けている
-    const 案件 = {
+    const ケース = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.id === 'claim-neighbor' ? { ...claim, title: '夜9時に持ち主を庭で見た' } : claim
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(案件));
+    const 読み込み後 = parseCase(toJsonData(ケース));
 
     expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')?.title).toBe('夜9時に持ち主を庭で見た');
   });
 
   it('並び順を持たない頃に保存したデータは、当時の表示順（日時の早い順）を並び順として補って受け付ける', () => {
     // 前提: 以前の版では、ボード上の位置を証言が述べる日時から決めており、timelineOrder を保存していなかった
-    const { timelineOrder: _並び順, ...並び順の無い案件 } = sampleFictionalCase;
+    const { timelineOrder: _並び順, ...並び順の無いケース } = sampleFictionalCase;
     const 並び順の無い旧データ = {
-      ...並び順の無い案件,
+      ...並び順の無いケース,
       claims: [
         ...sampleFictionalCase.claims,
         {
@@ -46,7 +46,7 @@ describe('parseCase', () => {
       ],
     };
 
-    // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言を案件への登録順に並べる
+    // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言をケースへの登録順に並べる
     expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
       'claim:claim-arrival',
       'claim:claim-caretaker',
@@ -140,7 +140,7 @@ describe('parseCase', () => {
       claims: [{ ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: [] } }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
+    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('発言者の1人が存在しない人物である証言を拒否する', () => {
@@ -157,7 +157,7 @@ describe('parseCase', () => {
   it('必須の項目が欠けているデータを拒否する', () => {
     const 証言一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
 
-    expect(() => parseCase(toJsonData(証言一覧が無いデータ))).toThrow('案件データの形式が正しくありません');
+    expect(() => parseCase(toJsonData(証言一覧が無いデータ))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('解釈できない日時の表記を拒否する', () => {
@@ -166,7 +166,7 @@ describe('parseCase', () => {
       claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, when: '1998年8月12日' })),
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('案件データの形式が正しくありません');
+    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('本文に解釈できない日時のメンションを含む証言を拒否する', () => {
@@ -305,10 +305,10 @@ describe('parseCase', () => {
   });
 });
 
-/** ソース（Source）を人物とは別の種類のエンティティとして持っていた頃の案件データです。 */
+/** ソース（Source）を人物とは別の種類のエンティティとして持っていた頃のケースデータです。 */
 const ソースを持つ旧データ = {
   id: 'case-legacy',
-  name: 'ソースを持っていた頃の案件',
+  name: 'ソースを持っていた頃のケース',
   sources: [
     {
       id: 'source-newspaper',
@@ -351,9 +351,9 @@ const ソースを持つ旧データ = {
 
 describe('parseCase（ソースを人物に統合する前のデータ）', () => {
   it('ソースを人物に変換し、URL・公開時点・メモを人物のメモにまとめる', () => {
-    const 読み込んだ案件 = parseCase(toJsonData(ソースを持つ旧データ));
+    const 読み込んだケース = parseCase(toJsonData(ソースを持つ旧データ));
 
-    expect(読み込んだ案件.persons).toEqual([
+    expect(読み込んだケース.persons).toEqual([
       { id: 'person-neighbor', name: '隣家の住人' },
       {
         id: 'source-newspaper',
@@ -361,7 +361,7 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
         note: '社会面の記事\nhttps://example.co.jp/news/19980814\n公開・刊行: 1998年8月14日',
       },
     ]);
-    expect(読み込んだ案件).not.toHaveProperty('sources');
+    expect(読み込んだケース).not.toHaveProperty('sources');
   });
 
   it('人物の証言は、ソースを経由に移し、本文の末尾のソースのメンションを取り除く', () => {
@@ -420,10 +420,10 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
       timelineOrder: ['claim:claim-announcement'],
     };
 
-    const 読み込んだ案件 = parseCase(toJsonData(旧データ));
+    const 読み込んだケース = parseCase(toJsonData(旧データ));
 
-    expect(読み込んだ案件.persons).toEqual([{ id: 'person-police', name: '県警', note: '組織です。\n記者発表' }]);
-    expect(読み込んだ案件.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
+    expect(読み込んだケース.persons).toEqual([{ id: 'person-police', name: '県警', note: '組織です。\n記者発表' }]);
+    expect(読み込んだケース.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
   });
 
   it('変換後のデータは、もう一度読み込んでも変わらない', () => {
@@ -437,7 +437,7 @@ describe('parseCase（人物・場所の画像）', () => {
   const 縮小済みの画像 = 'data:image/jpeg;base64,AAAA';
 
   it('人物と場所の画像（data URL）を保持して受け付ける', () => {
-    const 案件 = {
+    const ケース = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner' ? { ...person, imageDataUrl: 縮小済みの画像 } : person
@@ -445,42 +445,42 @@ describe('parseCase（人物・場所の画像）', () => {
       places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 縮小済みの画像 })),
     };
 
-    const 読み込み後 = parseCase(toJsonData(案件));
+    const 読み込み後 = parseCase(toJsonData(ケース));
 
     expect(読み込み後.persons.find((person) => person.id === 'person-owner')?.imageDataUrl).toBe(縮小済みの画像);
     expect(読み込み後.places[0]?.imageDataUrl).toBe(縮小済みの画像);
   });
 
   it('画像が data URL でない場合は拒否する（読み込んだファイルから外部のURLを表示しないため）', () => {
-    const 案件 = {
+    const ケース = {
       ...sampleFictionalCase,
       places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 'https://example.com/villa.png' })),
     };
 
-    expect(() => parseCase(toJsonData(案件))).toThrow(/places\.0\.imageDataUrl/);
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/places\.0\.imageDataUrl/);
   });
 });
 
 describe('parseCase（人物のアイコンの文字）', () => {
   it('人物のアイコンの文字を保持して受け付ける', () => {
-    const 案件 = {
+    const ケース = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-caretaker' ? { ...person, iconText: '鍵' } : person
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(案件));
+    const 読み込み後 = parseCase(toJsonData(ケース));
 
     expect(読み込み後.persons.find((person) => person.id === 'person-caretaker')?.iconText).toBe('鍵');
   });
 
   it('アイコンの文字が空文字列の場合は拒否する（指定しない場合は項目ごと省略するため）', () => {
-    const 案件 = {
+    const ケース = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) => ({ ...person, iconText: '' })),
     };
 
-    expect(() => parseCase(toJsonData(案件))).toThrow(/persons\.0\.iconText/);
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/persons\.0\.iconText/);
   });
 });

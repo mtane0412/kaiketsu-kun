@@ -1,7 +1,7 @@
 /**
  * ボード全体（タブ切り替え・証言の詳細ページへの導線・エンティティのパネル）のテスト
  *
- * 案件を開く処理は CaseGate が担うため、実際の画面と同じく CaseGate の中に描画します。
+ * ケースを開く処理は CaseGate が担うため、実際の画面と同じく CaseGate の中に描画します。
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,7 +15,7 @@ import { CaseGate } from './CaseGate';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-/** サンプルの案件を保存済みの状態にして、ボードを描画します。detail は、ボードの横に並べる証言の詳細です。 */
+/** サンプルのケースを保存済みの状態にして、ボードを描画します。detail は、ボードの横に並べる証言の詳細です。 */
 function renderBoard(detail?: ReactNode) {
   saveCase(sampleFictionalCase);
   render(
@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe('CaseBoard', () => {
-  it('保存済みの案件を復元して時系列のボードを最初に表示し、証言者別に切り替えられる', async () => {
+  it('保存済みのケースを復元して時系列のボードを最初に表示し、証言者別に切り替えられる', async () => {
     const user = userEvent.setup();
     renderBoard();
 
@@ -60,7 +60,7 @@ describe('CaseBoard', () => {
 
     await user.click(await screen.findByRole('tab', { name: '地図' }));
 
-    // 前提: サンプルの案件の場所には座標が無いため、湖畔の別荘に言及する証言（2件）は「地図に表示できない証言」に並ぶ
+    // 前提: サンプルのケースの場所には座標が無いため、湖畔の別荘に言及する証言（2件）は「地図に表示できない証言」に並ぶ
     const 一覧 = screen.getByRole('region', { name: '地図に表示できない証言' });
     expect(within(一覧).getAllByRole('link', { name: '@湖畔の別荘' })[0]!).toHaveAttribute(
       'href',

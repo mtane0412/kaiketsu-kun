@@ -63,7 +63,7 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
         segment.type !== 'mention' ? (
           segment.text
         ) : segment.kind === 'date' ? (
-          // 日時は案件のエンティティではないため、開く先が無い。リンクにせず、色だけを人物・場所とそろえる
+          // 日時はケースのエンティティではないため、開く先が無い。リンクにせず、色だけを人物・場所とそろえる
           <span key={index} className={`rounded px-0.5 ${MENTION_STYLES.date}`}>
             @{segment.label}
           </span>

@@ -3,7 +3,7 @@
  *
  * App Router のルーターはテスト環境（jsdom）には存在しないため、URLを1つ持つだけの最小の代役を用意します。
  * router.push・router.replace で URL を書き換えると、useSearchParams・useParams を使うコンポーネントが再描画されます。
- * useParams は、案件のボードのURL（/cases/<案件のID>）から caseId を読み取り、
+ * useParams は、ケースのボードのURL（/cases/<ケースのID>）から caseId を読み取り、
  * 詳細ページのURL（.../claims/<証言のID>・.../persons/<人物のID>・.../places/<場所のID>）から、
  * それぞれ claimId・personId・placeId を読み取ります。
  *
@@ -52,7 +52,7 @@ export function useSearchParams() {
   return new URLSearchParams(search);
 }
 
-/** 案件のボードのURLから、案件のIDを取り出すための形です。 */
+/** ケースのボードのURLから、ケースのIDを取り出すための形です。 */
 const CASE_PATH_PATTERN = /^\/cases\/([^/]+)/;
 
 /** 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。 */

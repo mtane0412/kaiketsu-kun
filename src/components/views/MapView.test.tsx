@@ -13,7 +13,7 @@ import { MapView } from './MapView';
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
-  // 証言のカードは、リンク先のURLの組み立てに案件のIDをURLから読み取るため、案件のボードのURLから始める
+  // 証言のカードは、リンク先のURLの組み立てにケースのIDをURLから読み取るため、ケースのボードのURLから始める
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -42,10 +42,10 @@ vi.mock('./TrailMap', () => ({
 }));
 
 /**
- * 2つの場所に座標を登録した案件です。
+ * 2つの場所に座標を登録したケースです。
  * 時系列の並び順は 管理人（湖畔の別荘）→ 防犯カメラ（県道の交差点）→ 隣家（湖畔の別荘）→ 架空日報（場所なし）→ 推測（場所なし）です。
  */
-const 座標を登録した案件: Case = {
+const 座標を登録したケース: Case = {
   ...sampleFictionalCase,
   places: [
     { id: 'place-villa', name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 },
@@ -63,7 +63,7 @@ function 選択中の証言() {
 
 describe('MapView', () => {
   it('最初は時系列の1番目の地点を選び、場所ごとにまとめたピンを地図に渡す', async () => {
-    render(<MapView target={座標を登録した案件} />);
+    render(<MapView target={座標を登録したケース} />);
 
     expect(await screen.findByText('地図で選択中の番号: 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ピン: 湖畔の別荘（1・3）' })).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('MapView', () => {
 
   it('「次へ」「前へ」で、時系列の並び順に1件ずつ地点を移る', async () => {
     const user = userEvent.setup();
-    render(<MapView target={座標を登録した案件} />);
+    render(<MapView target={座標を登録したケース} />);
 
     await user.click(screen.getByRole('button', { name: '次へ' }));
     expect(screen.getByText('2 / 3 県道の交差点')).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('MapView', () => {
 
   it('最初の地点では「前へ」を、最後の地点では「次へ」を押せない', async () => {
     const user = userEvent.setup();
-    render(<MapView target={座標を登録した案件} />);
+    render(<MapView target={座標を登録したケース} />);
 
     expect(screen.getByRole('button', { name: '前へ' })).toBeDisabled();
 
@@ -99,7 +99,7 @@ describe('MapView', () => {
 
   it('地図のピンを選ぶと、そのピンの証言を選択する', async () => {
     const user = userEvent.setup();
-    render(<MapView target={座標を登録した案件} />);
+    render(<MapView target={座標を登録したケース} />);
 
     await user.click(await screen.findByRole('button', { name: 'ピン: 県道の交差点（2）' }));
 
@@ -108,7 +108,7 @@ describe('MapView', () => {
 
   it('複数の証言があるピンを続けて選ぶと、その場所の証言を順に切り替え、最後の次は最初に戻る', async () => {
     const user = userEvent.setup();
-    render(<MapView target={座標を登録した案件} />);
+    render(<MapView target={座標を登録したケース} />);
     const 別荘のピン = await screen.findByRole('button', { name: 'ピン: 湖畔の別荘（1・3）' });
 
     // 前提: 最初は1番目（湖畔の別荘）を選択している
@@ -120,11 +120,11 @@ describe('MapView', () => {
   });
 
   it('地図に表示できない証言を、理由ごとに分けて一覧にする', () => {
-    const 交差点に座標が無い案件: Case = {
-      ...座標を登録した案件,
-      places: [座標を登録した案件.places[0]!, { id: 'place-crossing', name: '県道の交差点' }],
+    const 交差点に座標が無いケース: Case = {
+      ...座標を登録したケース,
+      places: [座標を登録したケース.places[0]!, { id: 'place-crossing', name: '県道の交差点' }],
     };
-    render(<MapView target={交差点に座標が無い案件} />);
+    render(<MapView target={交差点に座標が無いケース} />);
 
     const 一覧 = within(screen.getByRole('region', { name: '地図に表示できない証言' }));
     expect(within(一覧.getByRole('list', { name: '場所に座標が登録されていない証言' })).getByText('県道の防犯カメラ')).toBeInTheDocument();
@@ -134,18 +134,18 @@ describe('MapView', () => {
   });
 
   it('すべての証言を地図に表示できる場合は、表示できない証言の一覧を出さない', () => {
-    const 別荘の証言だけの案件: Case = {
-      ...座標を登録した案件,
-      claims: 座標を登録した案件.claims.filter((claim) => claim.placeId === 'place-villa'),
+    const 別荘の証言だけのケース: Case = {
+      ...座標を登録したケース,
+      claims: 座標を登録したケース.claims.filter((claim) => claim.placeId === 'place-villa'),
       relationships: [],
     };
-    render(<MapView target={別荘の証言だけの案件} />);
+    render(<MapView target={別荘の証言だけのケース} />);
 
     expect(screen.queryByRole('region', { name: '地図に表示できない証言' })).not.toBeInTheDocument();
   });
 
   it('地図に表示できる証言が1件も無い場合は、地図を出さずに、座標の登録と場所への言及を案内する', () => {
-    // 前提: サンプルの案件の場所には座標が登録されていない
+    // 前提: サンプルのケースの場所には座標が登録されていない
     render(<MapView target={sampleFictionalCase} />);
 
     expect(screen.getByText(/地図に表示できる証言がまだありません/)).toBeInTheDocument();

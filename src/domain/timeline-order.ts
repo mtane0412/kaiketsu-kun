@@ -1,7 +1,7 @@
 /**
  * 時系列ボードの並び順（相対関係）と、日時との整合性
  *
- * ボードの項目（証言）の位置は、日時ではなく、案件が持つ並び順（Case.timelineOrder）で決まります。
+ * ボードの項目（証言）の位置は、日時ではなく、ケースが持つ並び順（Case.timelineOrder）で決まります。
  * 日時（Claim.when）は任意の付加情報です。ただし、日時を持つ項目同士は、日時と矛盾する順には並べられません。
  *
  * 矛盾の定義: 前にある項目の日時の区間が、後ろにある項目の区間より完全に後であること。
@@ -21,7 +21,7 @@ export function timelineKeyOf(claimId: Id): TimelineKey {
   return `claim:${claimId}`;
 }
 
-/** ボードの項目のキーを、案件への登録順で返します。 */
+/** ボードの項目のキーを、ケースへの登録順で返します。 */
 function boardKeys(target: Pick<Case, 'claims'>): TimelineKey[] {
   return target.claims.map((claim) => timelineKeyOf(claim.id));
 }

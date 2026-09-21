@@ -31,7 +31,7 @@ const 見出し付きの記述: Claim = {
 };
 
 describe('TimelineView', () => {
-  it('証言を、案件の並び順のとおりに並べ、述べる日時を持つ証言にはカードの上に日時を示す', () => {
+  it('証言を、ケースの並び順のとおりに並べ、述べる日時を持つ証言にはカードの上に日時を示す', () => {
     // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ（夜8時10分ごろ）→ 隣家の住人（夜9時ごろ）→ 架空日報 → ユーザーの推測
     render(<TimelineView target={sampleFictionalCase} />);
 
@@ -67,13 +67,13 @@ describe('TimelineView', () => {
 
   it('本文のメンションは、トークンの記法ではなくエンティティの現在の名前で表示する', () => {
     // 前提: 本文のトークンが控えている表示名は「別荘の持ち主」だが、人物はその後「湖畔荘のオーナー」に改名されている
-    const 案件: Case = {
+    const ケース: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner' ? { ...person, name: '湖畔荘のオーナー' } : person
       ),
     };
-    render(<TimelineView target={案件} />);
+    render(<TimelineView target={ケース} />);
 
     const 隣家の証言 = screen.getByText(/明かりがついていて/).closest('li')!;
     expect(隣家の証言).toHaveTextContent(
@@ -106,8 +106,8 @@ describe('TimelineView', () => {
 
   it('見出しのある証言は、見出しを表示し、本文は折りたたんで示す', () => {
     // 前提: 長い本文に、要約としての見出しを付けている
-    const 案件: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
-    render(<TimelineView target={案件} />);
+    const ケース: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
+    render(<TimelineView target={ケース} />);
 
     const 証言 = screen.getByText('Zによる恐喝事件があった').closest('li')!;
     const 本文 = within(証言).getByText(/現金を渡すよう繰り返し迫った/);
@@ -124,8 +124,8 @@ describe('TimelineView', () => {
   });
 
   it('見出しのある証言は、本文の冒頭ではなく見出しを、つまみの名前にする', () => {
-    const 案件: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
-    render(<TimelineView target={案件} />);
+    const ケース: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 見出し付きの記述] };
+    render(<TimelineView target={ケース} />);
 
     expect(screen.getByRole('button', { name: '「Zによる恐喝事件があった」を動かす' })).toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe('TimelineView', () => {
   });
 });
 
-/** ストアの案件を時系列ボードに表示します。ボードへの書き足しがストアを通じて画面に反映されることを検証するために使います。 */
+/** ストアのケースを時系列ボードに表示します。ボードへの書き足しがストアを通じて画面に反映されることを検証するために使います。 */
 function StoreBoard() {
   return <TimelineView target={useCurrentCase()} />;
 }
@@ -291,8 +291,8 @@ describe('SpeakerView', () => {
 describe('エンティティの画像の表示', () => {
   const 住人の画像 = 'data:image/jpeg;base64,住人';
   const 別荘の画像 = 'data:image/jpeg;base64,別荘';
-  /** 隣家の住人と湖畔の別荘に画像を登録した案件です。 */
-  const 画像付きの案件: Case = {
+  /** 隣家の住人と湖畔の別荘に画像を登録したケースです。 */
+  const 画像付きのケース: Case = {
     ...sampleFictionalCase,
     persons: sampleFictionalCase.persons.map((person) =>
       person.id === 'person-neighbor' ? { ...person, imageDataUrl: 住人の画像 } : person
@@ -306,7 +306,7 @@ describe('エンティティの画像の表示', () => {
   }
 
   it('時系列の証言カードに、発言者の画像と、本文のメンションの画像を表示する', () => {
-    render(<TimelineView target={画像付きの案件} />);
+    render(<TimelineView target={画像付きのケース} />);
 
     const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
@@ -314,14 +314,14 @@ describe('エンティティの画像の表示', () => {
     expect(imageSources(住人の証言)).toEqual([住人の画像, 別荘の画像]);
   });
 
-  it('画像を登録していない案件では、画像を表示しない', () => {
+  it('画像を登録していないケースでは、画像を表示しない', () => {
     const { container } = render(<TimelineView target={sampleFictionalCase} />);
 
     expect(container.querySelector('img')).toBeNull();
   });
 
   it('証言者別ビューの見出しに、発言者の画像を表示する', () => {
-    render(<SpeakerView target={画像付きの案件} />);
+    render(<SpeakerView target={画像付きのケース} />);
 
     const 見出し = within(screen.getByRole('region', { name: '隣家の住人' })).getByRole('heading', { name: /隣家の住人/ });
 
@@ -348,13 +348,13 @@ describe('人物のアイコンの表示', () => {
   });
 
   it('アイコンの文字を指定した人物は、名前の先頭の文字ではなく、指定した文字をアイコンにする', () => {
-    const 案件: Case = {
+    const ケース: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-neighbor' ? { ...person, iconText: '住' } : person
       ),
     };
-    render(<TimelineView target={案件} />);
+    render(<TimelineView target={ケース} />);
 
     const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 
@@ -362,13 +362,13 @@ describe('人物のアイコンの表示', () => {
   });
 
   it('画像を登録した人物は、文字のアイコンではなく画像を表示する', () => {
-    const 案件: Case = {
+    const ケース: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-neighbor' ? { ...person, imageDataUrl: 'data:image/jpeg;base64,住人' } : person
       ),
     };
-    render(<TimelineView target={案件} />);
+    render(<TimelineView target={ケース} />);
 
     const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
 

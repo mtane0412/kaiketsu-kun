@@ -8,7 +8,7 @@
  * メモのメンションでつながった関連するエンティティ（findRelatedEntities）へのリンクを並べます。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、証言・エンティティへのリンクに引き継ぎます。
  *
- * 注意: 案件に無いIDが渡された場合（URLの直接入力、削除済みのエンティティ）は、見つからないことを表示します。
+ * 注意: ケースに無いIDが渡された場合（URLの直接入力、削除済みのエンティティ）は、見つからないことを表示します。
  * 人物・場所のフォームは初期値を初期化でのみ使用するため、呼び出し側はIDが変わるたびに key を変えて再マウントしてください。
  * useSearchParams を使うため、ページでは Suspense の中に置いてください。
  */
@@ -50,7 +50,7 @@ function CloseLink({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
   );
 }
 
-/** 案件に無いIDが渡された場合の表示です。 */
+/** ケースに無いIDが渡された場合の表示です。 */
 function NotFound({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
   return (
     <div className="space-y-4">

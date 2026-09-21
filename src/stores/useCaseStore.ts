@@ -1,18 +1,18 @@
 /**
- * 案件ストア
+ * ケースストア
  *
- * 複数の案件のうち、いま開いている案件を1件だけ保持し、変更のたびにブラウザへ保存します（src/lib/case-storage.ts）。
- * どの案件を開くかはURL（/cases/<案件のID>）が決めるため、このストアは案件の切り替えをURLから受け取ります（openCase）。
- * 案件の一覧（summaries）は、案件を開かずに一覧ページへ表示するために保持します。
- * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げて案件を変更しません。
+ * 複数のケースのうち、いま開いているケースを1件だけ保持し、変更のたびにブラウザへ保存します（src/lib/case-storage.ts）。
+ * どのケースを開くかはURL（/cases/<ケースのID>）が決めるため、このストアはケースの切り替えをURLから受け取ります（openCase）。
+ * ケースの一覧（summaries）は、ケースを開かずに一覧ページへ表示するために保持します。
+ * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
- * - LocalStorage を読み書きするため、案件を開く（openCase）・一覧を読む（refreshSummaries）操作は、
+ * - LocalStorage を読み書きするため、ケースを開く（openCase）・一覧を読む（refreshSummaries）操作は、
  *   ブラウザ側（useEffect の中）から呼び出してください。サーバー描画との食い違いを避けるためです。
  * - この段階はドメインモデルの検証が目的のため、スキーマのマイグレーションは実装していません。
- *   モデルを変更して保存済みデータが検証に失敗した場合は、案件を開かずに loadError へ理由を設定します
- *   （黙って空の案件に差し替えることはしません）。
+ *   モデルを変更して保存済みデータが検証に失敗した場合は、ケースを開かずに loadError へ理由を設定します
+ *   （黙って空のケースに差し替えることはしません）。
  */
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
@@ -29,36 +29,36 @@ import {
   type CaseSummary,
 } from '@/lib/case-storage';
 
-/** 案件が持つ一覧の名前です。 */
+/** ケースが持つ一覧の名前です。 */
 export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships';
 
 /** 一覧の名前と、その一覧に保存する要素の組です。 */
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
 
 type CaseStore = {
-  /** いま開いている案件です。開いていない場合は null です。 */
+  /** いま開いているケースです。開いていない場合は null です。 */
   currentCase: Case | null;
-  /** 保存済みの案件の一覧です。更新日時の新しい順に並びます。 */
+  /** 保存済みのケースの一覧です。更新日時の新しい順に並びます。 */
   summaries: CaseSummary[];
-  /** 案件を開けなかった理由です。開けている場合は null です。 */
+  /** ケースを開けなかった理由です。開けている場合は null です。 */
   loadError: string | null;
-  /** IDを指定して案件を開きます。開けない場合は案件を開かず、loadError に理由を設定します。 */
+  /** IDを指定してケースを開きます。開けない場合はケースを開かず、loadError に理由を設定します。 */
   openCase: (caseId: Id) => void;
-  /** 開いている案件を閉じます。案件の一覧ページへ移るときに使います。 */
+  /** 開いているケースを閉じます。ケースの一覧ページへ移るときに使います。 */
   closeCase: () => void;
-  /** 保存済みの案件の一覧を読み直します。 */
+  /** 保存済みのケースの一覧を読み直します。 */
   refreshSummaries: () => void;
-  /** 空の案件を作って保存し、そのIDを返します。開いている案件は切り替えません。 */
+  /** 空のケースを作って保存し、そのIDを返します。開いているケースは切り替えません。 */
   createCase: (name?: string) => Id;
   /**
-   * 型の保証が無いデータを検証し、新しい案件として保存して、そのIDを返します。
-   * 保存済みの案件とIDが重なる場合は、元の案件を上書きしないよう、新しいIDを振ります。
-   * 検証に失敗した場合は例外を投げ、案件を追加しません。
+   * 型の保証が無いデータを検証し、新しいケースとして保存して、そのIDを返します。
+   * 保存済みのケースとIDが重なる場合は、元のケースを上書きしないよう、新しいIDを振ります。
+   * 検証に失敗した場合は例外を投げ、ケースを追加しません。
    */
   importCase: (data: unknown) => Id;
-  /** 案件を保存から消します。開いている案件を消した場合は、開いている案件を空にします。 */
+  /** ケースを保存から消します。開いているケースを消した場合は、開いているケースを空にします。 */
   deleteCase: (caseId: Id) => void;
-  /** 開いている案件の名前を変更します。 */
+  /** 開いているケースの名前を変更します。 */
   renameCase: (name: string) => void;
   /** 同じIDの要素があれば置き換え、無ければ追加します。参照の整合性に違反する場合は例外を投げます。 */
   upsert: <K extends CollectionKey>(key: K, entity: Case[K][number]) => void;
@@ -71,18 +71,18 @@ type CaseStore = {
   remove: (key: CollectionKey, id: Id) => void;
   /**
    * 時系列ボードの項目を動かします。toIndex は、動かした後の並び順の中での位置（0始まり）です。
-   * 日時と矛盾する位置を指定した場合は例外を投げ、案件を変更しません。
+   * 日時と矛盾する位置を指定した場合は例外を投げ、ケースを変更しません。
    */
   moveTimelineItem: (key: TimelineKey, toIndex: number) => void;
 };
 
-/** 案件を開いていない状態で、案件を変更しようとしたときのメッセージです。 */
-const NO_OPEN_CASE_MESSAGE = '案件が開かれていません';
+/** ケースを開いていない状態で、ケースを変更しようとしたときのメッセージです。 */
+const NO_OPEN_CASE_MESSAGE = 'ケースが開かれていません';
 
 export const useCaseStore = create<CaseStore>()((set, get) => {
   /**
-   * 開いている案件を、与えられた関数の結果で置き換えて保存します。
-   * 案件を開いていない場合は例外を投げます（どの案件へ書き込むべきか決められないため）。
+   * 開いているケースを、与えられた関数の結果で置き換えて保存します。
+   * ケースを開いていない場合は例外を投げます（どのケースへ書き込むべきか決められないため）。
    */
   const updateCurrentCase = (update: (current: Case) => Case): void => {
     const { currentCase } = get();
@@ -120,7 +120,7 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 
     importCase: (data) => {
       const parsed = parseCase(data);
-      // 同じ案件を2回読み込んだ場合に、先に読み込んだ案件を失わないよう、IDが重なるときは新しいIDを振る
+      // 同じケースを2回読み込んだ場合に、先に読み込んだケースを失わないよう、IDが重なるときは新しいIDを振る
       const isDuplicated = listCaseSummaries().some((summary) => summary.id === parsed.id);
       const imported: Case = isDuplicated ? { ...parsed, id: nanoid() } : parsed;
       saveCase(imported);
@@ -182,9 +182,9 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 });
 
 /**
- * 開いている案件を返します。
- * 案件のボードと詳細は、案件を開けた場合だけ描画する（CaseStoreGate）ため、これらのコンポーネントからはこのフックを使います。
- * 案件を開いていない場合に呼び出すことは誤りのため、例外を投げます。
+ * 開いているケースを返します。
+ * ケースのボードと詳細は、ケースを開けた場合だけ描画する（CaseStoreGate）ため、これらのコンポーネントからはこのフックを使います。
+ * ケースを開いていない場合に呼び出すことは誤りのため、例外を投げます。
  */
 export function useCurrentCase(): Case {
   const currentCase = useCaseStore((state) => state.currentCase);
@@ -193,8 +193,8 @@ export function useCurrentCase(): Case {
 }
 
 /**
- * 保存済みのデータを読み込む準備を行い、案件の一覧を読み直します。
- * 1件だけ保存していた頃のデータがあれば、1件目の案件として移行します（移行できなかった場合は loadError に理由を設定します）。
+ * 保存済みのデータを読み込む準備を行い、ケースの一覧を読み直します。
+ * 1件だけ保存していた頃のデータがあれば、1件目のケースとして移行します（移行できなかった場合は loadError に理由を設定します）。
  * ブラウザ側（useEffect の中）から呼び出してください。
  */
 export function initializeCaseStore(): void {

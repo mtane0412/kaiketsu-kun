@@ -13,7 +13,7 @@
  *
  * 注意: このコンポーネントはレイアウト（src/app/(board)/layout.tsx）に置きます。レイアウトはページを移っても再マウントされないため、
  * 証言を開閉しても、ボードのスクロール位置や入力中の内容を保ちます。
- * 保存済みの案件の復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
+ * 保存済みのケースの復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
  * useSearchParams を使うため、ページでは Suspense の中に置いてください。
  */
 'use client';

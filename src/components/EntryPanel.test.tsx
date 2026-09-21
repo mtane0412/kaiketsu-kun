@@ -406,7 +406,7 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.click(screen.getByRole('option', { name: optionName }));
   }
 
-  /** 持ち主のメモが管理人と別荘に触れている案件を読み込みます。 */
+  /** 持ち主のメモが管理人と別荘に触れているケースを読み込みます。 */
   function loadCaseWithOwnerNote() {
     openTestCase({
       ...sampleFictionalCase,

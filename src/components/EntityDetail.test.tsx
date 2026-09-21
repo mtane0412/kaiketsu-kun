@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
   localStorage.clear();
-  // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
+  // 前提: サンプルのケースの時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
   openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
 });
@@ -51,13 +51,13 @@ describe('PersonDetail', () => {
 
   it('メモのメンションでつながったエンティティを、そのエンティティの詳細へのリンクで表示する', () => {
     // 前提: 隣家の住人のメモから、湖畔の別荘に言及している
-    const 案件: Case = {
+    const ケース: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-neighbor' ? { ...person, note: '@[湖畔の別荘](place:place-villa)の隣に住んでいます。' } : person
       ),
     };
-    openTestCase(案件);
+    openTestCase(ケース);
     render(<PersonDetail personId="person-neighbor" />);
 
     const 関連 = screen.getByRole('region', { name: '関連するエンティティ' });
@@ -77,7 +77,7 @@ describe('PersonDetail', () => {
   });
 
   it('どの証言からも参照されていない人物を削除すると、ボードに戻る', async () => {
-    // 前提: 証言にも関係にも現れない「町役場の職員」を登録した案件を用意する
+    // 前提: 証言にも関係にも現れない「町役場の職員」を登録したケースを用意する
     const user = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     openTestCase({
@@ -103,7 +103,7 @@ describe('PersonDetail', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
-  it('案件に無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
+  it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<PersonDetail personId="person-deleted" />);
 
     expect(screen.getByRole('heading', { name: '人物が見つかりません' })).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('PlaceDetail', () => {
     ]);
   });
 
-  it('案件に無い場所を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
+  it('ケースに無い場所を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<PlaceDetail placeId="place-deleted" />);
 
     expect(screen.getByRole('heading', { name: '場所が見つかりません' })).toBeInTheDocument();

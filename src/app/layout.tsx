@@ -1,8 +1,8 @@
 /**
  * ルートレイアウト
  *
- * 案件のデータはブラウザ内にのみ保存します。どの案件を開くかはURL（/cases/<案件のID>）が決めるため、
- * 案件を開く処理は、案件のボードのレイアウト（src/app/cases/[caseId]/layout.tsx）の CaseGate が担います。
+ * ケースのデータはブラウザ内にのみ保存します。どのケースを開くかはURL（/cases/<ケースのID>）が決めるため、
+ * ケースを開く処理は、ケースのボードのレイアウト（src/app/cases/[caseId]/layout.tsx）の CaseGate が担います。
  */
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';

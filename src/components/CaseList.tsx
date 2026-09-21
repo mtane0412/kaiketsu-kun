@@ -1,14 +1,14 @@
 /**
- * 案件の一覧
+ * ケースの一覧
  *
- * ブラウザに保存されている案件を並べ、開く案件を選びます（トップページ）。
- * 案件をまたぐ操作（新しい案件・JSONの読み込み・架空のサンプルの読み込み・案件の削除）は、この画面が担います。
- * 案件を1件だけ保存していた頃のデータがある場合は、一覧を読む前に1件目の案件として移行します。
+ * ブラウザに保存されているケースを並べ、開くケースを選びます（トップページ）。
+ * ケースをまたぐ操作（新しいケース・JSONの読み込み・架空のサンプルの読み込み・ケースの削除）は、この画面が担います。
+ * ケースを1件だけ保存していた頃のデータがある場合は、一覧を読む前に1件目のケースとして移行します。
  *
  * 1件だけ保存していた頃のデータを移行できなかった場合は、その理由もこの画面で伝えます（移行は起動のたびに試みるため、一覧が入口になります）。
  *
  * 注意: LocalStorage はブラウザにしか無いため、一覧の読み込みはマウント後（useEffect）に行います。
- * 読み込みが終わるまでは案件が0件に見えるため、「案件がありません」という案内は、読み込みが終わってから表示します。
+ * 読み込みが終わるまではケースが0件に見えるため、「ケースがありません」という案内は、読み込みが終わってから表示します。
  */
 'use client';
 
@@ -46,13 +46,13 @@ export function CaseList() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 一覧では案件を開かないため、前に開いていた案件を閉じる
+    // 一覧ではケースを開かないため、前に開いていたケースを閉じる
     closeCase();
     initializeCaseStore();
     setIsLoaded(true);
   }, [closeCase]);
 
-  /** 作った・読み込んだ案件のボードへ移ります。 */
+  /** 作った・読み込んだケースのボードへ移ります。 */
   const openBoard = (caseId: Id) => router.push(boardHref(caseId, 'timeline'));
 
   const handleCreate = () => {
@@ -81,17 +81,17 @@ export function CaseList() {
 
   const handleDelete = (caseId: Id, name: string) => {
     // 削除は取り消せないため、実行前に確認する
-    if (!window.confirm(`案件「${name}」を削除しますか？この操作は取り消せません。`)) return;
+    if (!window.confirm(`ケース「${name}」を削除しますか？この操作は取り消せません。`)) return;
     deleteCase(caseId);
   };
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <h1 className="text-xl font-bold text-slate-900">案件</h1>
+      <h1 className="text-xl font-bold text-slate-900">ケース</h1>
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={handleCreate} className={BUTTON_CLASS}>
-          新しい案件
+          新しいケース
         </button>
         <label className={`${BUTTON_CLASS} cursor-pointer`}>
           JSONを読み込む
@@ -132,7 +132,7 @@ export function CaseList() {
         ))}
       </ul>
 
-      {isLoaded && summaries.length === 0 && <p className="text-sm text-slate-600">保存されている案件はありません。</p>}
+      {isLoaded && summaries.length === 0 && <p className="text-sm text-slate-600">保存されているケースはありません。</p>}
     </div>
   );
 }

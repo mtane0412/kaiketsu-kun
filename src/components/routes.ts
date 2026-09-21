@@ -1,8 +1,8 @@
 /**
  * 画面のURLを組み立てる関数
  *
- * 案件は複数を保存できるため、ボードと詳細のURLは、どの案件かを表す案件のID（/cases/<案件のID>）から始めます。
- * 案件の一覧はトップページ（/）です。
+ * ケースは複数を保存できるため、ボードと詳細のURLは、どのケースかを表すケースのID（/cases/<ケースのID>）から始めます。
+ * ケースの一覧はトップページ（/）です。
  * 証言・人物・場所の詳細は、それぞれ独立したページ（.../claims/<ID>・.../persons/<ID>・.../places/<ID>）として開きます。
  * ボードのタブはURLのクエリ（?tab=）に持たせます。詳細ページからブラウザの「戻る」や
  * 「ボードに戻る」で、元のタブに戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
@@ -37,17 +37,17 @@ function tabQuery(tab: TabKey): string {
   return tab === DEFAULT_TAB ? '' : `?${TAB_SEARCH_PARAM}=${tab}`;
 }
 
-/** 案件のボードのURLの、共通の前半（/cases/<案件のID>）を組み立てます。 */
+/** ケースのボードのURLの、共通の前半（/cases/<ケースのID>）を組み立てます。 */
 function caseBasePath(caseId: Id): string {
   return `/cases/${encodeURIComponent(caseId)}`;
 }
 
-/** 案件の一覧ページのURLを返します。 */
+/** ケースの一覧ページのURLを返します。 */
 export function casesHref(): string {
   return '/';
 }
 
-/** 案件のボードのURLを返します。 */
+/** ケースのボードのURLを返します。 */
 export function boardHref(caseId: Id, tab: TabKey): string {
   return `${caseBasePath(caseId)}${tabQuery(tab)}`;
 }

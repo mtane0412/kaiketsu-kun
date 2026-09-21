@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
   localStorage.clear();
-  // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
+  // 前提: サンプルのケースの時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
   openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
 });
@@ -118,7 +118,7 @@ describe('ClaimDetail', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
-  it('案件に無い証言を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
+  it('ケースに無い証言を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<ClaimDetail claimId="claim-deleted" />);
 
     expect(screen.getByRole('heading', { name: '証言が見つかりません' })).toBeInTheDocument();
