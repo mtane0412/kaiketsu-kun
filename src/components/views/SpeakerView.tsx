@@ -30,7 +30,7 @@ export function SpeakerView({ target }: { target: Case }) {
           </h3>
           <ul className="space-y-2">
             {group.claims.map((view) => (
-              <ClaimCard key={view.claim.id} view={view} showSpeaker={false} showEvent />
+              <ClaimCard key={view.claim.id} view={view} showSpeaker={false} />
             ))}
           </ul>
         </section>

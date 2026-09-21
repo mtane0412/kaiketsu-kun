@@ -4,18 +4,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   allowedIndexRange,
-  legacyTimelineOrder,
   moveTimelineItem,
   resolveTimelineOrder,
   settleTimelineItems,
 } from './timeline-order';
 import type { Case, Claim, TimeRef } from './types';
 
-/** ユーザーの推測として、出来事に束ねていない主張を作ります。 */
-function 主張(id: string, when?: TimeRef, eventId?: string): Claim {
+/** ユーザーの推測としての主張を作ります。 */
+function 主張(id: string, when?: TimeRef): Claim {
   const claim: Claim = { id, speaker: { kind: 'user' }, viaPersonIds: [], content: `${id}の内容`, mentionedPersonIds: [] };
   if (when) claim.when = when;
-  if (eventId) claim.eventId = eventId;
   return claim;
 }
 
@@ -25,7 +23,6 @@ function 案件(parts: Partial<Case>): Case {
     name: '湖畔の別荘の失踪',
     persons: [],
     places: [],
-    events: [],
     claims: [],
     relationships: [],
     timelineOrder: [],
@@ -39,40 +36,32 @@ const 八月十五日: TimeRef = { text: '8月15日', earliest: '1998-08-15' };
 const 八月中: TimeRef = { text: '1998年8月', earliest: '1998-08' };
 
 describe('resolveTimelineOrder', () => {
-  it('保存した並び順のとおりに、出来事の束と、出来事に束ねていない主張を並べる', () => {
+  it('保存した並び順のとおりに、主張を並べる', () => {
     const target = 案件({
-      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された' }],
-      claims: [主張('claim-arrival'), 主張('claim-search')],
-      timelineOrder: ['claim:claim-search', 'event:event-last-seen', 'claim:claim-arrival'],
+      claims: [主張('claim-arrival'), 主張('claim-last-seen'), 主張('claim-search')],
+      timelineOrder: ['claim:claim-search', 'claim:claim-last-seen', 'claim:claim-arrival'],
     });
 
-    expect(resolveTimelineOrder(target)).toEqual(['claim:claim-search', 'event:event-last-seen', 'claim:claim-arrival']);
+    expect(resolveTimelineOrder(target)).toEqual(['claim:claim-search', 'claim:claim-last-seen', 'claim:claim-arrival']);
   });
 
-  it('並び順に載っていない項目は、末尾に、出来事、主張の順で登録順に並べる', () => {
+  it('並び順に載っていない主張は、末尾に登録順で並べる', () => {
     // 前提: 「ボードに書き足す」で位置を決めずに書いた主張は、並び順に載せずに保存される
     const target = 案件({
-      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された' }],
       claims: [主張('claim-arrival'), 主張('claim-search'), 主張('claim-memo')],
       timelineOrder: ['claim:claim-search'],
     });
 
-    expect(resolveTimelineOrder(target)).toEqual([
-      'claim:claim-search',
-      'event:event-last-seen',
-      'claim:claim-arrival',
-      'claim:claim-memo',
-    ]);
+    expect(resolveTimelineOrder(target)).toEqual(['claim:claim-search', 'claim:claim-arrival', 'claim:claim-memo']);
   });
 
-  it('削除された項目と、出来事に束ねられてボードの項目ではなくなった主張は、並び順から除く', () => {
+  it('削除された主張は、並び順から除く', () => {
     const target = 案件({
-      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された' }],
-      claims: [主張('claim-neighbor', undefined, 'event-last-seen'), 主張('claim-search')],
-      timelineOrder: ['claim:claim-neighbor', 'claim:claim-deleted', 'claim:claim-search', 'event:event-last-seen'],
+      claims: [主張('claim-search')],
+      timelineOrder: ['claim:claim-deleted', 'claim:claim-search'],
     });
 
-    expect(resolveTimelineOrder(target)).toEqual(['claim:claim-search', 'event:event-last-seen']);
+    expect(resolveTimelineOrder(target)).toEqual(['claim:claim-search']);
   });
 });
 
@@ -103,23 +92,6 @@ describe('allowedIndexRange', () => {
     });
 
     expect(allowedIndexRange(target, 'claim:claim-summer')).toEqual({ min: 0, max: 2 });
-  });
-
-  it('出来事の束は、束ねた主張が述べる日時の全体（最も早い始まりから最も遅い終わりまで）を区間とする', () => {
-    // 前提: 出来事に束ねた主張は 8月10日 と 8月12日 を述べている
-    const target = 案件({
-      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された' }],
-      claims: [
-        主張('claim-neighbor', 八月十日, 'event-last-seen'),
-        主張('claim-caretaker', 八月十二日, 'event-last-seen'),
-        主張('claim-before', { text: '8月11日', earliest: '1998-08-11' }),
-        主張('claim-search', 八月十五日),
-      ],
-      timelineOrder: ['event:event-last-seen', 'claim:claim-before', 'claim:claim-search'],
-    });
-
-    // 8月11日の主張は束の区間（8月10日〜12日）と重なるため、束の前にも後ろにも置ける。8月15日の後ろには置けない
-    expect(allowedIndexRange(target, 'claim:claim-before')).toEqual({ min: 0, max: 1 });
   });
 });
 
@@ -169,35 +141,9 @@ describe('settleTimelineItems', () => {
     expect(settleTimelineItems(target, ['claim:claim-summer'])).toEqual(resolveTimelineOrder(target));
   });
 
-  it('ボードの項目ではないキー（出来事に束ねた主張など）は無視する', () => {
+  it('ボードの項目ではないキー（削除された主張など）は無視する', () => {
     const target = 案件({ claims: [主張('claim-arrival', 八月十日)] });
 
     expect(settleTimelineItems(target, ['claim:claim-unknown'])).toEqual(['claim:claim-arrival']);
-  });
-});
-
-describe('legacyTimelineOrder', () => {
-  it('並び順を持たない頃のデータを、当時の表示順（日時の早い順、並び順の数値の順、どちらも無い項目）に並べる', () => {
-    const target = 案件({
-      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された' }, { id: 'event-empty', title: '主張の無い出来事' }],
-      claims: [
-        主張('claim-memo'),
-        主張('claim-episode-4', { text: '第4話', order: 4 }),
-        主張('claim-search', 八月十五日),
-        主張('claim-caretaker', 八月十二日, 'event-last-seen'),
-        主張('claim-episode-3', { text: '第3話', order: 3 }),
-        主張('claim-arrival', 八月十日),
-      ],
-    });
-
-    expect(legacyTimelineOrder(target)).toEqual([
-      'claim:claim-arrival',
-      'event:event-last-seen',
-      'claim:claim-search',
-      'claim:claim-episode-3',
-      'claim:claim-episode-4',
-      'event:event-empty',
-      'claim:claim-memo',
-    ]);
   });
 });

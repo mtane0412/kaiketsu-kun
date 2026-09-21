@@ -17,7 +17,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
 import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
-import type { Case, Claim, Id } from '@/domain/types';
+import type { Case, Id } from '@/domain/types';
 
 /** 案件を保存するLocalStorageのキーです。 */
 export const STORAGE_KEY = 'testimony-board-case';
@@ -25,7 +25,7 @@ export const STORAGE_KEY = 'testimony-board-case';
 export const BACKUP_STORAGE_KEY = 'testimony-board-case-backup';
 
 /** 案件が持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'events' | 'claims' | 'relationships';
+export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships';
 
 /** 一覧の名前と、その一覧に保存する要素の組です。 */
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
@@ -63,16 +63,10 @@ function createEmptyCase(): Case {
     name: '新しい案件',
     persons: [],
     places: [],
-    events: [],
     claims: [],
     relationships: [],
     timelineOrder: [],
   };
-}
-
-/** 主張が属するボードの項目（束ねた出来事、束ねていなければ主張自身）のキーを返します。 */
-function boardKeyOf(claim: Claim): TimelineKey {
-  return claim.eventId === undefined ? timelineKeyOf('claim', claim.id) : timelineKeyOf('event', claim.eventId);
 }
 
 export const useCaseStore = create<CaseStore>()(
@@ -88,14 +82,10 @@ export const useCaseStore = create<CaseStore>()(
       upsertMany: (entries) => {
         const { currentCase } = get();
         let nextCase = currentCase;
-        /** 日時の区間が変わった可能性のあるボードの項目です。 */
+        /** 日時が変わった可能性のあるボードの項目です。 */
         const touchedKeys: TimelineKey[] = [];
         for (const { key, entity } of entries) {
-          if (key === 'claims') {
-            // 束から外れた主張は、外れた元の束の区間も変える
-            const previous = currentCase.claims.find((claim) => claim.id === entity.id);
-            touchedKeys.push(...(previous ? [boardKeyOf(previous)] : []), boardKeyOf(entity));
-          }
+          if (key === 'claims') touchedKeys.push(timelineKeyOf(entity.id));
           const items = nextCase[key] as { id: Id }[];
           const exists = items.some((item) => item.id === entity.id);
           const nextItems = exists ? items.map((item) => (item.id === entity.id ? entity : item)) : [...items, entity];
@@ -115,16 +105,11 @@ export const useCaseStore = create<CaseStore>()(
       remove: (key, id) => {
         const { currentCase } = get();
         const items = currentCase[key] as { id: Id }[];
-        let nextCase = { ...currentCase, [key]: items.filter((item) => item.id !== id) } as Case;
+        const nextCase = { ...currentCase, [key]: items.filter((item) => item.id !== id) } as Case;
 
         const violations = findCaseViolations(nextCase);
         if (violations.length > 0) {
           throw new Error(`他のデータから参照されているため削除できません\n${violations.join('\n')}`);
-        }
-        // 束ねた主張を削除すると束の区間が狭まり、前後の項目と矛盾する場合がある
-        const removedClaim = key === 'claims' ? currentCase.claims.find((claim) => claim.id === id) : undefined;
-        if (removedClaim) {
-          nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, [boardKeyOf(removedClaim)]) };
         }
         set({ currentCase: nextCase });
       },

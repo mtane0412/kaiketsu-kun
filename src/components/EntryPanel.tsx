@@ -1,11 +1,11 @@
 /**
  * 登録済みの一覧（台帳）
  *
- * 人物・場所・出来事・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
+ * 人物・場所・主張のうち1種類を選び、入力フォームと登録済みの一覧を表示します。
  * 一覧の「編集」を選ぶとフォームが編集に切り替わり、「削除」は他のデータから参照されている場合に
  * 理由を示して中止します。
  *
- * 日常の入力は時系列ボードへの書き足しで行います。このパネルは、ボード上のメンションや出来事の見出しから
+ * 日常の入力は時系列ボードへの書き足しで行います。このパネルは、ボード上のメンションから
  * エンティティの詳細を編集するため、およびボードに現れていないエンティティを編集・削除するための導線です。
  * initial は useState の初期化でのみ使用するため、対象を切り替えるときは呼び出し側で key を変えて再マウントしてください。
  */
@@ -16,7 +16,7 @@ import { describeClaimAttribution } from '@/domain/case-views';
 import { contentToPlainText } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore, type CollectionKey } from '@/stores/useCaseStore';
-import { EventForm, PersonForm, PlaceForm } from './forms/BasicForms';
+import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { ClaimForm } from './forms/ClaimForm';
 
 /** このパネルで扱う一覧の名前です。関係（relationships）はグラフ表示を移植する段階で追加します。 */
@@ -54,14 +54,6 @@ const SECTIONS: Section[] = [
     listItems: (target) => target.places.map((place) => ({ id: place.id, label: place.name })),
     renderForm: (target, editingId, onDone) => (
       <PlaceForm initial={target.places.find((place) => place.id === editingId)} onDone={onDone} />
-    ),
-  },
-  {
-    key: 'events',
-    label: '出来事',
-    listItems: (target) => target.events.map((event) => ({ id: event.id, label: event.title })),
-    renderForm: (target, editingId, onDone) => (
-      <EventForm initial={target.events.find((event) => event.id === editingId)} onDone={onDone} />
     ),
   },
   {

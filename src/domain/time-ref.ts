@@ -1,5 +1,5 @@
 /**
- * 時刻参照（TimeRef）の解釈・並べ替え・食い違い判定
+ * 時刻参照（TimeRef）の解釈・並べ替え
  *
  * TimeRef の earliest / latest は、精度の異なるISO 8601の部分表記を受け付けます。
  * - 年: '1998'
@@ -121,25 +121,4 @@ export function compareTimeRef(a: TimeRef | undefined, b: TimeRef | undefined): 
     return intervalA.start - intervalB.start || intervalA.end - intervalB.end;
   }
   return (a?.order ?? 0) - (b?.order ?? 0);
-}
-
-/**
- * 2つの時刻参照が食い違っているかを判定します。
- *
- * - 両方が日時を持つ場合: 区間が重ならなければ食い違いです。
- * - 両方が日時を持たず order を持つ場合: order が異なれば食い違いです。
- * - それ以外: 比較できないため、食い違いとは判定しません。
- */
-export function isTimeConflict(a: TimeRef | undefined, b: TimeRef | undefined): boolean {
-  if (!a || !b) return false;
-
-  const intervalA = toInterval(a);
-  const intervalB = toInterval(b);
-  if (intervalA && intervalB) {
-    return intervalA.end < intervalB.start || intervalB.end < intervalA.start;
-  }
-  if (!intervalA && !intervalB && a.order !== undefined && b.order !== undefined) {
-    return a.order !== b.order;
-  }
-  return false;
 }

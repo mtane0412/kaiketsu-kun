@@ -7,6 +7,7 @@
  * 3. 参照の整合性（IDの参照先と、主張の本文のメンションの参照先が案件内に存在すること）と、経由の規則
  *
  * 時系列ボードの並び順（timelineOrder）を持たない頃のデータは、当時の表示順を並び順として補います。
+ * 出来事（Event）に主張を束ねていた頃のデータは、束を解いて主張だけを並べる形に変換します（src/domain/legacy-events.ts）。
  * 発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除きます（発言者は speaker に保存済みです）。
  * ソース（Source）を人物とは別の種類で持っていた頃のデータは、ソースを人物に統合します（migrateLegacySources）。
  *
@@ -14,9 +15,10 @@
  */
 import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
+import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
 import { isValidPartialIso, toInterval } from './time-ref';
-import { legacyTimelineOrder } from './timeline-order';
-import type { Case, Claim, Id, Person, Speaker } from './types';
+import { settleTimelineItems } from './timeline-order';
+import type { Case, Id, Person, Speaker } from './types';
 
 const idSchema = z.string().min(1);
 
@@ -100,13 +102,8 @@ const caseSchema = z.object({
       note: z.string().optional(),
     })
   ),
-  events: z.array(
-    z.object({
-      id: idSchema,
-      title: z.string(),
-      description: z.string().optional(),
-    })
-  ),
+  // 出来事を廃止する前のデータだけが持つ項目です（migrateLegacyEvents で束を解きます）
+  events: z.array(z.object({ id: idSchema, title: z.string() })).optional(),
   claims: z.array(
     // 評価（assessment）を廃止する前に保存したデータも読み込めるよう、未知のキーは拒否せずに取り除く（z.object の既定の動作）
     z.object({
@@ -119,6 +116,7 @@ const caseSchema = z.object({
       title: z.string().optional(),
       content: z.string(),
       statedAt: timeRefSchema.optional(),
+      // 出来事を廃止する前のデータだけが持つ項目です
       eventId: idSchema.optional(),
       mentionedPersonIds: z.array(idSchema),
       when: timeRefSchema.optional(),
@@ -148,13 +146,11 @@ export function findCaseViolations(target: Case): string[] {
   const idsOf = (items: { id: string }[]) => new Set(items.map((item) => item.id));
   const personIds = idsOf(target.persons);
   const placeIds = idsOf(target.places);
-  const eventIds = idsOf(target.events);
   const claimIds = idsOf(target.claims);
 
   const mentionTargets: Record<MentionKind, { ids: Set<string>; name: string }> = {
     person: { ids: personIds, name: '人物' },
     place: { ids: placeIds, name: '場所' },
-    event: { ids: eventIds, name: '出来事' },
   };
 
   const check = (known: Set<string>, id: string | undefined, entityName: string) => {
@@ -169,7 +165,6 @@ export function findCaseViolations(target: Case): string[] {
     if (claim.speaker.kind === 'user' && claim.viaPersonIds.length > 0) {
       violations.push(`ユーザーの推測に経由は指定できません: ${claim.id}`);
     }
-    check(eventIds, claim.eventId, '出来事');
     check(placeIds, claim.placeId, '場所');
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
     // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
@@ -204,7 +199,7 @@ const LEGACY_TRAILING_SOURCE_TOKEN_PATTERN = /\s*@\[[^\]]*\]\(source:([^)\s]+)\)
  *
  * 変換の必要が無いデータは、そのままの内容で返します。
  */
-function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Claim[] } {
+function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: LegacyClaim[] } {
   const persons: Person[] = [...data.persons];
   const personIdBySourceId = new Map<Id, Id>();
 
@@ -233,7 +228,7 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Cl
     return personId;
   };
 
-  const claims = data.claims.map(({ speaker: parsedSpeaker, sourceId, viaPersonIds, content: parsedContent, ...rest }): Claim => {
+  const claims = data.claims.map(({ speaker: parsedSpeaker, sourceId, viaPersonIds, content: parsedContent, ...rest }): LegacyClaim => {
     const sourcePersonId = sourceId === undefined ? undefined : personIdOf(sourceId);
 
     let speaker: Speaker;
@@ -284,9 +279,13 @@ export function parseCase(data: unknown): Case {
     throw new Error(`案件データの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, ...current } = result.data;
-  const migrated = { ...current, ...migrateLegacySources(result.data) };
-  const parsed: Case = { ...migrated, timelineOrder: migrated.timelineOrder ?? legacyTimelineOrder(migrated) };
+  const { sources: _legacySources, events, timelineOrder, ...current } = result.data;
+  const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
+  let parsed: Case = { ...current, persons, ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }) };
+  // 束は束ねた主張の日時の全体を区間としていたため、束を解くと、束の前後にあった主張と日時が矛盾する並びになる場合がある
+  if (events && events.length > 0) {
+    parsed = { ...parsed, timelineOrder: settleTimelineItems(parsed, parsed.timelineOrder) };
+  }
   const violations = findCaseViolations(parsed);
   if (violations.length > 0) {
     throw new Error(`案件データの参照に問題があります\n${violations.join('\n')}`);

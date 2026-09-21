@@ -19,7 +19,7 @@ describe('CaseBoard', () => {
     render(<CaseBoard />);
 
     expect(await screen.findByDisplayValue('湖畔の別荘失踪事件（架空）')).toBeInTheDocument();
-    expect(screen.getByRole('article', { name: '持ち主が最後に目撃された' })).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/夜9時ごろ、/)).toBeInTheDocument();
     // 入力はボードへの書き足しに一本化したため、入力専用のタブは持たない
     expect(screen.queryByRole('tab', { name: '入力' })).not.toBeInTheDocument();
 

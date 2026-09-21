@@ -42,21 +42,10 @@ describe('EntryPanel', () => {
     });
   });
 
-  it('出来事を、タイトルとメモだけで登録する', async () => {
-    // 出来事は主張を束ねるラベルであり、日時・場所・人物は束ねた主張から導出するため、入力欄を持たない
-    const user = userEvent.setup();
+  it('種類の選択肢に「出来事」は無い（語られる出来事は、すべて誰かの主張として書く）', () => {
     render(<EntryPanel />);
 
-    await user.click(screen.getByRole('tab', { name: /出来事/ }));
-    await user.type(screen.getByLabelText('タイトル'), '警察が別荘を捜索した');
-    await user.type(screen.getByLabelText('メモ'), '捜索の範囲は資料によって異なる');
-    await user.click(screen.getByRole('button', { name: '出来事を保存' }));
-
-    expect(useCaseStore.getState().currentCase.events.at(-1)).toEqual({
-      id: expect.any(String),
-      title: '警察が別荘を捜索した',
-      description: '捜索の範囲は資料によって異なる',
-    });
+    expect(screen.queryByRole('tab', { name: /出来事/ })).not.toBeInTheDocument();
   });
 
   it('主張から参照されている人物を削除しようとすると、理由を示して削除しない', async () => {
@@ -114,7 +103,7 @@ describe('EntryPanel', () => {
     await user.click(screen.getByRole('button', { name: /^夜7時に見回りをしたとき.*を編集/ }));
 
     expect(screen.getByLabelText('内容')).toHaveValue(
-      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。@持ち主が最後に目撃された'
+      '夜7時に見回りをしたとき、@湖畔の別荘はすでに真っ暗で、@別荘の持ち主の車も無かった。'
     );
 
     // 検証: 発言者と経由は本文ではなく「発言者」に読み込む

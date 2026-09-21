@@ -1,8 +1,8 @@
 /**
  * 主張（人物や媒体の発言・ユーザーの推測）の入力フォーム
  *
- * 入力の中心は本文の1欄です。本文に「@」で人物・場所・出来事を書くと、
- * 対象の出来事・場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
+ * 入力の中心は本文の1欄です。本文に「@」で人物・場所を書くと、
+ * 場所・言及している人物を本文から導出します（規則は src/domain/mention.ts を参照）。
  * 未登録の名前は候補の一覧から新規作成でき、新しいエンティティは主張と同時に保存します。
  * 本文が長い主張には、本文を要約する見出しを任意で付けられます。見出しはメンションに対応せず、参照の導出には使いません。
  * 誰の発言か、誰を経由して伝わったかは本文には書かず、投稿ボタンの横の「発言者」で選びます（SpeakerPicker）。
@@ -12,7 +12,7 @@
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。「詳細」の項目は入力欄を表示しないだけで、編集時は入力済みの値を保持します。
- * 新規登録時は、ボード上の書いた位置（defaults）に従って、束ねる出来事と時系列の並び順の中での位置を決めます。
+ * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
  *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
@@ -27,15 +27,14 @@ import {
   claimToDraft,
   deriveClaimLinks,
   draftToContent,
-  formatMention,
   parseContent,
   type ClaimDraft,
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
 import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
-import { resolveTimelineOrder, timelineKeyOf } from '@/domain/timeline-order';
-import type { Case, Claim, Id } from '@/domain/types';
+import { timelineKeyOf } from '@/domain/timeline-order';
+import type { Case, Claim } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
 import { MentionTextarea, type MentionCandidate } from './MentionTextarea';
@@ -51,7 +50,6 @@ function caseToCandidates(target: Case): MentionCandidate[] {
       keywords: person.aliases,
     })),
     ...target.places.map((place) => ({ kind: 'place' as const, id: place.id, label: place.name })),
-    ...target.events.map((event) => ({ kind: 'event' as const, id: event.id, label: event.title })),
   ];
 }
 
@@ -62,8 +60,6 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
       return { key: 'persons', entity: { id, name } };
     case 'place':
       return { key: 'places', entity: { id, name } };
-    case 'event':
-      return { key: 'events', entity: { id, title: name } };
   }
 }
 
@@ -71,13 +67,7 @@ function createEntry(kind: MentionKind, id: string, name: string): UpsertEntry {
  * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
  */
 export type ClaimDefaults = {
-  /** 出来事の束の中で書いた場合の出来事です。本文に出来事のメンションが無いときに採用します。 */
-  eventId?: Id;
-  /**
-   * 項目と項目の間で書いた場合の、時系列の並び順の中での位置（0始まり）です。
-   * 保存した主張（新しい出来事に束ねた場合はその出来事の束）を、この位置に並べます。
-   * 本文のメンションで既存の出来事に束ねた場合は、その束の位置に従うため使用しません。
-   */
+  /** 項目と項目の間で書いた場合の、時系列の並び順の中での位置（0始まり）です。保存した主張を、この位置に並べます。 */
   insertIndex?: number;
 };
 
@@ -112,22 +102,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const hasDetails = Boolean(initial?.statedAt || initial?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
-  const typedContent = draftToContent({ ...draft, text: draft.text.trim() });
-  // 出来事の束の中で書いた主張は、本文に出来事のメンションが無ければ、その出来事のメンションを末尾に補う。
-  // 参照を項目に直接設定せず本文に補うのは、「参照は本文から導出する」という規則を保つため
-  const defaultEvent =
-    deriveClaimLinks(typedContent).eventId === undefined
-      ? currentCase.events.find((event) => event.id === defaults?.eventId)
-      : undefined;
-  const content = defaultEvent
-    ? `${typedContent} ${formatMention({ kind: 'event', id: defaultEvent.id, label: defaultEvent.title })}`
-    : typedContent;
+  const content = draftToContent({ ...draft, text: draft.text.trim() });
   const links = deriveClaimLinks(content);
   const labelOf = (kind: MentionKind, id: string | undefined) =>
     candidates.find((candidate) => candidate.kind === kind && candidate.id === id)?.label;
   /** 本文から読み取れた参照です。読み取れなかった項目は含めません。 */
   const summaryItems = [
-    { term: MENTION_KIND_LABELS.event, description: labelOf('event', links.eventId) },
     { term: MENTION_KIND_LABELS.place, description: labelOf('place', links.placeId) },
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
   ].filter((item) => item.description);
@@ -177,10 +157,9 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     ]);
     const newEntries = pending.filter((item) => usedIds.has(item.mention.id)).map((item) => item.entry);
 
-    // 書いた位置に並べるのは、この保存でボードに新しく現れる項目だけ
-    const boardKey =
-      claim.eventId === undefined ? timelineKeyOf('claim', claim.id) : timelineKeyOf('event', claim.eventId);
-    const insertIndex = resolveTimelineOrder(currentCase).includes(boardKey) ? undefined : defaults?.insertIndex;
+    // 書いた位置に並べるのは新規登録のときだけ（編集では、ボード上の位置を変えない）
+    const boardKey = timelineKeyOf(claim.id);
+    const insertIndex = initial ? undefined : defaults?.insertIndex;
 
     try {
       upsertMany([...newEntries, { key: 'claims', entity: claim }]);
@@ -223,14 +202,14 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         hideLabel={compact}
         placeholder={
           compact
-            ? '分かったことを書く（「@」で人物・場所・出来事。誰の発言かは下の「発言者」で選ぶ）'
+            ? '分かったことを書く（「@」で人物・場所。誰の発言かは下の「発言者」で選ぶ）'
             : '例: 夜9時ごろ @湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
         }
       />
       {!compact && (
         <>
         <p className="text-xs text-slate-500">
-          「@」で人物・場所・出来事を参照します。未登録の名前はその場で作成できます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない主張は、ユーザーの推測です。
+          「@」で人物・場所を参照します。未登録の名前はその場で作成できます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない主張は、ユーザーの推測です。
         </p>
         {summaryItems.length > 0 && (
           <dl

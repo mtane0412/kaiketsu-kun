@@ -46,11 +46,43 @@ describe('parseCase', () => {
       ],
     };
 
+    // 検証: 日時を持つ主張を早い順に、次に日時を持たない主張を述べられた時点の早い順に並べる
     expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
       'claim:claim-arrival',
-      'event:event-last-seen',
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-report',
       'claim:claim-user-guess',
     ]);
+  });
+
+  it('出来事に主張を束ねていた頃のデータは、束を解いて主張だけを並べる形に変換して受け付ける', () => {
+    // 前提: 以前の版では、隣家の住人と管理人の証言を、出来事「持ち主が最後に目撃された」に束ねていた
+    const 出来事を持つ旧データ = {
+      ...sampleFictionalCase,
+      events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された', description: '目撃の時刻が食い違う' }],
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor' || claim.id === 'claim-caretaker'
+          ? { ...claim, eventId: 'event-last-seen', content: `${claim.content} @[持ち主が最後に目撃された](event:event-last-seen)` }
+          : claim
+      ),
+      timelineOrder: ['claim:claim-police-camera', 'event:event-last-seen', 'claim:claim-report', 'claim:claim-user-guess'],
+    };
+
+    const 読み込み後 = parseCase(toJsonData(出来事を持つ旧データ));
+
+    // 検証: 束の位置に、束ねていた主張が述べる日時の早い順（管理人の夜7時 → 隣家の住人の夜9時ごろ）で並ぶ。
+    // 束の前にあった防犯カメラの記録（夜8時10分ごろ）は、束を解くと管理人の夜7時より前にあって日時と矛盾するため、矛盾しない位置へ動かす
+    expect(読み込み後.timelineOrder).toEqual([
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-report',
+      'claim:claim-user-guess',
+    ]);
+    expect(読み込み後).not.toHaveProperty('events');
+    expect(読み込み後.claims).toEqual(sampleFictionalCase.claims);
   });
 
   it('評価を廃止する前に保存したデータは、主張の評価を取り除いて受け付ける', () => {
@@ -220,7 +252,6 @@ const ソースを持つ旧データ = {
   ],
   persons: [{ id: 'person-neighbor', name: '隣家の住人' }],
   places: [],
-  events: [],
   claims: [
     {
       id: 'claim-testimony',

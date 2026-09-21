@@ -8,5 +8,4 @@ import type { MentionKind } from './mention';
 export const MENTION_KIND_LABELS: Record<MentionKind, string> = {
   person: '人物',
   place: '場所',
-  event: '出来事',
 };

@@ -2,7 +2,7 @@
  * 時刻参照（TimeRef）の解釈・並べ替え・食い違い判定のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { compareTimeRef, isTimeConflict, isValidPartialIso, toInterval } from './time-ref';
+import { compareTimeRef, isValidPartialIso, toInterval } from './time-ref';
 
 describe('isValidPartialIso', () => {
   it.each(['1998', '1998-08', '1998-08-12', '1998-08-12T19:00'])(
@@ -76,31 +76,5 @@ describe('compareTimeRef', () => {
       時期不明,
       undefined,
     ]);
-  });
-});
-
-describe('isTimeConflict', () => {
-  const 見立て = { text: '8月12日の夜', earliest: '1998-08-12T18:00', latest: '1998-08-12T23:59' };
-
-  it('証言の時刻が見立ての区間に収まっていれば、食い違いではない', () => {
-    const 証言 = { text: '夜9時ごろ', earliest: '1998-08-12T20:30', latest: '1998-08-12T21:30' };
-
-    expect(isTimeConflict(証言, 見立て)).toBe(false);
-  });
-
-  it('証言の時刻が見立ての区間と重ならなければ、食い違いである', () => {
-    const 証言 = { text: '翌朝', earliest: '1998-08-13T06:00' };
-
-    expect(isTimeConflict(証言, 見立て)).toBe(true);
-  });
-
-  it('どちらかが日時を持たない場合は、食い違いと判定しない', () => {
-    expect(isTimeConflict({ text: '夏の終わり' }, 見立て)).toBe(false);
-    expect(isTimeConflict(undefined, 見立て)).toBe(false);
-  });
-
-  it('日時が無くorderだけを持つ同士は、orderが異なれば食い違いである', () => {
-    expect(isTimeConflict({ text: '第3話', order: 3 }, { text: '第5話', order: 5 })).toBe(true);
-    expect(isTimeConflict({ text: '第3話', order: 3 }, { text: '第3話の冒頭', order: 3 })).toBe(false);
   });
 });

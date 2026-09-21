@@ -10,7 +10,7 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
 
-/** 見出し（要約）を付けた、出来事に束ねていない長文の主張です。 */
+/** 見出し（要約）を付けた、長文の主張です。 */
 const 見出し付きの記述: Claim = {
   id: 'claim-extortion',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
@@ -21,15 +21,29 @@ const 見出し付きの記述: Claim = {
 };
 
 describe('TimelineView', () => {
-  it('出来事の束に、束ねた主張から導出した日時・場所・人物と、束ねた主張を表示する', () => {
+  it('主張を、案件の並び順のとおりに並べ、述べる日時を持つ主張にはカードの上に日時を示す', () => {
+    // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ（夜8時10分ごろ）→ 隣家の住人（夜9時ごろ）→ 架空日報 → ユーザーの推測
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const entry = screen.getByRole('article', { name: '持ち主が最後に目撃された' });
-    // 見出しの日時は、束ねた主張が述べる日時のうち最も早いもの（管理人の「夜7時」）
-    expect(entry.querySelector('header')).toHaveTextContent('8月12日 夜7時');
-    expect(entry.querySelector('header')).toHaveTextContent('湖畔の別荘 ／ 別荘の持ち主');
-    expect(within(entry).getByText(/夜9時ごろ、/)).toBeInTheDocument();
-    expect(within(entry).getByText(/夜7時に見回りをしたとき/)).toBeInTheDocument();
+    const 時系列 = screen.getByRole('list', { name: '時系列' });
+    const 本文の並び = within(時系列)
+      .getAllByText(/夜7時に見回り|夜8時10分ごろ、|夜9時ごろ、|連絡が取れなくなっている|金銭の問題があった可能性/)
+      .map((element) => element.textContent);
+    expect(本文の並び).toEqual([
+      expect.stringContaining('夜7時に見回り'),
+      expect.stringContaining('夜8時10分ごろ、'),
+      expect.stringContaining('夜9時ごろ、'),
+      expect.stringContaining('連絡が取れなくなっている'),
+      expect.stringContaining('金銭の問題があった可能性'),
+    ]);
+    expect(within(時系列).getAllByText('8月12日 夜7時').length).toBeGreaterThan(0);
+  });
+
+  it('出来事の束を表示しない（語られる出来事は、すべて誰かの主張として並べる）', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(screen.queryByText(/この出来事に書き足す/)).not.toBeInTheDocument();
   });
 
   it('主張に「信頼できる」「疑わしい」「未検証」といった真偽の評価を表示しない', () => {
@@ -56,38 +70,11 @@ describe('TimelineView', () => {
     expect(隣家の証言).not.toHaveTextContent('person:person-owner');
   });
 
-  it('同じ出来事に束ねた他の主張と時刻が食い違う主張に、食い違いの表示を付ける', () => {
-    // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。架空日報の記述は日時を述べていない
+  it('主張同士の食い違いは判定せず、食い違いの表示を付けない', () => {
+    // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。見比べて判断するのは読み手
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const 管理人の証言 = screen.getByText(/夜7時に見回りをしたとき/).closest('li');
-    const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li');
-    const 架空日報の記述 = screen.getByText(/連絡が取れなくなっている/).closest('li');
-
-    expect(within(管理人の証言!).getByText('他の主張と時刻が食い違う')).toBeInTheDocument();
-    expect(within(隣家の証言!).getByText('他の主張と時刻が食い違う')).toBeInTheDocument();
-    expect(within(架空日報の記述!).queryByText('他の主張と時刻が食い違う')).not.toBeInTheDocument();
-  });
-
-  it('出来事に束ねていない主張も、時系列に並べる', () => {
-    const 案件: Case = {
-      ...sampleFictionalCase,
-      claims: [
-        ...sampleFictionalCase.claims,
-        {
-          id: 'claim-police-search',
-          speaker: { kind: 'person', personIds: ['person-newspaper'] },
-          viaPersonIds: [],
-          content: '警察が別荘を捜索した。',
-          mentionedPersonIds: [],
-          when: { text: '8月15日', earliest: '1998-08-15' },
-        },
-      ],
-    };
-    render(<TimelineView target={案件} />);
-
-    const 時系列 = screen.getByRole('list', { name: '時系列' });
-    expect(within(時系列).getByText('警察が別荘を捜索した。')).toBeInTheDocument();
+    expect(screen.queryByText(/食い違う$/)).not.toBeInTheDocument();
   });
 
   it('日時を述べる主張が無い項目も同じ時系列に並べ、「時期不明」の枠は表示しない', () => {
@@ -101,8 +88,7 @@ describe('TimelineView', () => {
   it('ボードの項目ごとに、ドラッグで動かすためのつまみを表示する', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
-    expect(screen.getByRole('button', { name: '「持ち主が最後に目撃された」を動かす' })).toBeInTheDocument();
-    // 出来事に束ねていない主張は、本文の冒頭20文字を名前にする
+    // 見出しの無い主張は、本文の冒頭20文字を名前にする
     expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
   });
 
@@ -132,8 +118,8 @@ describe('TimelineView', () => {
     expect(screen.getByRole('button', { name: '「Zによる恐喝事件があった」を動かす' })).toBeInTheDocument();
   });
 
-  it('主張も出来事も1件も無い場合は、書き始め方の案内を表示する', () => {
-    render(<TimelineView target={{ ...sampleFictionalCase, events: [], claims: [], relationships: [] }} />);
+  it('主張が1件も無い場合は、書き始め方の案内を表示する', () => {
+    render(<TimelineView target={{ ...sampleFictionalCase, claims: [], relationships: [] }} />);
 
     expect(screen.getByText('まだ何も書かれていません。「ボードに書き足す」から書き始めてください。')).toBeInTheDocument();
   });
@@ -145,7 +131,7 @@ function StoreBoard({ onOpenEntity }: { onOpenEntity?: (kind: string, id: string
   return <TimelineView target={currentCase} onOpenEntity={onOpenEntity} />;
 }
 
-/** 警察の捜索（8月15日）についての、出来事に束ねていない主張です。 */
+/** 警察の捜索（8月15日）についての主張です。 */
 const 捜索の記述: Claim = {
   id: 'claim-police-search',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
@@ -160,22 +146,8 @@ describe('TimelineView への書き足し', () => {
     useCaseStore.getState().replaceCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, 捜索の記述] });
   });
 
-  it('出来事の束の中に書き足すと、その出来事に束ねた主張としてボードに現れる', async () => {
-    const user = userEvent.setup();
-    render(<StoreBoard />);
-
-    await user.click(screen.getByRole('button', { name: '「持ち主が最後に目撃された」に書き足す' }));
-    await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
-    await user.click(screen.getByRole('button', { name: '書き足す' }));
-
-    const entry = screen.getByRole('article', { name: '持ち主が最後に目撃された' });
-    expect(within(entry).getByText(/別荘の電話は12日の夜から不通だった。/)).toBeInTheDocument();
-    // 保存後は入力欄を閉じる
-    expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
-  });
-
   it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {
-    // 前提: 並びは 出来事「持ち主が最後に目撃された」→ ユーザーの推測 → 警察の捜索
+    // 前提: 並びは サンプルの証言（管理人の「夜7時に見回り」が先頭）→ ユーザーの推測 → 警察の捜索
     const user = userEvent.setup();
     render(<StoreBoard />);
 
@@ -199,7 +171,7 @@ describe('TimelineView への書き足し', () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
 
-    await user.click(screen.getByRole('button', { name: '「持ち主が最後に目撃された」の前に書き足す' }));
+    await user.click(screen.getByRole('button', { name: /^「夜7時に見回りをしたとき.*」の前に書き足す$/ }));
     await user.type(screen.getByLabelText('内容'), '持ち主は8月の初めに別荘へ来たらしい。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
@@ -328,7 +300,7 @@ describe('TimelineView への書き足し', () => {
     expect(onOpenClaimDetails).toHaveBeenCalledWith('claim-police-search');
   });
 
-  it('本文のメンションや出来事の見出しから、エンティティの編集を開く', async () => {
+  it('本文のメンションから、エンティティの編集を開く', async () => {
     const user = userEvent.setup();
     const onOpenEntity = vi.fn();
     render(<StoreBoard onOpenEntity={onOpenEntity} />);
@@ -336,9 +308,6 @@ describe('TimelineView への書き足し', () => {
     const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li')!;
     await user.click(within(隣家の証言).getByRole('button', { name: '@湖畔の別荘' }));
     expect(onOpenEntity).toHaveBeenLastCalledWith('place', 'place-villa');
-
-    await user.click(screen.getByRole('button', { name: '「持ち主が最後に目撃された」を編集' }));
-    expect(onOpenEntity).toHaveBeenLastCalledWith('event', 'event-last-seen');
   });
 });
 

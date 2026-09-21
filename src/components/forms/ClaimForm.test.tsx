@@ -1,7 +1,7 @@
 /**
  * 主張の入力フォームのテスト
  *
- * 本文に「@」でメンションを書き、出来事・場所・言及している人物を本文から導出することと、
+ * 本文に「@」でメンションを書き、場所・言及している人物を本文から導出することと、
  * 発言者と経由（発言者の話を伝えた人物や媒体）を、投稿ボタンの横の「発言者」から選ぶことを検証します。
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
@@ -47,14 +47,14 @@ function lastSavedClaim() {
 }
 
 describe('ClaimForm', () => {
-  it('登録済みの場所・人物・出来事を「@」で選び、本文から参照を導出して保存する', async () => {
+  it('登録済みの場所・人物を「@」で選び、本文から参照を導出して保存する', async () => {
     const user = userEvent.setup();
     const onDone = vi.fn();
     render(<ClaimForm onDone={onDone} />);
 
     await typeAndChoose(user, '翌朝、@湖畔', '場所 湖畔の別荘');
     await typeAndChoose(user, 'の郵便受けに@持ち主', '人物 別荘の持ち主');
-    await typeAndChoose(user, 'あての新聞が残っていた。@最後に', '出来事 持ち主が最後に目撃された');
+    await user.type(screen.getByLabelText('内容'), 'あての新聞が残っていた。');
     await chooseSpeakers(user, ['隣家の住人']);
     await chooseVia(user, ['架空日報 朝刊']);
     await user.type(screen.getByLabelText('証言が述べる日時：最も早い時点'), '1998-08-13');
@@ -65,8 +65,7 @@ describe('ClaimForm', () => {
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
       content:
-        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。@[持ち主が最後に目撃された](event:event-last-seen)',
-      eventId: 'event-last-seen',
+        '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。',
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
       when: { text: '1998-08-13', earliest: '1998-08-13' },
@@ -122,6 +121,16 @@ describe('ClaimForm', () => {
 
     expect(screen.getByRole('option', { name: '「配達員の手記」を人物として新規作成' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /ソース/ })).not.toBeInTheDocument();
+  });
+
+  it('メンションの種類に「出来事」は無い（語られる出来事は、すべて誰かの主張として書く）', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('内容'), '@最後の目撃');
+
+    expect(screen.getByRole('option', { name: '「最後の目撃」を人物として新規作成' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /出来事/ })).not.toBeInTheDocument();
   });
 
   it('新規作成した名前を本文から消した場合は、そのエンティティを保存しない', async () => {
@@ -505,34 +514,8 @@ describe('ClaimForm のキーボード操作', () => {
   });
 
   describe('ボード上の位置から決まる初期値（defaults）', () => {
-    it('出来事の束の中で書いた主張は、本文に「@出来事」を書かなくても、その出来事に束ねて保存する', async () => {
-      const user = userEvent.setup();
-      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
-
-      await user.type(screen.getByLabelText('内容'), '別荘の電話は12日の夜から不通だった。');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
-
-      // 参照は本文から導出する規則を保つため、出来事のメンションを本文の末尾に補う
-      expect(lastSavedClaim()).toMatchObject({
-        speaker: { kind: 'user' },
-        content: '別荘の電話は12日の夜から不通だった。 @[持ち主が最後に目撃された](event:event-last-seen)',
-        eventId: 'event-last-seen',
-      });
-    });
-
-    it('本文に別の出来事を「@」で書いた場合は、本文の出来事を優先する', async () => {
-      const user = userEvent.setup();
-      useCaseStore.getState().upsert('events', { id: 'event-search', title: '警察が別荘を捜索した' });
-      render(<ClaimForm defaults={{ eventId: 'event-last-seen' }} onDone={vi.fn()} />);
-
-      await typeAndChoose(user, '捜索は半日で終わった。@警察が', '出来事 警察が別荘を捜索した');
-      await user.click(screen.getByRole('button', { name: '主張を保存' }));
-
-      expect(lastSavedClaim()).toMatchObject({ eventId: 'event-search' });
-    });
-
     it('ボードの項目と項目の間で書いた場合は、書いた位置に主張を並べる', async () => {
-      // 前提: サンプルの並びは 出来事「持ち主が最後に目撃された」→ ユーザーの推測。その間（1番目）で書く
+      // 前提: サンプルの並びの先頭は、管理人の証言 → 防犯カメラの記録。その間（1番目）で書く
       const user = userEvent.setup();
       render(<ClaimForm defaults={{ insertIndex: 1 }} onDone={vi.fn()} />);
 
@@ -541,10 +524,10 @@ describe('ClaimForm のキーボード操作', () => {
 
       // 日時は付けず、並び順だけで位置を表す
       expect(lastSavedClaim()?.when).toBeUndefined();
-      expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
-        'event:event-last-seen',
+      expect(useCaseStore.getState().currentCase.timelineOrder.slice(0, 3)).toEqual([
+        'claim:claim-caretaker',
         `claim:${lastSavedClaim()?.id}`,
-        'claim:claim-user-guess',
+        'claim:claim-police-camera',
       ]);
     });
   });
