@@ -5,6 +5,7 @@
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
@@ -14,12 +15,12 @@ import { CaseStoreGate } from './CaseStoreGate';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-/** サンプルの案件を保存済みの状態にして、ボードを描画します。 */
-function renderBoard() {
+/** サンプルの案件を保存済みの状態にして、ボードを描画します。detail は、ボードの横に並べる証言の詳細です。 */
+function renderBoard(detail?: ReactNode) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase }, version: 0 }));
   render(
     <CaseStoreGate>
-      <CaseBoard />
+      <CaseBoard>{detail}</CaseBoard>
     </CaseStoreGate>
   );
 }
@@ -108,5 +109,40 @@ describe('CaseBoard', () => {
 
     const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
     expect(within(panel).getByRole('tablist', { name: '入力する種類' })).toBeInTheDocument();
+  });
+
+  describe('証言の詳細を横に並べる表示（2ペイン）', () => {
+    it('証言の詳細ページのURLでは、ボードの横に証言の詳細を並べ、開いている証言のカードを示す', async () => {
+      resetMockNavigation('/claims/claim-neighbor');
+      renderBoard(<p>隣家の住人の証言の詳細</p>);
+
+      // 検証: ボードを覆わずに横へ並べるため、時系列は表示したままになる
+      const 詳細 = await screen.findByRole('complementary', { name: '証言の詳細' });
+      expect(within(詳細).getByText('隣家の住人の証言の詳細')).toBeInTheDocument();
+
+      const 時系列 = screen.getByRole('list', { name: '時系列' });
+      const 隣家の証言 = within(時系列).getByText(/夜9時ごろ、/).closest('li')!;
+      const 管理人の証言 = within(時系列).getByText(/夜7時に見回りをしたとき/).closest('li')!;
+      expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute('aria-current', 'true');
+      expect(within(管理人の証言).getByRole('link', { name: /を開く$/ })).not.toHaveAttribute('aria-current');
+    });
+
+    it('証言を開いていないURLでは、証言の詳細の枠を表示しない', async () => {
+      renderBoard();
+
+      await screen.findByRole('list', { name: '時系列' });
+      expect(screen.queryByRole('complementary', { name: '証言の詳細' })).not.toBeInTheDocument();
+    });
+
+    it('証言を開いたままタブを切り替えると、証言を開いたままのURLに切り替える', async () => {
+      const user = userEvent.setup();
+      resetMockNavigation('/claims/claim-neighbor');
+      renderBoard(<p>隣家の住人の証言の詳細</p>);
+
+      await user.click(await screen.findByRole('tab', { name: '証言者別' }));
+
+      expect(mockRouter.replace).toHaveBeenLastCalledWith('/claims/claim-neighbor?tab=speaker', { scroll: false });
+      expect(screen.getByRole('complementary', { name: '証言の詳細' })).toBeInTheDocument();
+    });
   });
 });

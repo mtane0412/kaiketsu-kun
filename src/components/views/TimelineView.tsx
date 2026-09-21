@@ -51,6 +51,8 @@ type ComposerTarget =
 
 type TimelineViewProps = {
   target: Case;
+  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
+  activeClaimId?: Id;
   /** 本文のメンションが選ばれたときに呼び出します。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
 };
@@ -101,7 +103,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
   );
 }
 
-export function TimelineView({ target, onOpenEntity }: TimelineViewProps) {
+export function TimelineView({ target, activeClaimId, onOpenEntity }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -156,7 +158,13 @@ export function TimelineView({ target, onOpenEntity }: TimelineViewProps) {
     <>
       {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
       <ul>
-        <ClaimCard view={view} showSpeaker onOpenEntity={onOpenEntity} href={claimHref(view.claim.id, 'timeline')} />
+        <ClaimCard
+          view={view}
+          showSpeaker
+          onOpenEntity={onOpenEntity}
+          href={claimHref(view.claim.id, 'timeline')}
+          isActive={view.claim.id === activeClaimId}
+        />
       </ul>
     </>
   );

@@ -52,11 +52,11 @@ describe('ClaimDetail', () => {
     expect(links[0]).toHaveTextContent(/夜7時に見回りをしたとき/);
   });
 
-  it('戻り先のタブをURLから引き継ぎ、ボードへ戻るリンクと、他の証言へのリンクに反映する', () => {
+  it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {
     resetMockNavigation('/claims/claim-neighbor?tab=map');
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    expect(screen.getByRole('link', { name: 'ボードに戻る' })).toHaveAttribute('href', '/?tab=map');
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/?tab=map');
     const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
     expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/claims/claim-report?tab=map');
   });
@@ -84,10 +84,10 @@ describe('ClaimDetail', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
-  it('案件に無い証言を開いた場合は、見つからないことを伝え、ボードへ戻れるようにする', () => {
+  it('案件に無い証言を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<ClaimDetail claimId="claim-deleted" />);
 
     expect(screen.getByRole('heading', { name: '証言が見つかりません' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'ボードに戻る' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/');
   });
 });

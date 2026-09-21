@@ -34,11 +34,13 @@ const UNMAPPED_REASONS: { reason: UnmappedReason; label: string }[] = [
 
 type MapViewProps = {
   target: Case;
+  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
+  activeClaimId?: Id;
   /** 本文のメンションが選ばれたときに呼び出します。エンティティの編集（場所への座標の登録など）を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
 };
 
-export function MapView({ target, onOpenEntity }: MapViewProps) {
+export function MapView({ target, activeClaimId, onOpenEntity }: MapViewProps) {
   const trail = useMemo(() => buildMapTrail(target), [target]);
   const pins = useMemo(() => groupStopsByPlace(trail.stops), [trail]);
   const path = useMemo(() => trail.stops.map((stop) => stop.coordinates), [trail]);
@@ -90,6 +92,7 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
               showSpeaker
               onOpenEntity={onOpenEntity}
               href={claimHref(activeStop.view.claim.id, 'map')}
+              isActive={activeStop.view.claim.id === activeClaimId}
             />
           </ul>
         </section>
@@ -118,6 +121,7 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
                       showSpeaker
                       onOpenEntity={onOpenEntity}
                       href={claimHref(item.view.claim.id, 'map')}
+                      isActive={item.view.claim.id === activeClaimId}
                     />
                   ))}
                 </ul>

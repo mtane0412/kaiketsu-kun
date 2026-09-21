@@ -9,11 +9,16 @@
  * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
  * カード全体が、証言の詳細ページ（href）へのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
  * onOpenEntity を渡すとメンションと言及のアイコンがボタンになります。
+ * 詳細を開いている証言のカード（isActive）は、枠を強調し、画面の外にある場合は見える位置までスクロールします。
+ * 詳細の関連リンクから別の証言へ移ったときに、ボード上の位置を見失わないようにするためです。
  *
  * 注意: リンクの当たり判定をカード全体に広げています（リンクの after 疑似要素）。カードの中で操作できる要素
  * （メンション・言及のアイコン・「本文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
  */
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
@@ -36,10 +41,19 @@ type ClaimCardProps = {
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
   /** 証言の詳細ページのURLです。 */
   href: string;
+  /** この証言の詳細を開いているかどうかです。 */
+  isActive?: boolean;
 };
 
-export function ClaimCard({ view, showSpeaker, onOpenEntity, href }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = false }: ClaimCardProps) {
   const { claim } = view;
+  const cardRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    // すでに見えているカードは動かさない（block: 'nearest'）
+    if (isActive) cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [isActive]);
+
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
     <p className="whitespace-pre-line text-slate-900">
@@ -66,7 +80,8 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, href }: ClaimCardPr
 
   return (
     <li
-      className={`relative rounded border p-3 text-sm hover:border-sky-400 ${
+      ref={cardRef}
+      className={`relative rounded border p-3 text-sm hover:border-sky-400 ${isActive ? 'ring-2 ring-sky-400' : ''} ${
         isUserSpeculation ? 'border-dashed border-violet-300 bg-violet-50' : 'border-slate-200 bg-white'
       }`}
     >
@@ -82,6 +97,7 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, href }: ClaimCardPr
         )}
         <Link
           href={href}
+          aria-current={isActive ? 'true' : undefined}
           aria-label={`「${claimLabelOf(view)}」を開く`}
           className="ml-auto text-sky-700 after:absolute after:inset-0 hover:underline"
         >

@@ -1,10 +1,11 @@
 /**
- * 証言の詳細ページの本体
+ * 証言の詳細
  *
+ * ボード（CaseBoard）の横に並べて表示します。幅が狭い画面では、ボードの代わりに、これだけを表示します。
  * 証言1件の編集（見出し・本文・発言者・日時）と削除を、この1か所で行います。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
- * 戻り先のタブはURLのクエリ（?tab=）から読み取り、「ボードに戻る」と、他の証言へのリンクに引き継ぎます。
+ * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
  *
  * 注意: 案件に無い証言のIDが渡された場合（URLの直接入力、削除済みの証言）は、見つからないことを表示します。
  * 証言のフォームは初期値を初期化でのみ使用するため、呼び出し側は claimId が変わるたびに key を変えて再マウントしてください。
@@ -50,19 +51,21 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const [isSaved, setIsSaved] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const backLink = (
-    <Link href={boardHref(tab)} className="text-sm text-sky-700 hover:underline">
-      <span aria-hidden="true">← </span>ボードに戻る
-    </Link>
+  const closeLink = (
+    <div className="flex justify-end">
+      <Link href={boardHref(tab)} aria-label="証言の詳細を閉じる" className="text-xs text-slate-600 hover:underline">
+        閉じる
+      </Link>
+    </div>
   );
 
   if (!detail) {
     return (
-      <main className="mx-auto max-w-3xl space-y-4 p-4">
-        {backLink}
-        <h1 className="text-lg font-semibold text-slate-900">証言が見つかりません</h1>
+      <div className="space-y-4">
+        {closeLink}
+        <h2 className="text-lg font-semibold text-slate-900">証言が見つかりません</h2>
         <p className="text-sm text-slate-600">この証言は削除されたか、URLが誤っています。</p>
-      </main>
+      </div>
     );
   }
 
@@ -82,11 +85,11 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   };
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4">
-      {backLink}
+    <div className="space-y-6">
+      {closeLink}
 
       <section aria-label="証言の編集" className="rounded border border-slate-200 bg-white p-4">
-        <h1 className="mb-3 text-lg font-semibold text-slate-900">{claimLabelOf(view)}</h1>
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">{claimLabelOf(view)}</h2>
         <ClaimForm
           initial={view.claim}
           onDone={() => setIsSaved(true)}
@@ -109,7 +112,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">
-          <h2 className="text-sm font-semibold text-slate-800">時系列の前後</h2>
+          <h3 className="text-sm font-semibold text-slate-800">時系列の前後</h3>
           {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" />}
           {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
         </nav>
@@ -119,12 +122,12 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         const label = `「${group.label}」に触れている他の証言`;
         return (
           <section key={`${group.kind}:${group.id}`} aria-label={label} className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-800">
+            <h3 className="text-sm font-semibold text-slate-800">
               {label}
               <span className="ml-2 text-xs font-normal text-slate-500">
                 {MENTION_KIND_LABELS[group.kind]}・{group.claims.length}件
               </span>
-            </h2>
+            </h3>
             <ul className="space-y-1">
               {group.claims.map((claimView) => (
                 <li key={claimView.claim.id}>
@@ -135,6 +138,6 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           </section>
         );
       })}
-    </main>
+    </div>
   );
 }
