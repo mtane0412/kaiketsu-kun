@@ -37,6 +37,18 @@ describe('ClaimDetail', () => {
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
   });
 
+  it('「この証言を削除」を、「発言者」と「証言を保存」より前に置く', () => {
+    // 検証: 削除が「発言者」と「証言を保存」の中間に浮かないよう、行の左端に置くこと
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 削除 = screen.getByRole('button', { name: 'この証言を削除' });
+    const 発言者 = screen.getByRole('button', { name: /^発言者:/ });
+    const 保存 = screen.getByRole('button', { name: '証言を保存' });
+
+    expect(削除.compareDocumentPosition(発言者)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(発言者.compareDocumentPosition(保存)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('時系列の前後の証言へのリンクを表示する', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
