@@ -2,21 +2,16 @@
  * 座標を決めるための地図（地理院タイルの表示、クリックでの地点の選択、ピンの表示）
  *
  * Leaflet は window を前提にしているため、この部品は next/dynamic の ssr: false で読み込みます（CoordinateField.tsx）。
- * 地図の画像は国土地理院の地理院タイル（標準地図）で、無料でキーが不要です。出典の明示が利用条件のため、地図の隅に表示します。
+ * 地図の画像は国土地理院の地理院タイルです（GsiTileLayers.tsx）。地点を探しやすい標準地図を最初に表示し、右上の選択肢で淡色地図に切り替えられます。
  */
 'use client';
 
 import 'leaflet/dist/leaflet.css';
 import { useEffect } from 'react';
-import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { CircleMarker, MapContainer, useMap, useMapEvents } from 'react-leaflet';
 import type { Coordinates } from '@/domain/types';
-
-const GSI_TILE_URL = 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png';
-const GSI_ATTRIBUTION = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">地理院タイル</a>';
-
-/** 地理院タイル（標準地図）が提供されているズームレベルの範囲です。 */
-const MIN_ZOOM = 5;
-const MAX_ZOOM = 18;
+import { MAX_ZOOM, MIN_ZOOM } from '@/lib/gsi-tiles';
+import { GsiTileLayers } from '../GsiTileLayers';
 
 /** 座標が無い場合に表示する範囲（日本全体が収まる中心とズームレベル）です。 */
 const JAPAN_CENTER: [number, number] = [36.5, 137.5];
@@ -47,7 +42,7 @@ export default function CoordinateMap({ value, onPick }: CoordinateMapProps) {
       maxZoom={MAX_ZOOM}
       className="h-full w-full cursor-crosshair"
     >
-      <TileLayer url={GSI_TILE_URL} attribution={GSI_ATTRIBUTION} />
+      <GsiTileLayers defaultStyle="standard" />
       <PickHandler onPick={onPick} />
       {value && (
         <>
