@@ -97,10 +97,11 @@ describe('ClaimDetail', () => {
 
   it('証言を削除すると、ボードに戻る', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
     expect(openedCase().claims.map((claim) => claim.id)).not.toContain('claim-neighbor');
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside');
@@ -109,12 +110,13 @@ describe('ClaimDetail', () => {
   it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
     // 前提: 管理人の証言（claim-caretaker）は、関係「雇用主」の根拠になっている
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
+    expect(await screen.findByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 

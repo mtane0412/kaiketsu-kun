@@ -39,7 +39,7 @@ export function EntityAvatar({ imageDataUrl, iconText, size }: EntityAvatarProps
     <span
       aria-hidden="true"
       data-icon-text={iconText}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-sky-600 align-text-bottom font-semibold leading-none text-white before:content-[attr(data-icon-text)] ${SIZE_CLASSES[size]}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-primary align-text-bottom font-semibold leading-none text-primary-foreground before:content-[attr(data-icon-text)] ${SIZE_CLASSES[size]}`}
     />
   );
 }

@@ -19,12 +19,12 @@ const MAP_HEIGHT_CLASS = 'h-56';
 /** 座標の表示の小数点以下の桁数です。5桁で約1mの精度になります。 */
 const COORDINATE_FRACTION_DIGITS = 5;
 
-const SUB_BUTTON_CLASS = 'shrink-0 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50';
+const SUB_BUTTON_CLASS = 'shrink-0 rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted/40 disabled:opacity-50';
 
 // Leaflet は window を前提にしており、サーバー側では読み込めないため、ブラウザでのみ読み込む
 const CoordinateMap = dynamic(() => import('./CoordinateMap'), {
   ssr: false,
-  loading: () => <p className="p-2 text-xs text-slate-500">地図を読み込んでいます…</p>,
+  loading: () => <p className="p-2 text-xs text-muted-foreground">地図を読み込んでいます…</p>,
 });
 
 type CoordinateFieldProps = {
@@ -94,7 +94,7 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
           </button>
         </div>
         {results?.length === 0 && (
-          <p className="text-xs text-slate-500">候補が見つかりませんでした。地図をクリックして座標を決めてください。</p>
+          <p className="text-xs text-muted-foreground">候補が見つかりませんでした。地図をクリックして座標を決めてください。</p>
         )}
         {results && results.length > 0 && (
           <ul aria-label="座標の候補" className="max-h-40 space-y-1 overflow-y-auto">
@@ -103,7 +103,7 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
                 <button
                   type="button"
                   onClick={() => handleSelect(result)}
-                  className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-left text-xs hover:bg-slate-50"
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-left text-xs hover:bg-muted/40"
                 >
                   {result.title}
                 </button>
@@ -111,23 +111,23 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
             ))}
           </ul>
         )}
-        <div className={`overflow-hidden rounded border border-slate-300 bg-slate-100 ${MAP_HEIGHT_CLASS}`}>
+        <div className={`overflow-hidden rounded border border-border bg-muted ${MAP_HEIGHT_CLASS}`}>
           <CoordinateMap value={value} onPick={onChange} />
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           {value ? (
             <>
               <span>
                 緯度 {value.latitude.toFixed(COORDINATE_FRACTION_DIGITS)}・経度 {value.longitude.toFixed(COORDINATE_FRACTION_DIGITS)}
               </span>
-              <button type="button" onClick={() => onChange(undefined)} className="py-1 text-red-600 hover:underline">
+              <button type="button" onClick={() => onChange(undefined)} className="py-1 text-destructive hover:underline">
                 座標を削除
               </button>
             </>
           ) : (
             <span>座標は未設定です。</span>
           )}
-          <span className="text-[11px] text-slate-500">地図をクリックすると、その地点を座標にします。</span>
+          <span className="text-[11px] text-muted-foreground">地図をクリックすると、その地点を座標にします。</span>
         </div>
       </div>
       <FormError message={error} />

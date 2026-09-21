@@ -22,6 +22,7 @@ import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
+import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM } from './routes';
@@ -61,7 +62,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
   const closeLink = (
     <div className="flex justify-end">
-      <Link href={boardHref(caseId, tab)} aria-label="証言の詳細を閉じる" className="text-xs text-slate-600 hover:underline">
+      <Link href={boardHref(caseId, tab)} aria-label="証言の詳細を閉じる" className="text-xs text-muted-foreground hover:underline">
         閉じる
       </Link>
     </div>
@@ -71,8 +72,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
     return (
       <div className="space-y-4">
         {closeLink}
-        <h2 className="text-lg font-semibold text-slate-900">証言が見つかりません</h2>
-        <p className="text-sm text-slate-600">この証言は削除されたか、URLが誤っています。</p>
+        <h2 className="text-lg font-semibold">証言が見つかりません</h2>
+        <p className="text-sm text-muted-foreground">この証言は削除されたか、URLが誤っています。</p>
       </div>
     );
   }
@@ -81,8 +82,6 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const mentionedEntities = mentionedEntitiesOf(view);
 
   const handleDelete = () => {
-    // 削除は取り消せないため、実行前に確認する
-    if (!window.confirm('この証言を削除しますか？')) return;
     try {
       remove('claims', claimId);
     } catch (caught) {
@@ -97,19 +96,24 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
     <div className="space-y-6">
       {closeLink}
 
-      <section aria-label="証言の編集" className="rounded border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">{claimLabelOf(view)}</h2>
+      <section aria-label="証言の編集" className="rounded-lg border bg-card p-4">
+        <h2 className="mb-3 text-lg font-semibold">{claimLabelOf(view)}</h2>
         <ClaimForm
           initial={view.claim}
           onDone={() => setIsSaved(true)}
           actions={
-            <button type="button" onClick={handleDelete} className="mr-auto text-xs text-red-600 hover:underline">
-              この証言を削除
-            </button>
+            <div className="mr-auto">
+              <DeleteConfirmButton
+                label="この証言を削除"
+                title="この証言を削除しますか？"
+                description="この証言をケースから削除します。この操作は取り消せません。"
+                onConfirm={handleDelete}
+              />
+            </div>
           }
         />
         {isSaved && (
-          <p role="status" className="mt-2 text-right text-xs text-emerald-700">
+          <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
             保存しました
           </p>
         )}
@@ -120,7 +124,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
       {mentionedEntities.length > 0 && (
         <nav aria-label={MENTIONED_ENTITIES_LABEL} className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">{MENTIONED_ENTITIES_LABEL}</h3>
+          <h3 className="text-sm font-semibold">{MENTIONED_ENTITIES_LABEL}</h3>
           <ul className="flex flex-wrap gap-1">
             {mentionedEntities.map((entity) => (
               <li key={`${entity.role}:${entity.kind}:${entity.id}`}>
@@ -128,10 +132,10 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
                   href={mentionHref(caseId, entity.kind, entity.id, tab)}
                   // どの立場で触れているかを読み上げにも伝えるため、リンクの名前に立場と名前を明示する
                   aria-label={`${entity.role} ${entity.name}`}
-                  className="flex items-baseline gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-sm hover:border-sky-400"
+                  className="flex items-baseline gap-1 rounded-lg border bg-card px-2 py-1 text-sm transition-colors hover:border-foreground/30"
                 >
-                  <span className="text-xs text-slate-500">{entity.role}</span>
-                  <span className="text-slate-900">{entity.name}</span>
+                  <span className="text-xs text-muted-foreground">{entity.role}</span>
+                  <span>{entity.name}</span>
                 </Link>
               </li>
             ))}
@@ -141,7 +145,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">時系列の前後</h3>
+          <h3 className="text-sm font-semibold">時系列の前後</h3>
           {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" />}
           {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
         </nav>
@@ -151,13 +155,13 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         const label = `「${group.label}」に触れている他の証言`;
         return (
           <section key={`${group.kind}:${group.id}`} aria-label={label} className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-800">
+            <h3 className="text-sm font-semibold">
               「
-              <Link href={mentionHref(caseId, group.kind, group.id, tab)} className="text-sky-700 hover:underline">
+              <Link href={mentionHref(caseId, group.kind, group.id, tab)} className="underline underline-offset-2 hover:no-underline">
                 {group.label}
               </Link>
               」に触れている他の証言
-              <span className="ml-2 text-xs font-normal text-slate-500">
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
                 {MENTION_KIND_LABELS[group.kind]}・{group.claims.length}件
               </span>
             </h3>

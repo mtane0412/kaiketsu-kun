@@ -18,7 +18,7 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.01;
 
-const SUB_BUTTON_CLASS = 'rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50';
+const SUB_BUTTON_CLASS = 'rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted/40';
 
 /** 形ごとの、プレビューの角の丸めです。 */
 const SHAPE_CLASSES = {
@@ -124,7 +124,7 @@ export function ImageField({ label, shape, value, onChange }: ImageFieldProps) {
         />
       ) : (
         <div className="flex items-center gap-3">
-          <div className={`group relative h-20 w-20 shrink-0 overflow-hidden border border-slate-300 bg-slate-100 ${SHAPE_CLASSES[shape]}`}>
+          <div className={`group relative h-20 w-20 shrink-0 overflow-hidden border border-border bg-muted ${SHAPE_CLASSES[shape]}`}>
             {value ? (
               // 縮小済みの data URL のため、next/image の最適化は使用しない
               <img src={value} alt="登録する画像" className="h-full w-full object-cover" />
@@ -136,7 +136,7 @@ export function ImageField({ label, shape, value, onChange }: ImageFieldProps) {
               type="button"
               aria-label="画像を選ぶ"
               onClick={() => inputRef.current?.click()}
-              className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
+              className="absolute inset-0 flex items-center justify-center bg-neutral-900/50 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
             >
               <CameraIcon />
             </button>
@@ -150,12 +150,12 @@ export function ImageField({ label, shape, value, onChange }: ImageFieldProps) {
                 クリップボードから貼り付け
               </button>
               {value && (
-                <button type="button" onClick={() => onChange(undefined)} className="px-1 py-1 text-xs text-red-600 hover:underline">
+                <button type="button" onClick={() => onChange(undefined)} className="px-1 py-1 text-xs text-destructive hover:underline">
                   画像を削除
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-500">コピーした画像は、Ctrl+V（Mac は ⌘+V）でも貼り付けできます。</p>
+            <p className="text-[11px] text-muted-foreground">コピーした画像は、Ctrl+V（Mac は ⌘+V）でも貼り付けできます。</p>
           </div>
         </div>
       )}
@@ -191,7 +191,7 @@ function ImageCropper({ file, shape, onConfirm, onCancel, onLoadError }: ImageCr
 
   return (
     <div className="space-y-2">
-      <div className="relative h-56 overflow-hidden rounded bg-slate-900">
+      <div className="relative h-56 overflow-hidden rounded-md bg-neutral-900">
         {imageUrl && (
           <Cropper
             image={imageUrl}
@@ -211,7 +211,7 @@ function ImageCropper({ file, shape, onConfirm, onCancel, onLoadError }: ImageCr
         )}
       </div>
       <div className="flex items-center gap-2">
-        <label htmlFor={zoomId} className="shrink-0 text-xs text-slate-600">
+        <label htmlFor={zoomId} className="shrink-0 text-xs text-muted-foreground">
           拡大
         </label>
         <input
@@ -230,7 +230,7 @@ function ImageCropper({ file, shape, onConfirm, onCancel, onLoadError }: ImageCr
           type="button"
           disabled={!area}
           onClick={() => area && onConfirm(area)}
-          className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+          className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
         >
           この範囲で登録
         </button>
@@ -246,14 +246,14 @@ function ImageCropper({ file, shape, onConfirm, onCancel, onLoadError }: ImageCr
 function PlaceholderIcon({ shape }: { shape: ImageShape }) {
   if (shape === 'rect') {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-slate-300">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-muted-foreground/40">
         <circle cx="16.5" cy="8" r="2" />
         <path d="M2 20l6.5-9 4.5 6 3-4 6 7z" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-slate-300">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-full w-full fill-muted-foreground/40">
       <circle cx="12" cy="9" r="4" />
       <path d="M4 22c0-4.4 3.6-8 8-8s8 3.6 8 8z" />
     </svg>

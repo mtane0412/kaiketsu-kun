@@ -49,9 +49,9 @@ const MAX_EXISTING_OPTIONS = 8;
  * 注意: 文字の位置が textarea とずれるため、余白や文字の太さなど文字組みを変える指定は加えないでください。
  */
 const MENTION_HIGHLIGHT_STYLES: Record<SegmentKind, string> = {
-  person: 'bg-sky-100',
-  place: 'bg-emerald-100',
-  date: 'bg-amber-100',
+  person: 'bg-mention-person',
+  place: 'bg-mention-place',
+  date: 'bg-mention-date',
 };
 
 /** textarea とハイライト層で一致させる文字組み（枠線の幅・余白・文字の大きさ・折り返し）の指定です。 */
@@ -290,7 +290,7 @@ export function MentionTextarea({
 
   return (
     <div className="relative">
-      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1 block text-xs font-medium text-slate-600'}>
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'mb-1 block text-xs font-medium text-muted-foreground'}>
         {label}
       </label>
       <div className="relative">
@@ -298,7 +298,7 @@ export function MentionTextarea({
         <div
           ref={highlightRef}
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-0 overflow-hidden rounded border-transparent bg-white text-transparent ${TEXT_LAYOUT_CLASSES}`}
+          className={`pointer-events-none absolute inset-0 overflow-hidden rounded border-transparent bg-background text-transparent ${TEXT_LAYOUT_CLASSES}`}
         >
           {segments.map((segment, index) =>
             segment.type === 'mention' ? (
@@ -320,7 +320,7 @@ export function MentionTextarea({
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={isOpen && activeIndex !== null ? optionId(activeIndex) : undefined}
-          className={`relative block w-full rounded border-slate-300 bg-transparent focus:border-sky-500 focus:outline-none ${TEXT_LAYOUT_CLASSES}`}
+          className={`relative block w-full rounded border-border bg-transparent focus-visible:border-ring focus:outline-none ${TEXT_LAYOUT_CLASSES}`}
           rows={4}
           value={value.text}
           required={required}
@@ -347,7 +347,7 @@ export function MentionTextarea({
         />
       </div>
       {openPicker !== null && (
-        <div className="absolute z-10 mt-1 rounded border border-slate-300 bg-white p-2 shadow-lg">
+        <div className="absolute z-10 mt-1 rounded border border-border bg-background p-2 shadow-lg">
           <input
             ref={pickerRef}
             type={DATE_PICKERS[openPicker.kind].inputType}
@@ -372,7 +372,7 @@ export function MentionTextarea({
           id={listboxId}
           role="listbox"
           aria-label="メンションの候補"
-          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded border border-slate-300 bg-white py-1 text-sm shadow-lg"
+          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded border border-border bg-background py-1 text-sm shadow-lg"
         >
           {options.map((option, index) => (
             <li
@@ -386,22 +386,22 @@ export function MentionTextarea({
               id={optionId(index)}
               role="option"
               aria-selected={index === activeIndex}
-              className={`cursor-pointer px-2 py-1 ${index === activeIndex ? 'bg-sky-100' : 'hover:bg-slate-100'}`}
+              className={`cursor-pointer px-2 py-1 ${index === activeIndex ? 'bg-accent' : 'hover:bg-muted'}`}
               // クリックで入力欄からフォーカスが外れないよう、mousedown の既定の動作を止める
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(option)}
             >
               {option.type === 'picker' ? (
-                <span className="text-sky-700">{DATE_PICKERS[option.picker].label}</span>
+                <span className="text-foreground">{DATE_PICKERS[option.picker].label}</span>
               ) : option.type === 'existing' ? (
                 <>
-                  <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-600">
+                  <span className="mr-1 rounded bg-muted px-1 text-xs text-muted-foreground">
                     {option.mention.kind === 'date' ? DATE_MENTION_LABEL : MENTION_KIND_LABELS[option.mention.kind]}
                   </span>{' '}
                   {option.mention.label}
                 </>
               ) : (
-                <span className="text-sky-700">
+                <span className="text-foreground">
                   「{option.name}」を{MENTION_KIND_LABELS[option.kind]}
                   として新規作成
                 </span>

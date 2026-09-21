@@ -173,13 +173,13 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       />
       {!compact && (
         <>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           「@」で人物・場所・日時を書きます。未登録の名前はその場で作成でき、日時は「@1998-08-12」「@1998年8月12日19時」のように書くと候補に出ます。誰の発言か、誰を経由して伝わったか（新聞・書籍・警察の発表など）は、保存ボタンの横の「発言者」で選びます。発言者を選ばない証言は、ユーザーの推測です。
         </p>
         {summaryItems.length > 0 && (
           <dl
             aria-label="本文から読み取った参照"
-            className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
+            className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
           >
             {summaryItems.map((item) => (
               <div key={item.term} className="contents">

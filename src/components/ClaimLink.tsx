@@ -27,15 +27,15 @@ export function ClaimLink({ view, tab, prefix }: ClaimLinkProps) {
   return (
     <Link
       href={claimHref(caseId, view.claim.id, tab)}
-      className="block rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-sky-400"
+      className="block rounded-lg border bg-card px-3 py-2 text-sm transition-colors hover:border-foreground/30"
     >
-      {prefix && <span className="mr-2 text-xs text-slate-500">{prefix}</span>}
-      <span className="mr-2 text-xs font-semibold text-slate-700">
+      {prefix && <span className="mr-2 text-xs text-muted-foreground">{prefix}</span>}
+      <span className="mr-2 text-xs font-semibold text-muted-foreground">
         {view.speakerLabel}
         {formatViaLabel(view.viaPersons.map((person) => person.name))}
       </span>
-      <span className="text-slate-900">{claimLabelOf(view)}</span>
-      {view.claim.when && <span className="ml-2 text-xs text-sky-700">{formatTimeRef(view.claim.when)}</span>}
+      <span>{claimLabelOf(view)}</span>
+      {view.claim.when && <span className="ml-2 text-xs text-muted-foreground">{formatTimeRef(view.claim.when)}</span>}
     </Link>
   );
 }

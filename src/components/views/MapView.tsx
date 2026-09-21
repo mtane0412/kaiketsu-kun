@@ -20,7 +20,7 @@ const MAP_HEIGHT_CLASS = 'h-96';
 // Leaflet は window を前提にしているため、サーバー側では描画しない
 const TrailMap = dynamic(() => import('./TrailMap'), {
   ssr: false,
-  loading: () => <p className="p-2 text-xs text-slate-500">地図を読み込んでいます…</p>,
+  loading: () => <p className="p-2 text-xs text-muted-foreground">地図を読み込んでいます…</p>,
 });
 
 const UNMAPPED_LABEL = '地図に表示できない証言';
@@ -58,7 +58,7 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
     <div className="space-y-4">
       {activeStop ? (
         <section aria-label="地図でたどる" className="space-y-2">
-          <div className={`${MAP_HEIGHT_CLASS} overflow-hidden rounded border border-slate-200`}>
+          <div className={`${MAP_HEIGHT_CLASS} overflow-hidden rounded border border-border`}>
             <TrailMap pins={pins} path={path} activeOrder={activeStop.order} onSelectPin={selectPin} />
           </div>
           <div className="flex items-center gap-2 text-sm">
@@ -66,7 +66,7 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
               type="button"
               disabled={currentIndex === 0}
               onClick={() => setActiveIndex(currentIndex - 1)}
-              className="rounded border border-slate-300 px-3 py-1 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+              className="rounded border border-border px-3 py-1 text-foreground hover:bg-muted disabled:opacity-40"
             >
               前へ
             </button>
@@ -74,11 +74,11 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
               type="button"
               disabled={currentIndex === lastIndex}
               onClick={() => setActiveIndex(currentIndex + 1)}
-              className="rounded border border-slate-300 px-3 py-1 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+              className="rounded border border-border px-3 py-1 text-foreground hover:bg-muted disabled:opacity-40"
             >
               次へ
             </button>
-            <p aria-live="polite" className="font-medium text-slate-800">
+            <p aria-live="polite" className="font-medium text-foreground">
               {`${activeStop.order} / ${trail.stops.length} ${activeStop.place.name}`}
             </p>
           </div>
@@ -87,14 +87,14 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
           </ul>
         </section>
       ) : (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           地図に表示できる証言がまだありません。場所に座標を登録し、証言の本文で「@」からその場所に言及してください。
         </p>
       )}
 
       {trail.unmapped.length > 0 && (
-        <section aria-label={UNMAPPED_LABEL} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <h3 className="text-sm font-semibold text-slate-800">
+        <section aria-label={UNMAPPED_LABEL} className="rounded-lg border border-border bg-muted/40 p-3">
+          <h3 className="text-sm font-semibold text-foreground">
             {UNMAPPED_LABEL}（{trail.unmapped.length}件）
           </h3>
           {UNMAPPED_REASONS.map(({ reason, label }) => {
@@ -102,7 +102,7 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
             if (items.length === 0) return null;
             return (
               <div key={reason} className="mt-2">
-                <h4 className="mb-1 text-xs font-medium text-slate-600">{label}</h4>
+                <h4 className="mb-1 text-xs font-medium text-muted-foreground">{label}</h4>
                 <ul aria-label={label} className="space-y-2">
                   {items.map((item) => (
                     <ClaimCard

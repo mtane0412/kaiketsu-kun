@@ -12,15 +12,17 @@
  */
 'use client';
 
+import { FlaskConical, Plus, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Id } from '@/domain/types';
 import { initializeCaseStore, useCaseStore } from '@/stores/useCaseStore';
+import { Button } from '@/components/ui/button';
+import { DeleteConfirmButton } from './DeleteConfirmButton';
+import { FormError } from './forms/fields';
 import { boardHref } from './routes';
-
-const BUTTON_CLASS = 'rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50';
 
 /** 更新日時を「2026/09/21 19:30」の形で表示します。 */
 function formatUpdatedAt(updatedAt: string): string {
@@ -79,60 +81,64 @@ export function CaseList() {
     }
   };
 
-  const handleDelete = (caseId: Id, name: string) => {
-    // 削除は取り消せないため、実行前に確認する
-    if (!window.confirm(`ケース「${name}」を削除しますか？この操作は取り消せません。`)) return;
-    deleteCase(caseId);
-  };
+  const handleDelete = (caseId: Id) => deleteCase(caseId);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <h1 className="text-xl font-bold text-slate-900">ケース</h1>
+    <div className="mx-auto max-w-3xl space-y-6 p-6">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight">ケース</h1>
+        <p className="text-sm text-muted-foreground">
+          調べたい出来事ごとにケースを作り、証言・人物・場所を1つのボードに集めます。
+        </p>
+      </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={handleCreate} className={BUTTON_CLASS}>
+        <Button type="button" size="sm" onClick={handleCreate}>
+          <Plus />
           新しいケース
-        </button>
-        <label className={`${BUTTON_CLASS} cursor-pointer`}>
+        </Button>
+        {/* ファイル選択は input が担うため、ボタンの見た目だけを借りる */}
+        <Button type="button" variant="outline" size="sm" render={<label />} className="cursor-pointer">
+          <Upload />
           JSONを読み込む
           <input type="file" accept="application/json,.json" onChange={handleImport} className="sr-only" />
-        </label>
-        <button type="button" onClick={handleLoadSample} className={BUTTON_CLASS}>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={handleLoadSample}>
+          <FlaskConical />
           架空のサンプルを読み込む
-        </button>
+        </Button>
       </div>
 
-      {(error ?? loadError) !== null && (
-        <p role="alert" className="whitespace-pre-line rounded bg-red-50 px-2 py-1.5 text-sm text-red-700">
-          {error ?? loadError}
-        </p>
-      )}
+      <FormError message={error ?? loadError} />
 
       <ul className="space-y-2">
         {summaries.map((summary) => (
           <li key={summary.id} className="flex items-center gap-2">
             <Link
               href={boardHref(summary.id, 'timeline')}
-              className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-3 py-2 hover:border-sky-400"
+              className="min-w-0 flex-1 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
             >
-              <span className="block truncate font-semibold text-slate-900">{summary.name}</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
+              <span className="block truncate font-semibold">{summary.name}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
                 証言{summary.claimCount}件・最終更新 {formatUpdatedAt(summary.updatedAt)}
               </span>
             </Link>
-            <button
-              type="button"
-              onClick={() => handleDelete(summary.id, summary.name)}
-              aria-label={`「${summary.name}」を削除`}
-              className="text-xs text-red-600 hover:underline"
-            >
-              削除
-            </button>
+            <DeleteConfirmButton
+              label={`「${summary.name}」を削除`}
+              title={`ケース「${summary.name}」を削除しますか？`}
+              description="このケースの証言・人物・場所をすべて削除します。この操作は取り消せません。"
+              onConfirm={() => handleDelete(summary.id)}
+              iconOnly
+            />
           </li>
         ))}
       </ul>
 
-      {isLoaded && summaries.length === 0 && <p className="text-sm text-slate-600">保存されているケースはありません。</p>}
+      {isLoaded && summaries.length === 0 && (
+        <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+          保存されているケースはありません。「新しいケース」から始めてください。
+        </p>
+      )}
     </div>
   );
 }

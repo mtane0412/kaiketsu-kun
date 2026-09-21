@@ -697,8 +697,9 @@ describe('ClaimForm のキーボード操作', () => {
     await typeAndChoose(user, 'が@湖畔', '場所 湖畔の別荘');
     await user.type(screen.getByLabelText('内容'), 'にいた。@未登録の名前');
 
-    expect(screen.getByText('@隣家の住人')).toHaveClass('bg-sky-100');
-    expect(screen.getByText('@湖畔の別荘')).toHaveClass('bg-emerald-100');
+    // 前提: 種類ごとの色は globals.css のトークン（--mention-*）に集約している
+    expect(screen.getByText('@隣家の住人')).toHaveClass('bg-mention-person');
+    expect(screen.getByText('@湖畔の別荘')).toHaveClass('bg-mention-place');
     expect(screen.queryByText('@未登録の名前')).not.toBeInTheDocument();
   });
 

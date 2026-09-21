@@ -22,17 +22,17 @@ export function SpeakerView({ target, activeClaimId }: SpeakerViewProps) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);
 
   if (groups.length === 0) {
-    return <p className="text-sm text-slate-500">証言がまだ登録されていません。時系列のボードから書き足してください。</p>;
+    return <p className="text-sm text-muted-foreground">証言がまだ登録されていません。時系列のボードから書き足してください。</p>;
   }
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {groups.map((group) => (
-        <section key={group.key} aria-label={group.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-slate-900">
+        <section key={group.key} aria-label={group.label} className="rounded-lg border bg-muted/40 p-3">
+          <h3 className="mb-2 flex items-center gap-2 text-base font-semibold">
             <EntityAvatar imageDataUrl={group.imageDataUrl} iconText={group.iconText} size="md" />
             {group.label}
-            <span className="text-xs font-normal text-slate-500">
+            <span className="text-xs font-normal text-muted-foreground">
               {KIND_LABELS[group.kind]}・{group.claims.length}件
             </span>
           </h3>

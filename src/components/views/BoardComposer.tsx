@@ -19,14 +19,14 @@ type BoardComposerProps = {
 
 export function BoardComposer({ defaults, onClose }: BoardComposerProps) {
   return (
-    <div className="rounded border border-sky-300 bg-white p-3 shadow-sm">
+    <div className="rounded-lg border border-ring bg-card p-3 shadow-sm">
       <ClaimForm
         defaults={defaults}
         onDone={onClose}
         autoFocus
         compact
         actions={
-          <button type="button" onClick={onClose} className="text-xs text-slate-600 hover:underline">
+          <button type="button" onClick={onClose} className="text-xs text-muted-foreground hover:underline">
             やめる
           </button>
         }

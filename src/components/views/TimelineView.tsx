@@ -30,6 +30,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Plus } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import { formatTimeRef } from '@/domain/time-ref';
@@ -69,7 +70,7 @@ function SortableItem({ id, label, dimmed, children }: { id: TimelineKey; label:
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`flex items-start gap-2 ${isDragging ? 'relative z-10 rounded bg-white shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
+      className={`flex items-start gap-2 ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
     >
       <button
         type="button"
@@ -77,7 +78,7 @@ function SortableItem({ id, label, dimmed, children }: { id: TimelineKey; label:
         {...attributes}
         {...listeners}
         aria-label={`「${label}」を動かす`}
-        className="mt-0.5 cursor-grab touch-none rounded px-0.5 text-slate-300 hover:bg-slate-100 hover:text-slate-600 active:cursor-grabbing"
+        className="mt-0.5 cursor-grab touch-none rounded px-0.5 text-muted-foreground/40 hover:bg-accent hover:text-foreground active:cursor-grabbing"
       >
         <span aria-hidden="true">⠿</span>
       </button>
@@ -93,7 +94,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-sky-50 hover:text-sky-700"
+      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground/70 hover:bg-accent hover:text-foreground"
     >
       {children}
     </button>
@@ -153,7 +154,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
   /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
   const renderItem = ({ view }: TimelineItem) => (
     <>
-      {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{formatTimeRef(view.claim.when)}</p>}
+      {view.claim.when && <p className="mb-1 text-xs font-medium text-muted-foreground">{formatTimeRef(view.claim.when)}</p>}
       <ul>
         <ClaimCard view={view} showSpeaker tab="timeline" isActive={view.claim.id === activeClaimId} />
       </ul>
@@ -170,7 +171,8 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
         <BoardComposer defaults={{ insertIndex: index }} onClose={closeComposer} />
       ) : (
         <AddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', index })}>
-          ＋ ここに書き足す
+          <Plus className="size-3.5" aria-hidden="true" />
+          ここに書き足す
         </AddButton>
       )}
     </li>
@@ -181,7 +183,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
   return (
     <div className="space-y-6">
       {isEmpty && (
-        <p className="text-sm text-slate-500">まだ何も書かれていません。「ボードに書き足す」から書き始めてください。</p>
+        <p className="text-sm text-muted-foreground">まだ何も書かれていません。「ボードに書き足す」から書き始めてください。</p>
       )}
 
       {timeline.items.length > 0 && (
@@ -198,7 +200,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
           onDragCancel={() => setDraggingKey(null)}
         >
           <SortableContext items={keys} strategy={verticalListSortingStrategy}>
-            <ol aria-label="時系列" className="space-y-2 border-l-2 border-slate-200 pl-2">
+            <ol aria-label="時系列" className="space-y-2 border-l-2 pl-2">
               {timeline.items.flatMap((item, index) => [
                 renderSlot(item, index),
                 <SortableItem key={item.key} id={item.key} label={labelOf(item)} dimmed={item.key !== draggingKey && !isAllowedIndex(index)}>
@@ -211,7 +213,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
       )}
 
       {notice && (
-        <p role="status" className="text-sm text-amber-700">
+        <p role="status" className="text-sm text-mention-date-foreground">
           {notice}
         </p>
       )}
@@ -222,9 +224,10 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
         <button
           type="button"
           onClick={() => setComposer({ type: 'free' })}
-          className="w-full rounded border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-sky-400 hover:text-sky-700"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
         >
-          <span aria-hidden="true">＋ </span>ボードに書き足す
+          <Plus className="size-4" aria-hidden="true" />
+          ボードに書き足す
         </button>
       )}
     </div>
