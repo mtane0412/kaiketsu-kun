@@ -54,7 +54,7 @@ describe('CaseBoard', () => {
     expect(screen.getByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
   });
 
-  it('「地図」に切り替えると地図ビューを表示し、証言のメンションからエンティティの編集を開ける', async () => {
+  it('「地図」に切り替えると地図ビューを表示し、証言のメンションが場所の詳細ページへのリンクになる', async () => {
     const user = userEvent.setup();
     renderBoard();
 
@@ -62,24 +62,17 @@ describe('CaseBoard', () => {
 
     // 前提: サンプルの案件の場所には座標が無いため、湖畔の別荘に言及する証言（2件）は「地図に表示できない証言」に並ぶ
     const 一覧 = screen.getByRole('region', { name: '地図に表示できない証言' });
-    await user.click(within(一覧).getAllByRole('button', { name: '@湖畔の別荘' })[0]!);
-
-    const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
-    expect(within(panel).getByRole('heading', { name: '場所を編集' })).toBeInTheDocument();
+    expect(within(一覧).getAllByRole('link', { name: '@湖畔の別荘' })[0]!).toHaveAttribute(
+      'href',
+      '/places/place-villa?tab=map'
+    );
   });
 
-  it('ボード上のメンションを選ぶと、そのエンティティの編集をパネルに開き、閉じられる', async () => {
-    const user = userEvent.setup();
+  it('ボード上のメンションは、その人物・場所の詳細ページへのリンクになる（オーバーレイでは開かない）', async () => {
     renderBoard();
 
     const 隣家の証言 = (await screen.findByText(/夜9時ごろ、/)).closest('li')!;
-    await user.click(within(隣家の証言).getByRole('button', { name: '@湖畔の別荘' }));
-
-    const panel = screen.getByRole('complementary', { name: '登録済みの一覧' });
-    expect(within(panel).getByRole('heading', { name: '場所を編集' })).toBeInTheDocument();
-    expect(within(panel).getByLabelText('名前')).toHaveValue('湖畔の別荘');
-
-    await user.click(within(panel).getByRole('button', { name: '閉じる' }));
+    expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
     expect(screen.queryByRole('complementary', { name: '登録済みの一覧' })).not.toBeInTheDocument();
   });
 
@@ -143,6 +136,45 @@ describe('CaseBoard', () => {
 
       expect(mockRouter.replace).toHaveBeenLastCalledWith('/claims/claim-neighbor?tab=speaker', { scroll: false });
       expect(screen.getByRole('complementary', { name: '証言の詳細' })).toBeInTheDocument();
+    });
+  });
+
+  describe('人物・場所の詳細を横に並べる表示（2ペイン）', () => {
+    it('人物の詳細ページのURLでは、ボードの横に人物の詳細を並べ、時系列は表示したままにする', async () => {
+      resetMockNavigation('/persons/person-neighbor');
+      renderBoard(<p>隣家の住人の詳細</p>);
+
+      const 詳細 = await screen.findByRole('complementary', { name: '人物の詳細' });
+      expect(within(詳細).getByText('隣家の住人の詳細')).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: '時系列' })).toBeInTheDocument();
+    });
+
+    it('場所の詳細ページのURLでは、ボードの横に場所の詳細を並べる', async () => {
+      resetMockNavigation('/places/place-villa');
+      renderBoard(<p>湖畔の別荘の詳細</p>);
+
+      const 詳細 = await screen.findByRole('complementary', { name: '場所の詳細' });
+      expect(within(詳細).getByText('湖畔の別荘の詳細')).toBeInTheDocument();
+    });
+
+    it('人物を開いたままタブを切り替えると、人物を開いたままのURLに切り替える', async () => {
+      const user = userEvent.setup();
+      resetMockNavigation('/persons/person-neighbor');
+      renderBoard(<p>隣家の住人の詳細</p>);
+
+      await user.click(await screen.findByRole('tab', { name: '地図' }));
+
+      expect(mockRouter.replace).toHaveBeenLastCalledWith('/persons/person-neighbor?tab=map', { scroll: false });
+      expect(screen.getByRole('complementary', { name: '人物の詳細' })).toBeInTheDocument();
+    });
+
+    it('人物の詳細を開いている間は、証言のカードを開いている扱いにしない', async () => {
+      resetMockNavigation('/persons/person-neighbor');
+      renderBoard(<p>隣家の住人の詳細</p>);
+
+      const 時系列 = await screen.findByRole('list', { name: '時系列' });
+      const 隣家の証言 = within(時系列).getByText(/夜9時ごろ、/).closest('li')!;
+      expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).not.toHaveAttribute('aria-current');
     });
   });
 });

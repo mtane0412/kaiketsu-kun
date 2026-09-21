@@ -45,11 +45,41 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
-    const links = within(湖畔の別荘).getAllByRole('link');
+    const links = within(within(湖畔の別荘).getByRole('list')).getAllByRole('link');
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute('href', '/claims/claim-caretaker');
     expect(links[0]).toHaveTextContent('管理人');
     expect(links[0]).toHaveTextContent(/夜7時に見回りをしたとき/);
+  });
+
+  it('この証言が触れている発言者・経由・言及・場所を、人物・場所の詳細へのリンクにする', () => {
+    // 前提: 隣家の住人の証言は、発言者が隣家の住人で、架空日報 朝刊を経由し、別荘の持ち主に言及し、湖畔の別荘を述べている
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 触れている先 = screen.getByRole('navigation', { name: 'この証言が触れている人物・場所' });
+    expect(within(触れている先).getByRole('link', { name: '発言者 隣家の住人' })).toHaveAttribute(
+      'href',
+      '/persons/person-neighbor'
+    );
+    expect(within(触れている先).getByRole('link', { name: '経由 架空日報 朝刊' })).toHaveAttribute(
+      'href',
+      '/persons/person-newspaper'
+    );
+    expect(within(触れている先).getByRole('link', { name: '言及 別荘の持ち主' })).toHaveAttribute(
+      'href',
+      '/persons/person-owner'
+    );
+    expect(within(触れている先).getByRole('link', { name: '場所 湖畔の別荘' })).toHaveAttribute(
+      'href',
+      '/places/place-villa'
+    );
+  });
+
+  it('「〇〇に触れている他の証言」の見出しを、その人物・場所の詳細へのリンクにする', () => {
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    expect(within(湖畔の別荘).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
   });
 
   it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildClaimDetail,
   buildMapTrail,
+  buildPersonDetail,
+  buildPlaceDetail,
   buildTimeline,
   findRelatedEntities,
   groupClaimsBySpeaker,
@@ -359,5 +361,77 @@ describe('buildClaimDetail', () => {
 
   it('案件に無い証言のIDを渡すと undefined を返す（URLの直接入力で、削除済みの証言を開いた場合）', () => {
     expect(buildClaimDetail(sampleFictionalCase, 'claim-deleted')).toBeUndefined();
+  });
+});
+
+describe('buildPersonDetail', () => {
+  // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
+
+  it('人物から証言を逆引きし、発言者・経由・言及のまとまりを、時系列の並び順で返す', () => {
+    // 前提: 架空日報 朝刊は、連絡が取れない件を自ら述べ、隣家の住人と防犯カメラの証言を伝えている
+    const detail = buildPersonDetail(sampleFictionalCase, 'person-newspaper');
+
+    expect(detail?.person.name).toBe('架空日報 朝刊');
+    expect(detail?.claimGroups.map((group) => [group.label, group.claims.map((view) => view.claim.id)])).toEqual([
+      ['この人物が述べた証言', ['claim-report']],
+      ['この人物を経由して伝わった証言', ['claim-police-camera', 'claim-neighbor']],
+    ]);
+  });
+
+  it('言及されている証言も逆引きし、1件も無いまとまりは作らない', () => {
+    // 前提: 別荘の持ち主は、自ら述べた証言も経由した証言も無く、5件すべての証言に言及されている
+    const detail = buildPersonDetail(sampleFictionalCase, 'person-owner');
+
+    expect(detail?.claimGroups.map((group) => [group.label, group.claims.map((view) => view.claim.id)])).toEqual([
+      [
+        'この人物に言及している証言',
+        ['claim-caretaker', 'claim-police-camera', 'claim-neighbor', 'claim-report', 'claim-user-guess'],
+      ],
+    ]);
+  });
+
+  it('メモのメンションでつながった、関連するエンティティを返す', () => {
+    // 前提: 隣家の住人のメモから、湖畔の別荘に言及している案件を用意する
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-neighbor'
+          ? { ...person, note: '@[湖畔の別荘](place:place-villa)の隣に住んでいます。' }
+          : person
+      ),
+    };
+    const detail = buildPersonDetail(案件, 'person-neighbor');
+
+    expect(detail?.relatedEntities.map((related) => related.name)).toEqual(['湖畔の別荘']);
+  });
+
+  it('案件に無い人物のIDを渡すと undefined を返す（URLの直接入力で、削除済みの人物を開いた場合）', () => {
+    expect(buildPersonDetail(sampleFictionalCase, 'person-deleted')).toBeUndefined();
+  });
+});
+
+describe('buildPlaceDetail', () => {
+  it('場所から証言を逆引きし、その場所を述べている証言を、時系列の並び順で返す', () => {
+    // 前提: 湖畔の別荘を述べているのは、管理人の証言と隣家の住人の証言の2件
+    const detail = buildPlaceDetail(sampleFictionalCase, 'place-villa');
+
+    expect(detail?.place.name).toBe('湖畔の別荘');
+    expect(detail?.claimGroups.map((group) => [group.label, group.claims.map((view) => view.claim.id)])).toEqual([
+      ['この場所を述べている証言', ['claim-caretaker', 'claim-neighbor']],
+    ]);
+  });
+
+  it('その場所を述べている証言が1件も無い場合は、まとまりを作らない', () => {
+    // 前提: どの証言も述べていない「県道の交差点」を登録する
+    const 案件: Case = {
+      ...sampleFictionalCase,
+      places: [...sampleFictionalCase.places, { id: 'place-crossing', name: '県道の交差点' }],
+    };
+
+    expect(buildPlaceDetail(案件, 'place-crossing')?.claimGroups).toEqual([]);
+  });
+
+  it('案件に無い場所のIDを渡すと undefined を返す（URLの直接入力で、削除済みの場所を開いた場合）', () => {
+    expect(buildPlaceDetail(sampleFictionalCase, 'place-deleted')).toBeUndefined();
   });
 });

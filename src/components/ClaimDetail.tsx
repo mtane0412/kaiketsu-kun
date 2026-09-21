@@ -16,30 +16,36 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { buildClaimDetail, claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
+import { buildClaimDetail, claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
+import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
+import { ClaimLink } from './ClaimLink';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
-import { boardHref, claimHref, parseTab, TAB_SEARCH_PARAM, type TabKey } from './routes';
+import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM } from './routes';
 
-/** 他の証言へのリンクです。発言者と、証言の名前（見出し、または本文の冒頭）を示します。 */
-function ClaimLink({ view, tab, prefix }: { view: ClaimView; tab: TabKey; prefix?: string }) {
-  return (
-    <Link
-      href={claimHref(view.claim.id, tab)}
-      className="block rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-sky-400"
-    >
-      {prefix && <span className="mr-2 text-xs text-slate-500">{prefix}</span>}
-      <span className="mr-2 text-xs font-semibold text-slate-700">
-        {view.speakerLabel}
-        {formatViaLabel(view.viaPersons.map((person) => person.name))}
-      </span>
-      <span className="text-slate-900">{claimLabelOf(view)}</span>
-      {view.claim.when && <span className="ml-2 text-xs text-sky-700">{view.claim.when.text}</span>}
-    </Link>
-  );
+/** この証言が触れている人物・場所を並べる欄の見出しです。 */
+const MENTIONED_ENTITIES_LABEL = 'この証言が触れている人物・場所';
+
+/** この証言が触れている人物・場所1件と、どの立場で触れているかです。 */
+type MentionedEntity = { role: string; kind: MentionKind; id: Id; name: string };
+
+/**
+ * 証言が触れている人物・場所を、発言者・経由した人物・言及している人物・場所の順に並べます。
+ * 同じ人物が複数の立場で現れる場合は、立場ごとに並べます（どの立場で触れているかを示すためです）。
+ */
+function mentionedEntitiesOf(view: ClaimView): MentionedEntity[] {
+  const persons = (role: string, list: { id: Id; name: string }[]): MentionedEntity[] =>
+    list.map((person) => ({ role, kind: 'person', id: person.id, name: person.name }));
+
+  return [
+    ...persons('発言者', view.speakerPersons),
+    ...persons('経由', view.viaPersons),
+    ...persons('言及', view.mentionedPersons),
+    ...(view.place ? [{ role: '場所', kind: 'place' as const, id: view.place.id, name: view.place.name }] : []),
+  ];
 }
 
 export function ClaimDetail({ claimId }: { claimId: Id }) {
@@ -70,6 +76,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   }
 
   const { view, previous, next, relatedClaimGroups } = detail;
+  const mentionedEntities = mentionedEntitiesOf(view);
 
   const handleDelete = () => {
     // 削除は取り消せないため、実行前に確認する
@@ -110,6 +117,27 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         </div>
       </section>
 
+      {mentionedEntities.length > 0 && (
+        <nav aria-label={MENTIONED_ENTITIES_LABEL} className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-800">{MENTIONED_ENTITIES_LABEL}</h3>
+          <ul className="flex flex-wrap gap-1">
+            {mentionedEntities.map((entity) => (
+              <li key={`${entity.role}:${entity.kind}:${entity.id}`}>
+                <Link
+                  href={mentionHref(entity.kind, entity.id, tab)}
+                  // どの立場で触れているかを読み上げにも伝えるため、リンクの名前に立場と名前を明示する
+                  aria-label={`${entity.role} ${entity.name}`}
+                  className="flex items-baseline gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-sm hover:border-sky-400"
+                >
+                  <span className="text-xs text-slate-500">{entity.role}</span>
+                  <span className="text-slate-900">{entity.name}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">
           <h3 className="text-sm font-semibold text-slate-800">時系列の前後</h3>
@@ -123,7 +151,11 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         return (
           <section key={`${group.kind}:${group.id}`} aria-label={label} className="space-y-2">
             <h3 className="text-sm font-semibold text-slate-800">
-              {label}
+              「
+              <Link href={mentionHref(group.kind, group.id, tab)} className="text-sky-700 hover:underline">
+                {group.label}
+              </Link>
+              」に触れている他の証言
               <span className="ml-2 text-xs font-normal text-slate-500">
                 {MENTION_KIND_LABELS[group.kind]}・{group.claims.length}件
               </span>

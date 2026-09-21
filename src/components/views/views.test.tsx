@@ -3,7 +3,7 @@
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
@@ -126,9 +126,9 @@ describe('TimelineView', () => {
 });
 
 /** ストアの案件を時系列ボードに表示します。ボードへの書き足しがストアを通じて画面に反映されることを検証するために使います。 */
-function StoreBoard({ onOpenEntity }: { onOpenEntity?: (kind: string, id: string) => void }) {
+function StoreBoard() {
   const currentCase = useCaseStore((state) => state.currentCase);
-  return <TimelineView target={currentCase} onOpenEntity={onOpenEntity} />;
+  return <TimelineView target={currentCase} />;
 }
 
 /** 警察の捜索（8月15日）についての証言です。 */
@@ -241,14 +241,12 @@ describe('TimelineView への書き足し', () => {
     expect(within(捜索).queryByRole('button', { name: 'この証言の詳細' })).not.toBeInTheDocument();
   });
 
-  it('本文のメンションから、エンティティの編集を開く', async () => {
-    const user = userEvent.setup();
-    const onOpenEntity = vi.fn();
-    render(<StoreBoard onOpenEntity={onOpenEntity} />);
+  it('本文のメンションは、その人物・場所の詳細ページへのリンクになる', () => {
+    // 前提: メンションからたどった先でも、時系列のタブに戻れるようにする
+    render(<StoreBoard />);
 
     const 隣家の証言 = screen.getByText(/夜9時ごろ、/).closest('li')!;
-    await user.click(within(隣家の証言).getByRole('button', { name: '@湖畔の別荘' }));
-    expect(onOpenEntity).toHaveBeenLastCalledWith('place', 'place-villa');
+    expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute('href', '/places/place-villa');
   });
 });
 
@@ -373,22 +371,21 @@ describe('人物のアイコンの表示', () => {
 
     const 推測 = screen.getByText(/金銭の問題があった可能性/).closest('li');
     if (!推測) throw new Error('ユーザーの推測のカードが見つかりません');
-    const 言及している人物 = within(within(推測).getByRole('list', { name: '言及している人物' })).getAllByRole('img');
+    // 言及のアイコンは、その人物の詳細ページへのリンクになる。名前はリンクの名前として持つ
+    const 言及している人物 = within(within(推測).getByRole('list', { name: '言及している人物' })).getAllByRole('link');
 
     expect(言及している人物.map((icon) => icon.getAttribute('aria-label'))).toEqual(['管理人', '隣家の住人', '別荘の持ち主']);
     expect(言及している人物.flatMap((icon) => iconTexts(icon))).toEqual(['管', '隣', '別']);
   });
 
-  it('言及の欄のアイコンを選ぶと、その人物を開く', async () => {
-    const user = userEvent.setup();
-    const onOpenEntity = vi.fn();
-    render(<TimelineView target={sampleFictionalCase} onOpenEntity={onOpenEntity} />);
+  it('言及の欄のアイコンは、その人物の詳細ページへのリンクになる', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
 
     const 推測 = screen.getByText(/金銭の問題があった可能性/).closest('li');
     if (!推測) throw new Error('ユーザーの推測のカードが見つかりません');
-    await user.click(within(within(推測).getByRole('list', { name: '言及している人物' })).getByRole('button', { name: '隣家の住人' }));
+    const 言及 = within(推測).getByRole('list', { name: '言及している人物' });
 
-    expect(onOpenEntity).toHaveBeenCalledWith('person', 'person-neighbor');
+    expect(within(言及).getByRole('link', { name: '隣家の住人' })).toHaveAttribute('href', '/persons/person-neighbor');
   });
 
   it('証言者別ビューの見出しに、画像の無い発言者の文字のアイコンを表示する', () => {
