@@ -2,7 +2,19 @@
  * 画面のURLを組み立てる関数のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { boardHref, casesHref, claimHref, mentionHref, parseTab, personHref, placeHref } from './routes';
+import {
+  boardHref,
+  casesHref,
+  claimHref,
+  mentionHref,
+  newPersonHref,
+  newPlaceHref,
+  parseDetailKind,
+  parseTab,
+  personHref,
+  placeHref,
+  withTab,
+} from './routes';
 
 /** テストで使うケースのIDです。 */
 const ケースのId = 'case-villa';
@@ -81,5 +93,54 @@ describe('mentionHref', () => {
       '/cases/case-villa/persons/person-neighbor?tab=map'
     );
     expect(mentionHref(ケースのId, 'place', 'place-villa', 'map')).toBe('/cases/case-villa/places/place-villa?tab=map');
+  });
+});
+
+describe('newPersonHref・newPlaceHref', () => {
+  it('人物・場所を新しく登録するページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(newPersonHref(ケースのId, 'timeline')).toBe('/cases/case-villa/persons/new');
+    expect(newPersonHref(ケースのId, 'map')).toBe('/cases/case-villa/persons/new?tab=map');
+    expect(newPlaceHref(ケースのId, 'timeline')).toBe('/cases/case-villa/places/new');
+    expect(newPlaceHref(ケースのId, 'speaker')).toBe('/cases/case-villa/places/new?tab=speaker');
+  });
+
+  it('登録のURLは、IDが「new」の人物・場所の詳細より優先される', () => {
+    // 前提: IDが「new」のエンティティは、アプリが振るID（nanoid）では生まれない。
+    // 読み込んだJSONに書かれていた場合だけ起こりうる衝突で、そのときは登録のページが優先される。
+    // Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するため、判定もそれに合わせる。
+    expect(parseDetailKind(personHref(ケースのId, 'new', 'timeline'))).toBe('newPerson');
+    expect(parseDetailKind(personHref(ケースのId, 'person-neighbor', 'timeline'))).toBe('person');
+    expect(parseDetailKind(newPersonHref(ケースのId, 'timeline'))).toBe('newPerson');
+  });
+});
+
+describe('parseDetailKind', () => {
+  it('証言・人物・場所の詳細のURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/claims/claim-neighbor')).toBe('claim');
+    expect(parseDetailKind('/cases/case-villa/persons/person-neighbor')).toBe('person');
+    expect(parseDetailKind('/cases/case-villa/places/place-villa')).toBe('place');
+  });
+
+  it('人物・場所を新しく登録するURLから、登録の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/persons/new')).toBe('newPerson');
+    expect(parseDetailKind('/cases/case-villa/places/new')).toBe('newPlace');
+  });
+
+  it('ボードのURLと、詳細ではないURLでは undefined を返す', () => {
+    expect(parseDetailKind('/cases/case-villa')).toBeUndefined();
+    expect(parseDetailKind('/')).toBeUndefined();
+    expect(parseDetailKind('/cases/case-villa/claims')).toBeUndefined();
+  });
+});
+
+describe('withTab', () => {
+  it('詳細のURLに、開いているタブをクエリとして付け直す', () => {
+    // 検証: 詳細を開いたままタブだけを切り替えるために使う
+    expect(withTab('/cases/case-villa/claims/claim-neighbor', 'map')).toBe(
+      '/cases/case-villa/claims/claim-neighbor?tab=map'
+    );
+    expect(withTab('/cases/case-villa/claims/claim-neighbor', 'timeline')).toBe(
+      '/cases/case-villa/claims/claim-neighbor'
+    );
   });
 });

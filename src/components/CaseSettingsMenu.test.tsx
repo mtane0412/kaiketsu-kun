@@ -1,5 +1,8 @@
 /**
- * ケースツールバー（ケース名の変更・JSONの書き出し・ケースの削除・一覧への導線）のテスト
+ * ケース設定のメニュー（ケース名の変更・JSONの書き出し・ケースの削除）のテスト
+ *
+ * ケース名の変更・JSONの書き出し・ケースの削除は、毎日使う操作ではないため、
+ * サイドバーの一等地ではなくメニューの中に置いています。テストもメニューを開くところから始めます。
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,18 +13,23 @@ import { useCaseStore } from '@/stores/useCaseStore';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { openTestCase } from '@/test/open-case';
 import { CaseGate } from './CaseGate';
-import { CaseToolbar } from './CaseToolbar';
+import { CaseSettingsMenu } from './CaseSettingsMenu';
 
-/** 実際の画面と同じく、ケースを開く枠（CaseGate）の中にツールバーを描画します。 */
-function ツールバーを描画する() {
-  return render(
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+/** 実際の画面と同じく、ケースを開く枠（CaseGate）の中にメニューを描画します。 */
+function メニューを描画する() {
+  render(
     <CaseGate caseId={sampleFictionalCase.id}>
-      <CaseToolbar />
+      <CaseSettingsMenu />
     </CaseGate>
   );
 }
 
-vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+/** ケース設定のメニューを開きます。 */
+async function メニューを開く(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'ケース設定' }));
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -33,21 +41,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('CaseToolbar', () => {
+describe('CaseSettingsMenu', () => {
   it('ケース名を変更する', async () => {
     const user = userEvent.setup();
-    ツールバーを描画する();
+    メニューを描画する();
 
-    await user.clear(screen.getByLabelText('ケース名'));
+    await メニューを開く(user);
+    await user.click(await screen.findByRole('menuitem', { name: 'ケース名を変更' }));
+
+    await user.clear(await screen.findByLabelText('ケース名'));
     await user.type(screen.getByLabelText('ケース名'), '湖畔の事件');
+    await user.click(screen.getByRole('button', { name: '保存' }));
 
     expect(useCaseStore.getState().currentCase?.name).toBe('湖畔の事件');
-  });
-
-  it('ケースの一覧へ戻るリンクを表示する', () => {
-    ツールバーを描画する();
-
-    expect(screen.getByRole('link', { name: 'ケースの一覧' })).toHaveAttribute('href', '/');
   });
 
   it('現在のケースをJSONファイルとして書き出す', async () => {
@@ -59,19 +65,22 @@ describe('CaseToolbar', () => {
     });
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-    ツールバーを描画する();
+    メニューを描画する();
 
-    await user.click(screen.getByRole('button', { name: 'JSONを書き出す' }));
+    await メニューを開く(user);
+    await user.click(await screen.findByRole('menuitem', { name: 'JSONを書き出す' }));
 
     expect(JSON.parse(await exported!.text())).toEqual(sampleFictionalCase);
   });
 
   it('ケースを削除する前に確認し、承認された場合は削除して一覧へ移る', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    ツールバーを描画する();
+    メニューを描画する();
 
-    await user.click(screen.getByRole('button', { name: 'このケースを削除' }));
+    await メニューを開く(user);
+    await user.click(await screen.findByRole('menuitem', { name: 'このケースを削除' }));
+    // 削除は取り消せないため、確認の画面で改めて承認する
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
 
     expect(listCaseSummaries()).toEqual([]);
     expect(mockRouter.replace).toHaveBeenCalledWith('/');
@@ -79,10 +88,11 @@ describe('CaseToolbar', () => {
 
   it('ケースの削除が取り消された場合は、ケースを消さない', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    ツールバーを描画する();
+    メニューを描画する();
 
-    await user.click(screen.getByRole('button', { name: 'このケースを削除' }));
+    await メニューを開く(user);
+    await user.click(await screen.findByRole('menuitem', { name: 'このケースを削除' }));
+    await user.click(await screen.findByRole('button', { name: 'やめる' }));
 
     expect(listCaseSummaries().map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
     expect(mockRouter.replace).not.toHaveBeenCalled();

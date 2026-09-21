@@ -17,6 +17,7 @@
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
+import type { MentionKind } from '@/domain/mention';
 import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import {
@@ -31,6 +32,15 @@ import {
 
 /** ケースが持つ一覧の名前です。 */
 export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships';
+
+/**
+ * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。
+ * 本文のメンションや詳細ページの種類から、更新・削除する一覧を決めるために使います。
+ */
+export const COLLECTION_KEY_BY_MENTION_KIND: Record<MentionKind, CollectionKey> = {
+  person: 'persons',
+  place: 'places',
+};
 
 /** 一覧の名前と、その一覧に保存する要素の組です。 */
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];

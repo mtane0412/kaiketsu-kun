@@ -7,6 +7,8 @@
  * 詳細ページのURL（.../claims/<証言のID>・.../persons/<人物のID>・.../places/<場所のID>）から、
  * それぞれ claimId・personId・placeId を読み取ります。
  *
+ * usePathname は、URLのパス（クエリを含まない部分）を返します。
+ *
  * 使い方: テストファイルの先頭で vi.mock('next/navigation', () => import('@/test/mock-navigation')) を呼び、
  * beforeEach で resetMockNavigation() を呼んでください。
  */
@@ -30,6 +32,19 @@ function subscribe(listener: () => void) {
   };
 }
 
+/**
+ * リンク（next/link が描く <a>）のクリックを、この代役のURLの書き換えに置き換えます。
+ * jsdom はリンクをたどらないため、これが無いとテストからはリンクで画面を移れません。
+ * 画面の外へ出るリンク（http から始まるもの）は、そのまま素通りさせます。
+ */
+document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+  const href = event.target.closest('a')?.getAttribute('href');
+  if (href === null || href === undefined || href.startsWith('http')) return;
+  event.preventDefault();
+  navigate(href);
+});
+
 /** router.push・router.replace の呼び出しを検証するための代役です。 */
 export const mockRouter = {
   push: vi.fn((href: string) => navigate(href)),
@@ -52,14 +67,23 @@ export function useSearchParams() {
   return new URLSearchParams(search);
 }
 
+/** いま開いているURLのパス（クエリを含まない部分）を返します。ボードは、これで開いている詳細の種類を見分けます。 */
+export function usePathname() {
+  return useSyncExternalStore(subscribe, () => currentUrl.pathname);
+}
+
 /** ケースのボードのURLから、ケースのIDを取り出すための形です。 */
 const CASE_PATH_PATTERN = /^\/cases\/([^/]+)/;
 
-/** 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。 */
+/**
+ * 詳細ページのURLから、対象のIDを取り出すための形です。ルートごとに、本物のルーターが渡すパラメータの名前を対応させます。
+ * 人物・場所の登録のURL（.../persons/new・.../places/new）は、本物のルーターでは静的なルートに当たり、
+ * personId・placeId を渡しません。代役でも同じになるよう、「new」だけは対象から外します。
+ */
 const DETAIL_PATH_PATTERNS: { name: 'claimId' | 'personId' | 'placeId'; pattern: RegExp }[] = [
   { name: 'claimId', pattern: /^\/cases\/[^/]+\/claims\/([^/]+)$/ },
-  { name: 'personId', pattern: /^\/cases\/[^/]+\/persons\/([^/]+)$/ },
-  { name: 'placeId', pattern: /^\/cases\/[^/]+\/places\/([^/]+)$/ },
+  { name: 'personId', pattern: /^\/cases\/[^/]+\/persons\/(?!new$)([^/]+)$/ },
+  { name: 'placeId', pattern: /^\/cases\/[^/]+\/places\/(?!new$)([^/]+)$/ },
 ];
 
 export function useParams(): { caseId?: string; claimId?: string; personId?: string; placeId?: string } {

@@ -23,7 +23,7 @@ import {
   type MentionKind,
 } from '@/domain/mention';
 import { firstCharacter } from '@/domain/person-icon';
-import type { Coordinates, Person, Place } from '@/domain/types';
+import type { Coordinates, Id, Person, Place } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
 import { CoordinateField } from './CoordinateField';
@@ -33,7 +33,11 @@ import { MentionTextarea } from './MentionTextarea';
 
 type FormProps<T> = {
   initial?: T;
-  onDone: () => void;
+  /**
+   * 保存できたときに呼び出します。引数は、保存したエンティティのIDです。
+   * 新規登録では、保存した直後にそのエンティティの詳細へ移るために使います。
+   */
+  onDone: (id: Id) => void;
 };
 
 /** 例外をフォームに表示するエラー文に変換します。 */
@@ -118,7 +122,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
       setError(toMessage(caught));
       return;
     }
-    onDone();
+    onDone(person.id);
   };
 
   return (
@@ -168,7 +172,7 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
       setError(toMessage(caught));
       return;
     }
-    onDone();
+    onDone(place.id);
   };
 
   return (

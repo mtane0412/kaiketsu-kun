@@ -4,8 +4,13 @@
  * ケースは複数を保存できるため、ボードと詳細のURLは、どのケースかを表すケースのID（/cases/<ケースのID>）から始めます。
  * ケースの一覧はトップページ（/）です。
  * 証言・人物・場所の詳細は、それぞれ独立したページ（.../claims/<ID>・.../persons/<ID>・.../places/<ID>）として開きます。
- * ボードのタブはURLのクエリ（?tab=）に持たせます。詳細ページからブラウザの「戻る」や
- * 「ボードに戻る」で、元のタブに戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
+ * 人物・場所を新しく登録するページは、それぞれの一覧の下（.../persons/new・.../places/new）に置きます。
+ * 注意: IDがちょうど「new」の人物・場所は、登録のページに隠れて詳細を開けません。
+ * Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するためです。
+ * アプリが振るID（nanoid）では起こらず、読み込んだJSONに「new」と書かれていた場合だけ起こりえます。
+ * parseDetailKind も、URLの判定を Next.js の優先順位に合わせています。
+ * ボードの表示の切り替え（サイドバーの「時系列」「証言者別」「地図」）はURLのクエリ（?tab=）に持たせます。
+ * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
@@ -70,4 +75,45 @@ export function placeHref(caseId: Id, placeId: Id, tab: TabKey): string {
 /** メンションの種類（人物・場所）に応じた、詳細ページのURLを返します。証言の本文のメンションからたどるために使います。 */
 export function mentionHref(caseId: Id, kind: MentionKind, id: Id, tab: TabKey): string {
   return kind === 'person' ? personHref(caseId, id, tab) : placeHref(caseId, id, tab);
+}
+
+/** 人物を新しく登録するページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function newPersonHref(caseId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/persons/new${tabQuery(tab)}`;
+}
+
+/** 場所を新しく登録するページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function newPlaceHref(caseId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/places/new${tabQuery(tab)}`;
+}
+
+/** ボードの横に並べる詳細の種類です。「new」で始まる種類は、まだ保存していないエンティティの登録フォームです。 */
+export type DetailKind = 'claim' | 'person' | 'place' | 'newPerson' | 'newPlace';
+
+/**
+ * URLのパス（クエリを含まない部分）から、開いている詳細の種類を見分けるための形です。
+ * 登録のページ（.../persons/new）を先に並べ、IDが「new」の詳細より優先します。Next.js の優先順位に合わせるためです。
+ */
+const DETAIL_PATH_PATTERNS: { kind: DetailKind; pattern: RegExp }[] = [
+  { kind: 'newPerson', pattern: /^\/cases\/[^/]+\/persons\/new$/ },
+  { kind: 'newPlace', pattern: /^\/cases\/[^/]+\/places\/new$/ },
+  { kind: 'claim', pattern: /^\/cases\/[^/]+\/claims\/[^/]+$/ },
+  { kind: 'person', pattern: /^\/cases\/[^/]+\/persons\/[^/]+$/ },
+  { kind: 'place', pattern: /^\/cases\/[^/]+\/places\/[^/]+$/ },
+];
+
+/**
+ * URLのパスから、ボードの横に開いている詳細の種類を読み取ります。詳細のURLでない場合は undefined を返します。
+ * ボード（CaseBoard）は、この結果で2ペインの表示に切り替えます。
+ */
+export function parseDetailKind(pathname: string): DetailKind | undefined {
+  return DETAIL_PATH_PATTERNS.find(({ pattern }) => pattern.test(pathname))?.kind;
+}
+
+/**
+ * URLのパスに、表示するタブのクエリを付け直します。
+ * 詳細を開いたまま表示だけを切り替えるために、いま開いているパスへ新しいタブを付けて使います。
+ */
+export function withTab(pathname: string, tab: TabKey): string {
+  return `${pathname}${tabQuery(tab)}`;
 }

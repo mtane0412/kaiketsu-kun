@@ -7,6 +7,8 @@
  * その人物・場所から逆引きした証言（導出は buildPersonDetail・buildPlaceDetail を参照）と、
  * メモのメンションでつながった関連するエンティティ（findRelatedEntities）へのリンクを並べます。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、証言・エンティティへのリンクに引き継ぎます。
+ * 人物・場所を新しく登録する画面（NewPersonDetail・NewPlaceDetail）も、同じ場所に並べます。
+ * サイドバーの一覧の「＋」から開き、保存できたら、登録したエンティティの詳細へ移ります。
  *
  * 注意: ケースに無いIDが渡された場合（URLの直接入力、削除済みのエンティティ）は、見つからないことを表示します。
  * 人物・場所のフォームは初期値を初期化でのみ使用するため、呼び出し側はIDが変わるたびに key を変えて再マウントしてください。
@@ -21,13 +23,12 @@ import { buildPersonDetail, buildPlaceDetail, type EntityClaimGroup, type Relate
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
-import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
+import { COLLECTION_KEY_BY_MENTION_KIND, useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
 import { EntityAvatar } from './EntityAvatar';
-import { ENTRY_KEY_BY_MENTION_KIND } from './EntryPanel';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { FormError } from './forms/fields';
-import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM, type TabKey } from './routes';
+import { boardHref, mentionHref, parseTab, personHref, placeHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 
 /** 関連するエンティティの一覧の見出しです。 */
@@ -92,7 +93,7 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
     // 削除は取り消せないため、実行前に確認する
     if (!window.confirm(`「${name}」を削除しますか？`)) return;
     try {
-      remove(ENTRY_KEY_BY_MENTION_KIND[kind], id);
+      remove(COLLECTION_KEY_BY_MENTION_KIND[kind], id);
     } catch (caught) {
       setDeleteError(caught instanceof Error ? caught.message : String(caught));
       return;
@@ -184,6 +185,47 @@ export function PersonDetail({ personId }: { personId: Id }) {
       relatedEntities={detail.relatedEntities}
     />
   );
+}
+
+type NewEntityDetailProps = {
+  kind: MentionKind;
+  /** 登録フォームです。保存できたら、保存したエンティティのIDで onSaved を呼び出します。 */
+  form: (onSaved: (id: Id) => void) => ReactNode;
+  /** 保存したエンティティの詳細ページのURLを組み立てます。 */
+  href: (caseId: Id, id: Id, tab: TabKey) => string;
+};
+
+/**
+ * 人物・場所を新しく登録する枠組みです。ボードの横に、登録フォームだけを並べます。
+ * 保存できたら、そのまま編集・削除・関連の確認を続けられるよう、登録したエンティティの詳細へ移ります。
+ * 登録のURLへ「戻る」で戻ると、保存済みのエンティティを二重に登録しかねないため、履歴は置き換えます。
+ */
+function NewEntityDetail({ kind, form, href }: NewEntityDetailProps) {
+  const caseId = useCaseId();
+  const router = useRouter();
+  const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
+  const kindLabel = MENTION_KIND_LABELS[kind];
+
+  return (
+    <div className="space-y-6">
+      <CloseLink kindLabel={kindLabel} tab={tab} />
+
+      <section aria-label={`${kindLabel}の登録`} className="rounded-lg border bg-card p-4">
+        <h2 className="mb-3 text-lg font-semibold">{kindLabel}を登録</h2>
+        {form((id) => router.replace(href(caseId, id, tab)))}
+      </section>
+    </div>
+  );
+}
+
+export function NewPersonDetail() {
+  return (
+    <NewEntityDetail kind="person" href={personHref} form={(onSaved) => <PersonForm onDone={onSaved} />} />
+  );
+}
+
+export function NewPlaceDetail() {
+  return <NewEntityDetail kind="place" href={placeHref} form={(onSaved) => <PlaceForm onDone={onSaved} />} />;
 }
 
 export function PlaceDetail({ placeId }: { placeId: Id }) {
