@@ -12,7 +12,7 @@
  * - 「ボードに書き足す」: 並び順の末尾に並べます。
  *
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
- * 日時は、証言の「詳細」（onOpenClaimDetails）から編集します。
+ * 証言の編集・削除・日時の入力は、証言のカードから開く詳細ページ（ClaimDetail）で行います。ボード上では編集しません。
  * 本文のメンションは、エンティティの編集を開く導線（onOpenEntity）です。
  */
 'use client';
@@ -31,16 +31,14 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { buildTimeline, type ClaimView, type TimelineItem } from '@/domain/case-views';
+import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
+import { claimHref } from '../routes';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
-
-/** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
-const ITEM_LABEL_LENGTH = 20;
 
 const DRAG_INSTRUCTIONS =
   '項目を動かすには、スペースキーで持ち上げ、上下の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -49,24 +47,19 @@ const DRAG_INSTRUCTIONS =
 type ComposerTarget =
   | { type: 'free' }
   /** 時系列の index 番目の項目の前です。 */
-  | { type: 'before'; index: number }
-  | { type: 'edit'; claimId: Id };
+  | { type: 'before'; index: number };
 
 type TimelineViewProps = {
   target: Case;
+  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
+  activeClaimId?: Id;
   /** 本文のメンションが選ばれたときに呼び出します。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 証言の「詳細」が選ばれたときに呼び出します。日時を編集する導線です。 */
-  onOpenClaimDetails?: (claimId: Id) => void;
 };
 
-/** ボードの項目の名前（証言の見出し、見出しが無ければ本文の冒頭）を返します。ボタンの名前と読み上げに使います。 */
+/** ボードの項目の名前を返します。ボタンの名前と読み上げに使います。 */
 function labelOf(item: TimelineItem): string {
-  if (item.view.claim.title) return item.view.claim.title;
-  const text = item.view.contentSegments
-    .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
-    .join('');
-  return text.length > ITEM_LABEL_LENGTH ? `${text.slice(0, ITEM_LABEL_LENGTH)}…` : text;
+  return claimLabelOf(item.view);
 }
 
 /**
@@ -110,7 +103,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
   );
 }
 
-export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: TimelineViewProps) {
+export function TimelineView({ target, activeClaimId, onOpenEntity }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -160,28 +153,19 @@ export function TimelineView({ target, onOpenEntity, onOpenClaimDetails }: Timel
     onDragCancel: ({ active }) => `「${labelOfKey(active.id)}」を動かすのをやめました。`,
   };
 
-  /** 証言1件を表示します。編集中の証言は、その場で入力欄に置き換えます。 */
-  const renderClaim = (view: ClaimView) =>
-    composer?.type === 'edit' && composer.claimId === view.claim.id ? (
-      <li key={view.claim.id}>
-        <BoardComposer initial={view.claim} onClose={closeComposer} />
-      </li>
-    ) : (
-      <ClaimCard
-        key={view.claim.id}
-        view={view}
-        showSpeaker
-        onOpenEntity={onOpenEntity}
-        onEdit={() => setComposer({ type: 'edit', claimId: view.claim.id })}
-        onOpenDetails={onOpenClaimDetails && (() => onOpenClaimDetails(view.claim.id))}
-      />
-    );
-
   /** ボードの1項目（証言）を表示します。述べる日時を持つ証言は、カードの上に日時を示します。 */
   const renderItem = ({ view }: TimelineItem) => (
     <>
       {view.claim.when && <p className="mb-1 text-xs font-medium text-sky-700">{view.claim.when.text}</p>}
-      <ul>{renderClaim(view)}</ul>
+      <ul>
+        <ClaimCard
+          view={view}
+          showSpeaker
+          onOpenEntity={onOpenEntity}
+          href={claimHref(view.claim.id, 'timeline')}
+          isActive={view.claim.id === activeClaimId}
+        />
+      </ul>
     </>
   );
 

@@ -206,19 +206,6 @@ describe('TimelineView への書き足し', () => {
     expect(useCaseStore.getState().currentCase.claims).toHaveLength(件数);
   });
 
-  it('ボード上の証言を、その場で編集できる', async () => {
-    const user = userEvent.setup();
-    render(<StoreBoard />);
-
-    const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
-    await user.click(within(捜索).getByRole('button', { name: 'この証言を編集' }));
-    await user.type(screen.getByLabelText('内容'), ' 捜索は半日で終わった。');
-    await user.click(screen.getByRole('button', { name: '証言を保存' }));
-
-    expect(screen.getByText(/捜索は半日で終わった。/)).toBeInTheDocument();
-    expect(useCaseStore.getState().currentCase.claims.filter((claim) => claim.id === 'claim-police-search')).toHaveLength(1);
-  });
-
   it('ボードに書き足すときに、誰の発言かを「発言者」で紐づけられる', async () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
@@ -241,63 +228,17 @@ describe('TimelineView への書き足し', () => {
     });
   });
 
-  it('ボード上の証言を編集して、あとから発言者を紐づけられる', async () => {
-    // 前提: 捜索の記述は、架空日報の地の文（発言者: 架空日報）として保存されている。これを、架空日報が伝えた県警の発表に改める
-    const user = userEvent.setup();
+  it('証言のカードは詳細ページへのリンクになり、ボード上には編集・詳細のボタンを置かない', () => {
+    // 前提: 証言の編集・削除・日時の入力は、詳細ページ（ClaimDetail）に一本化している
     render(<StoreBoard />);
 
     const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
-    await user.click(within(捜索).getByRole('button', { name: 'この証言を編集' }));
-    await user.click(screen.getByRole('button', { name: '発言者: 架空日報 朝刊' }));
-    const 発言者欄 = screen.getByRole('group', { name: '発言者' });
-    await user.click(within(発言者欄).getByRole('checkbox', { name: '架空日報 朝刊' }));
-    await user.click(within(発言者欄).getByRole('checkbox', { name: '県警' }));
-    await user.click(within(screen.getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊' }));
-    await user.click(screen.getByRole('button', { name: '証言を保存' }));
-
-    const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-police-search');
-    expect(保存後).toEqual({
-      ...捜索の記述,
-      speaker: { kind: 'person', personIds: ['person-police'] },
-      viaPersonIds: ['person-newspaper'],
-    });
-  });
-
-  it('編集中の証言を削除できる', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<StoreBoard />);
-
-    const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
-    await user.click(within(捜索).getByRole('button', { name: 'この証言を編集' }));
-    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
-
-    expect(screen.queryByText(/警察が別荘を捜索した。/)).not.toBeInTheDocument();
-  });
-
-  it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
-    // 前提: 管理人の証言（claim-caretaker）は、関係「雇用主」の根拠になっている
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<StoreBoard />);
-
-    const 管理人の証言 = screen.getByText(/夜7時に見回りをしたとき/).closest('li')!;
-    await user.click(within(管理人の証言).getByRole('button', { name: 'この証言を編集' }));
-    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
-  });
-
-  it('証言の「詳細」から、日時の編集を開く', async () => {
-    const user = userEvent.setup();
-    const onOpenClaimDetails = vi.fn();
-    const currentCase = useCaseStore.getState().currentCase;
-    render(<TimelineView target={currentCase} onOpenClaimDetails={onOpenClaimDetails} />);
-
-    const 捜索 = screen.getByText(/警察が別荘を捜索した。/).closest('li')!;
-    await user.click(within(捜索).getByRole('button', { name: 'この証言の詳細' }));
-
-    expect(onOpenClaimDetails).toHaveBeenCalledWith('claim-police-search');
+    expect(within(捜索).getByRole('link', { name: '「警察が別荘を捜索した。」を開く' })).toHaveAttribute(
+      'href',
+      '/claims/claim-police-search'
+    );
+    expect(within(捜索).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
+    expect(within(捜索).queryByRole('button', { name: 'この証言の詳細' })).not.toBeInTheDocument();
   });
 
   it('本文のメンションから、エンティティの編集を開く', async () => {
@@ -322,6 +263,13 @@ describe('SpeakerView', () => {
 
     const 推測 = screen.getByRole('region', { name: 'ユーザーの推測' });
     expect(within(推測).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();
+  });
+
+  it('証言のカードは、証言者別のタブを戻り先に引き継いだ、詳細ページへのリンクになる', () => {
+    render(<SpeakerView target={sampleFictionalCase} />);
+
+    const 管理人 = screen.getByRole('region', { name: '管理人' });
+    expect(within(管理人).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/claims/claim-caretaker?tab=speaker');
   });
 
   it('証言が1件も無い場合は、案内を表示する', () => {

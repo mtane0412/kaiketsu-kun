@@ -57,11 +57,13 @@ type ClaimFormProps = {
   autoFocus?: boolean;
   /** 見出しと本文の欄・「発言者」・投稿ボタンだけを表示するかどうかです。 */
   compact?: boolean;
+  /** 日時が未入力でも「詳細（日時）」を開いておくかどうかです。証言の詳細ページで、日時の欄を探さずに入力できるようにします。 */
+  expandDetails?: boolean;
   /** 投稿ボタンの左に並べる要素です（「やめる」など）。 */
   actions?: ReactNode;
 };
 
-export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
+export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expandDetails, actions }: ClaimFormProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
@@ -202,7 +204,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
             ))}
           </dl>
         )}
-        <details open={hasDetails} className="rounded border border-slate-200 p-2">
+        <details open={expandDetails || hasDetails} className="rounded border border-slate-200 p-2">
           <summary className="cursor-pointer text-xs font-medium text-slate-600">
             詳細（日時）
           </summary>

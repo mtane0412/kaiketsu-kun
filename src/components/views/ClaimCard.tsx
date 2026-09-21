@@ -7,9 +7,19 @@
  * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
  * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
  * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
- * onOpenEntity を渡すとメンションと言及のアイコンがボタンになり、onEdit・onOpenDetails を渡すと証言の編集・詳細ボタンを表示します。
+ * カード全体が、証言の詳細ページ（href）へのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
+ * onOpenEntity を渡すとメンションと言及のアイコンがボタンになります。
+ * 詳細を開いている証言のカード（isActive）は、枠を強調し、画面の外にある場合は見える位置までスクロールします。
+ * 詳細の関連リンクから別の証言へ移ったときに、ボード上の位置を見失わないようにするためです。
+ *
+ * 注意: リンクの当たり判定をカード全体に広げています（リンクの after 疑似要素）。カードの中で操作できる要素
+ * （メンション・言及のアイコン・「本文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
  */
-import { formatViaLabel, type ClaimView } from '@/domain/case-views';
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useRef } from 'react';
+import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import type { Id } from '@/domain/types';
@@ -20,20 +30,30 @@ const MENTION_STYLES: Record<MentionKind, string> = {
   place: 'bg-emerald-100 text-emerald-800',
 };
 
+/** カード全体に広げたリンクの当たり判定より手前に置く要素のクラスです。 */
+const ABOVE_CARD_LINK = 'relative z-10';
+
 type ClaimCardProps = {
   view: ClaimView;
   /** 発言者名を表示するかどうかです。証言者別ビューではグループ見出しと重複するため非表示にします。 */
   showSpeaker: boolean;
   /** 本文のメンション、または言及の欄のアイコンが選ばれたときに呼び出します。エンティティの編集を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
-  /** 証言の編集ボタンが選ばれたときに呼び出します。 */
-  onEdit?: () => void;
-  /** 証言の詳細ボタンが選ばれたときに呼び出します。日時を編集する導線です。 */
-  onOpenDetails?: () => void;
+  /** 証言の詳細ページのURLです。 */
+  href: string;
+  /** この証言の詳細を開いているかどうかです。 */
+  isActive?: boolean;
 };
 
-export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetails }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, onOpenEntity, href, isActive = false }: ClaimCardProps) {
   const { claim } = view;
+  const cardRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    // すでに見えているカードは動かさない（block: 'nearest'）
+    if (isActive) cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [isActive]);
+
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
     <p className="whitespace-pre-line text-slate-900">
@@ -45,7 +65,7 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
             key={index}
             type="button"
             onClick={() => onOpenEntity(segment.kind, segment.id)}
-            className={`rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
+            className={`${ABOVE_CARD_LINK} rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
           </button>
@@ -60,7 +80,8 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
 
   return (
     <li
-      className={`rounded border p-3 text-sm ${
+      ref={cardRef}
+      className={`relative rounded border p-3 text-sm hover:border-sky-400 ${isActive ? 'ring-2 ring-sky-400' : ''} ${
         isUserSpeculation ? 'border-dashed border-violet-300 bg-violet-50' : 'border-slate-200 bg-white'
       }`}
     >
@@ -74,24 +95,20 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
         {view.viaPersons.length > 0 && (
           <span className="text-slate-500">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
         )}
-        <span className="ml-auto flex gap-2">
-          {onEdit && (
-            <button type="button" aria-label="この証言を編集" onClick={onEdit} className="text-sky-700 hover:underline">
-              編集
-            </button>
-          )}
-          {onOpenDetails && (
-            <button type="button" aria-label="この証言の詳細" onClick={onOpenDetails} className="text-sky-700 hover:underline">
-              詳細
-            </button>
-          )}
-        </span>
+        <Link
+          href={href}
+          aria-current={isActive ? 'true' : undefined}
+          aria-label={`「${claimLabelOf(view)}」を開く`}
+          className="ml-auto text-sky-700 after:absolute after:inset-0 hover:underline"
+        >
+          開く
+        </Link>
       </div>
 
       {claim.title ? (
         <>
           <p className="font-semibold text-slate-900">{claim.title}</p>
-          <details className="mt-1">
+          <details className={`${ABOVE_CARD_LINK} mt-1`}>
             <summary className="cursor-pointer text-xs text-slate-500">本文を表示</summary>
             <div className="mt-1">{content}</div>
           </details>
@@ -128,7 +145,7 @@ export function ClaimCard({ view, showSpeaker, onOpenEntity, onEdit, onOpenDetai
                           aria-label={person.name}
                           title={person.name}
                           onClick={() => onOpenEntity('person', person.id)}
-                          className="flex rounded-full hover:ring-2 hover:ring-sky-300"
+                          className={`${ABOVE_CARD_LINK} flex rounded-full hover:ring-2 hover:ring-sky-300`}
                         >
                           {avatar}
                         </button>

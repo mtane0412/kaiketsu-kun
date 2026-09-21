@@ -104,6 +104,16 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
   };
 }
 
+/** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
+const CLAIM_LABEL_LENGTH = 20;
+
+/** 証言の名前（見出し、見出しが無ければ本文の冒頭）を返します。ボタンやリンクの名前と、読み上げに使います。 */
+export function claimLabelOf(view: ClaimView): string {
+  if (view.claim.title) return view.claim.title;
+  const text = view.contentSegments.map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`)).join('');
+  return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
+}
+
 /** 証言を、述べられた時点の早い順に並べます。 */
 function sortByStatedAt(claims: ClaimView[]): ClaimView[] {
   return [...claims].sort((a, b) => compareTimeRef(a.claim.statedAt, b.claim.statedAt));
@@ -268,4 +278,73 @@ export function findRelatedEntities(target: Case, kind: MentionKind, id: Id): Re
     if (item.kind === 'person') related.iconText = personIconText(item.entity);
     return [related];
   });
+}
+
+/** 証言が触れているエンティティ1つと、同じエンティティに触れている他の証言です。 */
+export type RelatedClaimGroup = {
+  kind: MentionKind;
+  id: Id;
+  /** エンティティの現在の名前です。 */
+  label: string;
+  /** 同じエンティティに触れている他の証言です。時系列の並び順に並びます。 */
+  claims: ClaimView[];
+};
+
+/** 証言の詳細ページに表示する内容です。 */
+export type ClaimDetail = {
+  view: ClaimView;
+  /** 時系列の並び順で、この証言の1つ前の証言です。 */
+  previous?: ClaimView;
+  /** 時系列の並び順で、この証言の1つ後の証言です。 */
+  next?: ClaimView;
+  relatedClaimGroups: RelatedClaimGroup[];
+};
+
+/** 証言が触れている人物（発言者・経由した人物・言及している人物）のIDを、重複なく返します。 */
+function personIdsOf(claim: Claim): Id[] {
+  const speakerIds = claim.speaker.kind === 'person' ? claim.speaker.personIds : [];
+  return [...new Set([...speakerIds, ...claim.viaPersonIds, ...claim.mentionedPersonIds])];
+}
+
+/**
+ * 証言の詳細ページの内容を組み立てます。
+ *
+ * 証言から連想して次の証言へ進めるよう、時系列の前後の証言と、同じ人物・場所に触れている他の証言をまとめます。
+ * グループは、発言者・経由した人物・言及している人物・場所の順に並べます。他の証言が無いエンティティのグループは作りません。
+ * 注意: 案件に無いIDを渡すと undefined を返します。URLの直接入力や、削除済みの証言のURLを開いた場合に、
+ * 呼び出し側が「見つからない」表示を出すためです。
+ */
+export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undefined {
+  const views = buildTimeline(target).items.map((item) => item.view);
+  const index = views.findIndex((view) => view.claim.id === claimId);
+  const view = views[index];
+  if (!view) return undefined;
+
+  const others = views.filter((other) => other !== view);
+  const persons = [...view.speakerPersons, ...view.viaPersons, ...view.mentionedPersons];
+  const groups: RelatedClaimGroup[] = [
+    ...personIdsOf(view.claim).map((id) => ({
+      kind: 'person' as const,
+      id,
+      label: findOrThrow(persons, id, '人物').name,
+      claims: others.filter((other) => personIdsOf(other.claim).includes(id)),
+    })),
+    ...(view.place
+      ? [
+          {
+            kind: 'place' as const,
+            id: view.place.id,
+            label: view.place.name,
+            claims: others.filter((other) => other.claim.placeId === view.place?.id),
+          },
+        ]
+      : []),
+  ];
+
+  return {
+    view,
+    previous: views[index - 1],
+    next: views[index + 1],
+    relatedClaimGroups: groups.filter((group) => group.claims.length > 0),
+  };
 }

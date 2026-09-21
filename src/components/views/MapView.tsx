@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { buildMapTrail, groupStopsByPlace, type MapPin, type UnmappedReason } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import type { Case, Id } from '@/domain/types';
+import { claimHref } from '../routes';
 import { ClaimCard } from './ClaimCard';
 
 /** 地図の高さです。読み込み中の表示にも同じ高さを確保し、読み込みの前後で画面が動かないようにします。 */
@@ -33,11 +34,13 @@ const UNMAPPED_REASONS: { reason: UnmappedReason; label: string }[] = [
 
 type MapViewProps = {
   target: Case;
+  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
+  activeClaimId?: Id;
   /** 本文のメンションが選ばれたときに呼び出します。エンティティの編集（場所への座標の登録など）を開く導線です。 */
   onOpenEntity?: (kind: MentionKind, id: Id) => void;
 };
 
-export function MapView({ target, onOpenEntity }: MapViewProps) {
+export function MapView({ target, activeClaimId, onOpenEntity }: MapViewProps) {
   const trail = useMemo(() => buildMapTrail(target), [target]);
   const pins = useMemo(() => groupStopsByPlace(trail.stops), [trail]);
   const path = useMemo(() => trail.stops.map((stop) => stop.coordinates), [trail]);
@@ -84,7 +87,13 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
             </p>
           </div>
           <ul aria-label="選択中の証言">
-            <ClaimCard view={activeStop.view} showSpeaker onOpenEntity={onOpenEntity} />
+            <ClaimCard
+              view={activeStop.view}
+              showSpeaker
+              onOpenEntity={onOpenEntity}
+              href={claimHref(activeStop.view.claim.id, 'map')}
+              isActive={activeStop.view.claim.id === activeClaimId}
+            />
           </ul>
         </section>
       ) : (
@@ -106,7 +115,14 @@ export function MapView({ target, onOpenEntity }: MapViewProps) {
                 <h4 className="mb-1 text-xs font-medium text-slate-600">{label}</h4>
                 <ul aria-label={label} className="space-y-2">
                   {items.map((item) => (
-                    <ClaimCard key={item.view.claim.id} view={item.view} showSpeaker onOpenEntity={onOpenEntity} />
+                    <ClaimCard
+                      key={item.view.claim.id}
+                      view={item.view}
+                      showSpeaker
+                      onOpenEntity={onOpenEntity}
+                      href={claimHref(item.view.claim.id, 'map')}
+                      isActive={item.view.claim.id === activeClaimId}
+                    />
                   ))}
                 </ul>
               </div>

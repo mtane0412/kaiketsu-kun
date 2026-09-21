@@ -1,36 +1,38 @@
 /**
  * ボード全体
  *
- * ブラウザに保存済みの案件を復元したうえで、ツールバーと、時系列のボード（ホワイトボード）を表示します。
+ * ツールバーと、時系列のボード（ホワイトボード）を表示します。
  * タブで、証言者別の表示と、時系列を地図上でたどる表示に切り替えられます。
+ * タブはURLのクエリ（?tab=）に持たせます（src/components/routes.ts を参照）。
  * 入力はボードへの書き足しに一本化しており、入力専用の画面は持ちません。
- * エンティティの編集は、ボード上のメンション、または「登録済みの一覧」から、
+ * 証言の編集は、証言のカードから開く詳細（ClaimDetail）で行います。証言の詳細ページのURL（/claims/<証言のID>）では、
+ * 詳細（children）をボードを覆わずに横へ並べます（2ペイン）。時系列を見たまま、関連する証言を次々にたどれるようにするためです。
+ * 画面の幅が狭い場合は横に並べられないため、詳細だけを表示します。
+ * 人物・場所の編集は、ボード上のメンション、または「登録済みの一覧」から、
  * 画面の右側のパネル（EntryPanel）に開きます。
  *
- * 注意: ストアは skipHydration を有効にしているため、このコンポーネントがマウント時に復元を実行します。
- * 復元が終わるまでは、空の案件が一瞬表示されて保存データを上書きすることを避けるため、何も描画しません。
+ * 注意: このコンポーネントはレイアウト（src/app/(board)/layout.tsx）に置きます。レイアウトはページを移っても再マウントされないため、
+ * 証言を開閉しても、ボードのスクロール位置や入力中の内容を保ちます。
+ * 保存済みの案件の復元は CaseStoreGate が担います。このコンポーネントは CaseStoreGate の中に置いてください。
+ * useSearchParams を使うため、ページでは Suspense の中に置いてください。
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useState, type ReactNode } from 'react';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
-import { BACKUP_STORAGE_KEY, useCaseStore } from '@/stores/useCaseStore';
+import { useCaseStore } from '@/stores/useCaseStore';
 import { CaseToolbar } from './CaseToolbar';
 import { ENTRY_KEY_BY_MENTION_KIND, EntryPanel, type EntryKey } from './EntryPanel';
+import { boardHref, claimHref, parseTab, TAB_SEARCH_PARAM, TABS } from './routes';
 import { MapView } from './views/MapView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
 
-const TABS = [
-  { key: 'timeline', label: '時系列' },
-  { key: 'speaker', label: '証言者別' },
-  { key: 'map', label: '地図' },
-] as const;
-
-type TabKey = (typeof TABS)[number]['key'];
-
 const PANEL_LABEL = '登録済みの一覧';
+
+const DETAIL_LABEL = '証言の詳細';
 
 /** 右側のパネルの状態です。entity が null の場合は、編集対象を決めずに一覧を開いています。 */
 type PanelState = { entity: { key: EntryKey; id: Id } | null };
@@ -40,39 +42,26 @@ function panelStateOfMention(kind: MentionKind, id: Id): PanelState {
   return { entity: { key: ENTRY_KEY_BY_MENTION_KIND[kind], id } };
 }
 
-export function CaseBoard() {
+type CaseBoardProps = {
+  /** ボードの横に並べる、証言の詳細です。証言の詳細ページのURLでだけ表示します。 */
+  children?: ReactNode;
+};
+
+export function CaseBoard({ children }: CaseBoardProps) {
   const currentCase = useCaseStore((state) => state.currentCase);
-  const loadError = useCaseStore((state) => state.loadError);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('timeline');
+  const router = useRouter();
+  const activeTab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const [panel, setPanel] = useState<PanelState | null>(null);
-
-  useEffect(() => {
-    let isActive = true;
-    Promise.resolve(useCaseStore.persist.rehydrate()).then(() => {
-      if (isActive) setIsHydrated(true);
-    });
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  if (!isHydrated) return null;
+  /** 開いている証言のIDです。証言の詳細ページのURLでだけ値を持ちます。 */
+  const { claimId: claimIdParam } = useParams<{ claimId?: string }>();
+  const activeClaimId = claimIdParam === undefined ? undefined : decodeURIComponent(claimIdParam);
+  const isDetailOpen = activeClaimId !== undefined;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
+    <div className={`mx-auto p-4 ${isDetailOpen ? 'max-w-7xl lg:flex lg:items-start lg:gap-4' : 'max-w-5xl'}`}>
+      {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画する。幅が狭い画面では、詳細を開いている間は隠す */}
+      <div className={`min-w-0 flex-1 space-y-4 ${isDetailOpen ? 'hidden lg:block' : ''}`}>
       <CaseToolbar />
-
-      {loadError && (
-        <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          <p className="font-semibold">保存済みの案件を復元できませんでした</p>
-          <p className="mt-1">
-            保存されていたデータは、ブラウザのLocalStorageのキー <code>{BACKUP_STORAGE_KEY}</code> に退避しました。
-            データモデルの変更が原因の場合は、退避したデータを変換して「JSONを読み込む」から読み込んでください。
-          </p>
-          <pre className="mt-2 whitespace-pre-wrap text-xs">{loadError}</pre>
-        </div>
-      )}
 
       <div className="flex items-end justify-between border-b border-slate-200">
         <div role="tablist" aria-label="表示の切り替え" className="flex gap-1">
@@ -82,7 +71,10 @@ export function CaseBoard() {
               type="button"
               role="tab"
               aria-selected={tab.key === activeTab}
-              onClick={() => setActiveTab(tab.key)}
+              // タブの切り替えは履歴に積まない。証言を開いている場合は、開いたままタブだけを切り替える
+              onClick={() =>
+                router.replace(isDetailOpen ? claimHref(activeClaimId, tab.key) : boardHref(tab.key), { scroll: false })
+              }
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                 tab.key === activeTab
                   ? 'border-sky-600 text-sky-700'
@@ -106,15 +98,29 @@ export function CaseBoard() {
         {activeTab === 'timeline' && (
           <TimelineView
             target={currentCase}
+            activeClaimId={activeClaimId}
             onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))}
-            onOpenClaimDetails={(id) => setPanel({ entity: { key: 'claims', id } })}
           />
         )}
-        {activeTab === 'speaker' && <SpeakerView target={currentCase} />}
+        {activeTab === 'speaker' && <SpeakerView target={currentCase} activeClaimId={activeClaimId} />}
         {activeTab === 'map' && (
-          <MapView target={currentCase} onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))} />
+          <MapView
+            target={currentCase}
+            activeClaimId={activeClaimId}
+            onOpenEntity={(kind, id) => setPanel(panelStateOfMention(kind, id))}
+          />
         )}
       </main>
+      </div>
+
+      {isDetailOpen && (
+        <aside
+          aria-label={DETAIL_LABEL}
+          className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[30rem] lg:shrink-0 lg:overflow-y-auto"
+        >
+          {children}
+        </aside>
+      )}
 
       {panel && (
         <aside

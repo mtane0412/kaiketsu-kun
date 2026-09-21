@@ -1,0 +1,93 @@
+/**
+ * 証言の詳細ページ（編集・削除・関連する証言への導線）のテスト
+ */
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sampleFictionalCase } from '@/domain/sample-fictional-case';
+import { useCaseStore } from '@/stores/useCaseStore';
+import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
+import { ClaimDetail } from './ClaimDetail';
+
+vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+beforeEach(() => {
+  // 前提: サンプルの案件の時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
+  useCaseStore.getState().replaceCase(sampleFictionalCase);
+  resetMockNavigation('/claims/claim-neighbor');
+});
+
+describe('ClaimDetail', () => {
+  it('証言の内容と日時を、1つのフォームで編集できる', async () => {
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    // 検証: ボード上の入力欄と違い、日時の欄を最初から表示する
+    expect(screen.getByLabelText('証言が述べる日時：表記')).toHaveValue('8月12日 夜9時ごろ');
+
+    await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+    const 保存後 = useCaseStore.getState().currentCase.claims.find((claim) => claim.id === 'claim-neighbor');
+    expect(保存後?.content).toContain('窓は開いていた。');
+    expect(screen.getByRole('status')).toHaveTextContent('保存しました');
+  });
+
+  it('時系列の前後の証言へのリンクを表示する', () => {
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(within(前後).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/claims/claim-police-camera');
+    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/claims/claim-report');
+  });
+
+  it('同じ人物・場所に触れている他の証言を、人物・場所ごとにまとめてリンクにする', () => {
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    const links = within(湖畔の別荘).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', '/claims/claim-caretaker');
+    expect(links[0]).toHaveTextContent('管理人');
+    expect(links[0]).toHaveTextContent(/夜7時に見回りをしたとき/);
+  });
+
+  it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {
+    resetMockNavigation('/claims/claim-neighbor?tab=map');
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/?tab=map');
+    const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/claims/claim-report?tab=map');
+  });
+
+  it('証言を削除すると、ボードに戻る', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(useCaseStore.getState().currentCase.claims.map((claim) => claim.id)).not.toContain('claim-neighbor');
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
+  });
+
+  it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
+    // 前提: 管理人の証言（claim-caretaker）は、関係「雇用主」の根拠になっている
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('他のデータから参照されているため削除できません');
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('案件に無い証言を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
+    render(<ClaimDetail claimId="claim-deleted" />);
+
+    expect(screen.getByRole('heading', { name: '証言が見つかりません' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/');
+  });
+});

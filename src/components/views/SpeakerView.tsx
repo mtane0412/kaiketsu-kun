@@ -6,13 +6,20 @@
  */
 import { useMemo } from 'react';
 import { groupClaimsBySpeaker } from '@/domain/case-views';
-import type { Case } from '@/domain/types';
+import type { Case, Id } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
+import { claimHref } from '../routes';
 import { ClaimCard } from './ClaimCard';
 
 const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
 
-export function SpeakerView({ target }: { target: Case }) {
+type SpeakerViewProps = {
+  target: Case;
+  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
+  activeClaimId?: Id;
+};
+
+export function SpeakerView({ target, activeClaimId }: SpeakerViewProps) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);
 
   if (groups.length === 0) {
@@ -32,7 +39,13 @@ export function SpeakerView({ target }: { target: Case }) {
           </h3>
           <ul className="space-y-2">
             {group.claims.map((view) => (
-              <ClaimCard key={view.claim.id} view={view} showSpeaker={false} />
+              <ClaimCard
+                key={view.claim.id}
+                view={view}
+                showSpeaker={false}
+                href={claimHref(view.claim.id, 'speaker')}
+                isActive={view.claim.id === activeClaimId}
+              />
             ))}
           </ul>
         </section>
