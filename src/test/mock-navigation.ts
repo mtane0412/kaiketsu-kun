@@ -7,6 +7,8 @@
  * 詳細ページのURL（.../claims/<証言のID>・.../persons/<人物のID>・.../places/<場所のID>）から、
  * それぞれ claimId・personId・placeId を読み取ります。
  *
+ * usePathname は、URLのパス（クエリを含まない部分）を返します。
+ *
  * 使い方: テストファイルの先頭で vi.mock('next/navigation', () => import('@/test/mock-navigation')) を呼び、
  * beforeEach で resetMockNavigation() を呼んでください。
  */
@@ -30,6 +32,19 @@ function subscribe(listener: () => void) {
   };
 }
 
+/**
+ * リンク（next/link が描く <a>）のクリックを、この代役のURLの書き換えに置き換えます。
+ * jsdom はリンクをたどらないため、これが無いとテストからはリンクで画面を移れません。
+ * 画面の外へ出るリンク（http から始まるもの）は、そのまま素通りさせます。
+ */
+document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+  const href = event.target.closest('a')?.getAttribute('href');
+  if (href === null || href === undefined || href.startsWith('http')) return;
+  event.preventDefault();
+  navigate(href);
+});
+
 /** router.push・router.replace の呼び出しを検証するための代役です。 */
 export const mockRouter = {
   push: vi.fn((href: string) => navigate(href)),
@@ -50,6 +65,11 @@ export function useRouter() {
 export function useSearchParams() {
   const search = useSyncExternalStore(subscribe, () => currentUrl.search);
   return new URLSearchParams(search);
+}
+
+/** いま開いているURLのパス（クエリを含まない部分）を返します。ボードは、これで開いている詳細の種類を見分けます。 */
+export function usePathname() {
+  return useSyncExternalStore(subscribe, () => currentUrl.pathname);
 }
 
 /** ケースのボードのURLから、ケースのIDを取り出すための形です。 */
