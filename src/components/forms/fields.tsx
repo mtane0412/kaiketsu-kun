@@ -1,10 +1,11 @@
 /**
- * 入力フォームで共有する部品（テキスト欄・時刻入力欄・エラー表示・保存ボタン）
+ * 入力フォームで共有する部品（テキスト欄・画像欄・時刻入力欄・エラー表示・保存ボタン）
  */
 'use client';
 
-import { useId } from 'react';
+import { useId, useState, type ChangeEvent } from 'react';
 import type { TimeRefDraft } from '@/domain/time-ref-draft';
+import { fileToResizedDataUrl } from '@/lib/image-utils';
 
 const INPUT_CLASS =
   'w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none';
@@ -48,6 +49,54 @@ export function TextField({ label, value, onChange, required, multiline, placeho
           onChange={(event) => onChange(event.target.value)}
         />
       )}
+    </div>
+  );
+}
+
+type ImageFieldProps = {
+  label: string;
+  /** 登録する画像（縮小済みの data URL）です。画像が無い場合は undefined です。 */
+  value: string | undefined;
+  onChange: (value: string | undefined) => void;
+};
+
+/**
+ * ラベル付きの画像の入力欄です。
+ * 選んだ画像ファイルは縮小した data URL にして onChange に渡し、プレビューを表示します。
+ * 画像として読み込めないファイルの場合は、理由を欄の下に表示し、値を変えません。
+ */
+export function ImageField({ label, value, onChange }: ImageFieldProps) {
+  const id = useId();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // 同じファイルを選び直しても change イベントが発生するようにする
+    event.target.value = '';
+    if (!file) return;
+    try {
+      onChange(await fileToResizedDataUrl(file));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  };
+
+  return (
+    <div>
+      <label htmlFor={id} className={LABEL_CLASS}>
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        {value && <img src={value} alt="登録する画像" className="h-16 w-16 shrink-0 rounded border border-slate-200 object-cover" />}
+        <input id={id} type="file" accept="image/*" onChange={handleSelect} className="min-w-0 text-xs text-slate-600" />
+        {value && (
+          <button type="button" onClick={() => onChange(undefined)} className="shrink-0 text-xs text-red-600 hover:underline">
+            画像を削除
+          </button>
+        )}
+      </div>
+      <FormError message={error} />
     </div>
   );
 }

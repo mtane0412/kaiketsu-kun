@@ -62,6 +62,7 @@ export type Person = {
   name: string;
   /** 別名・旧姓・偽名などです。 */
   aliases?: string[];
+  /** 縮小済みの画像（data URL）です。顔写真のほか、組織のロゴや紙面の画像も入ります。 */
   imageDataUrl?: string;
   note?: string;
 };
@@ -72,6 +73,8 @@ export type Place = {
   name: string;
   latitude?: number;
   longitude?: number;
+  /** 縮小済みの画像（data URL）です。 */
+  imageDataUrl?: string;
   note?: string;
 };
 
