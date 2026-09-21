@@ -32,14 +32,17 @@ import {
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
-import { draftToTimeRef, timeRefToDraft } from '@/domain/time-ref-draft';
+import { isValidTimeRef } from '@/domain/time-ref';
 import { timelineKeyOf } from '@/domain/timeline-order';
 import type { Claim } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SubmitButton, TextField, TimeRefInput } from './fields';
+import { FormError, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
+
+/** 日時の入力欄に示す、受け付ける表記の例です。 */
+const TIME_REF_FORMAT_EXAMPLES = '1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00';
 
 /**
  * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
@@ -75,11 +78,10 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial));
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
-  const [statedAt, setStatedAt] = useState(timeRefToDraft(initial?.statedAt));
-  const [when, setWhen] = useState(timeRefToDraft(initial?.when));
+  const [when, setWhen] = useState(initial?.when ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const hasDetails = Boolean(initial?.statedAt || initial?.when);
+  const hasDetails = Boolean(initial?.when);
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];
 
   const content = draftToContent({ ...draft, text: draft.text.trim() });
@@ -105,14 +107,9 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
-    const statedAtResult = draftToTimeRef(statedAt);
-    if (!statedAtResult.ok) {
-      setError(`述べられた時点: ${statedAtResult.error}`);
-      return;
-    }
-    const whenResult = draftToTimeRef(when);
-    if (!whenResult.ok) {
-      setError(`証言が述べる日時: ${whenResult.error}`);
+    const trimmedWhen = when.trim();
+    if (trimmedWhen && !isValidTimeRef(trimmedWhen)) {
+      setError(`日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で入力してください`);
       return;
     }
 
@@ -126,8 +123,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
     };
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
-    if (statedAtResult.value) claim.statedAt = statedAtResult.value;
-    if (whenResult.value) claim.when = whenResult.value;
+    if (trimmedWhen) claim.when = trimmedWhen;
 
     // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
     const usedIds = new Set([
@@ -209,8 +205,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, expan
             詳細（日時）
           </summary>
           <div className="mt-2 space-y-3">
-            <TimeRefInput legend="証言が述べる日時" value={when} onChange={setWhen} />
-            <TimeRefInput legend="述べられた時点" value={statedAt} onChange={setStatedAt} />
+            <TextField
+              label="日時（任意）"
+              value={when}
+              onChange={setWhen}
+              placeholder={`証言が述べる出来事の日時（${TIME_REF_FORMAT_EXAMPLES}）`}
+            />
           </div>
         </details>
         </>

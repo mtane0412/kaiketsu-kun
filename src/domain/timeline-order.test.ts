@@ -30,10 +30,10 @@ function 案件(parts: Partial<Case>): Case {
   };
 }
 
-const 八月十日: TimeRef = { text: '8月10日', earliest: '1998-08-10' };
-const 八月十二日: TimeRef = { text: '8月12日', earliest: '1998-08-12' };
-const 八月十五日: TimeRef = { text: '8月15日', earliest: '1998-08-15' };
-const 八月中: TimeRef = { text: '1998年8月', earliest: '1998-08' };
+const 八月十日: TimeRef = '1998-08-10';
+const 八月十二日: TimeRef = '1998-08-12';
+const 八月十五日: TimeRef = '1998-08-15';
+const 八月中: TimeRef = '1998-08';
 
 describe('resolveTimelineOrder', () => {
   it('保存した並び順のとおりに、証言を並べる', () => {

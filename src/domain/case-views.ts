@@ -13,7 +13,6 @@
  */
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
-import { compareTimeRef } from './time-ref';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
 import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
 
@@ -116,9 +115,14 @@ export function claimLabelOf(view: ClaimView): string {
   return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
 }
 
-/** 証言を、述べられた時点の早い順に並べます。 */
-function sortByStatedAt(claims: ClaimView[]): ClaimView[] {
-  return [...claims].sort((a, b) => compareTimeRef(a.claim.statedAt, b.claim.statedAt));
+/**
+ * 証言を、時系列ボードの並び順（resolveTimelineOrder）で並べます。
+ * 証言者別ビューの中の順番を、時系列ビューで見える順番と一致させるためです。
+ */
+function sortByTimelineOrder(target: Case, claims: ClaimView[]): ClaimView[] {
+  const indexByKey = new Map(resolveTimelineOrder(target).map((key, index) => [key, index]));
+  const indexOf = (view: ClaimView) => indexByKey.get(timelineKeyOf(view.claim.id)) ?? Number.MAX_SAFE_INTEGER;
+  return [...claims].sort((a, b) => indexOf(a) - indexOf(b));
 }
 
 /** 時系列ビューを組み立てます。証言を、案件の並び順（resolveTimelineOrder）のとおりに並べます。 */
@@ -137,6 +141,7 @@ export function buildTimeline(target: Case): Timeline {
  * 人物（案件への登録順）、ユーザーの推測の順にグループを並べます。
  * 証言が1件も無い発言者のグループは作りません。複数の人物が述べた証言は、それぞれの人物のグループに入れます。
  * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
+ * グループの中の証言は、時系列ボードの並び順で並べます。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   const claimViews = target.claims.map((claim) => toClaimView(target, claim));
@@ -161,7 +166,7 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
 
   return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
-    .map((group) => ({ ...group, claims: sortByStatedAt(group.claims) }));
+    .map((group) => ({ ...group, claims: sortByTimelineOrder(target, group.claims) }));
 }
 
 /** 地図ビューでたどる1地点（座標のある場所を述べる証言）です。 */

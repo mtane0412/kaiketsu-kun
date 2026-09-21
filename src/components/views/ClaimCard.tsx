@@ -23,6 +23,7 @@ import { useEffect, useRef } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { MentionKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
+import { formatTimeRef } from '@/domain/time-ref';
 import { EntityAvatar } from '../EntityAvatar';
 import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
 
@@ -115,7 +116,7 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
         {claim.when && (
           <>
             <dt>述べる日時</dt>
-            <dd>{claim.when.text}</dd>
+            <dd>{formatTimeRef(claim.when)}</dd>
           </>
         )}
         {view.place && (
@@ -150,12 +151,6 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
           <>
             <dt>資料内の位置</dt>
             <dd>{claim.locator}</dd>
-          </>
-        )}
-        {claim.statedAt && (
-          <>
-            <dt>述べた時点</dt>
-            <dd>{claim.statedAt.text}</dd>
           </>
         )}
       </dl>

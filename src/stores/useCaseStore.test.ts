@@ -182,7 +182,7 @@ describe('時系列ボードの並び順', () => {
     viaPersonIds: [],
     content: '警察が別荘を捜索したはずだ。',
     mentionedPersonIds: [],
-    when: { text: '8月15日', earliest: '1998-08-15' },
+    when: '1998-08-15',
   };
 
   it('項目を動かすと、並び順を保存する', () => {
@@ -212,7 +212,7 @@ describe('時系列ボードの並び順', () => {
     useCaseStore.getState().upsert('claims', 捜索の推測);
 
     // 末尾の捜索の推測の日時を、サンプルの証言より前の「8月10日」に直す
-    useCaseStore.getState().upsert('claims', { ...捜索の推測, when: { text: '8月10日', earliest: '1998-08-10' } });
+    useCaseStore.getState().upsert('claims', { ...捜索の推測, when: '1998-08-10' });
 
     expect(useCaseStore.getState().currentCase.timelineOrder).toEqual([
       'claim:claim-police-search',

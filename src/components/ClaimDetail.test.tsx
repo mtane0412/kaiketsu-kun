@@ -23,7 +23,7 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     // 検証: ボード上の入力欄と違い、日時の欄を最初から表示する
-    expect(screen.getByLabelText('証言が述べる日時：表記')).toHaveValue('8月12日 夜9時ごろ');
+    expect(screen.getByLabelText('日時（任意）')).toHaveValue('1998-08-12T21:00');
 
     await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));

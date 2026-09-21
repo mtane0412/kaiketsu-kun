@@ -1,80 +1,81 @@
 /**
- * 時刻参照（TimeRef）の解釈・並べ替え・食い違い判定のテスト
+ * 時刻参照（TimeRef）の解釈・表示・並べ替えのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { compareTimeRef, isValidPartialIso, toInterval } from './time-ref';
+import { compareTimeRef, formatTimeRef, isValidTimeRef, toInterval } from './time-ref';
 
-describe('isValidPartialIso', () => {
+describe('isValidTimeRef', () => {
   it.each(['1998', '1998-08', '1998-08-12', '1998-08-12T19:00'])(
     '精度の異なる表記「%s」を受け付ける',
     (value) => {
-      expect(isValidPartialIso(value)).toBe(true);
+      expect(isValidTimeRef(value)).toBe(true);
     }
   );
 
   it.each(['1998年8月', '98-08-12', '1998-13', '1998-02-30', '1998-08-12T25:00', ''])(
     '解釈できない表記「%s」を拒否する',
     (value) => {
-      expect(isValidPartialIso(value)).toBe(false);
+      expect(isValidTimeRef(value)).toBe(false);
     }
   );
 });
 
 describe('toInterval', () => {
   it('年だけの表記は、その年の最初から最後までの区間になる', () => {
-    const interval = toInterval({ text: '2018年', earliest: '2018' });
-
-    expect(interval).toEqual({
+    expect(toInterval('2018')).toEqual({
       start: Date.UTC(2018, 0, 1, 0, 0, 0, 0),
       end: Date.UTC(2018, 11, 31, 23, 59, 59, 999),
     });
   });
 
-  it('earliestとlatestの両方がある場合は、earliestの始まりからlatestの終わりまでの区間になる', () => {
-    const interval = toInterval({ text: '1995年7月頃', earliest: '1995-06', latest: '1995-08' });
-
-    expect(interval).toEqual({
+  it('月までの表記は、その月の最初から最後までの区間になる', () => {
+    expect(toInterval('1995-06')).toEqual({
       start: Date.UTC(1995, 5, 1, 0, 0, 0, 0),
-      end: Date.UTC(1995, 7, 31, 23, 59, 59, 999),
+      end: Date.UTC(1995, 5, 30, 23, 59, 59, 999),
     });
   });
 
-  it('earliestが無い時刻参照は区間を持たない', () => {
-    expect(toInterval({ text: '第3話', order: 3 })).toBeNull();
+  it('分までの表記は、その1分間の区間になる', () => {
+    expect(toInterval('1998-08-12T19:00')).toEqual({
+      start: Date.UTC(1998, 7, 12, 19, 0, 0, 0),
+      end: Date.UTC(1998, 7, 12, 19, 0, 59, 999),
+    });
   });
 
-  it('latestがearliestより前の場合はエラーにする', () => {
-    expect(() => toInterval({ text: '逆転した区間', earliest: '1998-08', latest: '1998-07' })).toThrow(
-      'latest が earliest より前です'
-    );
+  it('解釈できない表記はエラーにする', () => {
+    expect(() => toInterval('1998年8月')).toThrow('日時を解釈できません: 1998年8月');
+  });
+});
+
+describe('formatTimeRef', () => {
+  it.each([
+    ['1998', '1998年'],
+    ['1998-08', '1998年8月'],
+    ['1998-08-12', '1998年8月12日'],
+    ['1998-08-12T19:00', '1998年8月12日 19:00'],
+  ])('表記「%s」を「%s」と表示する', (value, expected) => {
+    expect(formatTimeRef(value)).toBe(expected);
   });
 });
 
 describe('compareTimeRef', () => {
-  it('日時を持つ時刻参照は、区間の始まりが早い順に並ぶ', () => {
-    const 夜7時 = { text: '夜7時', earliest: '1998-08-12T19:00' };
-    const 夜9時ごろ = { text: '夜9時ごろ', earliest: '1998-08-12T20:30', latest: '1998-08-12T21:30' };
+  it('区間の始まりが早い順に並ぶ', () => {
+    const 夜7時 = '1998-08-12T19:00';
+    const 夜9時 = '1998-08-12T21:00';
 
-    expect([夜9時ごろ, 夜7時].sort(compareTimeRef)).toEqual([夜7時, 夜9時ごろ]);
+    expect([夜9時, 夜7時].sort(compareTimeRef)).toEqual([夜7時, 夜9時]);
   });
 
-  it('日時を持たない時刻参照は、orderの小さい順に並ぶ', () => {
-    const 第10話 = { text: '第10話', order: 10 };
-    const 十七年前の回想 = { text: '17年前', order: -100 };
+  it('区間の始まりが同じ場合は、精度の細かい（区間の終わりが早い）ものが先に並ぶ', () => {
+    const その年 = '1998';
+    const その年の元日 = '1998-01-01';
 
-    expect([第10話, 十七年前の回想].sort(compareTimeRef)).toEqual([十七年前の回想, 第10話]);
+    expect([その年, その年の元日].sort(compareTimeRef)).toEqual([その年の元日, その年]);
   });
 
-  it('日時を持つもの、orderだけを持つもの、どちらも無いものの順に並ぶ', () => {
-    const 日時あり = { text: '1998年8月12日', earliest: '1998-08-12' };
-    const orderのみ = { text: '第3話', order: 3 };
-    const 時期不明 = { text: '時期不明' };
+  it('日時を持たないものは、日時を持つものの後ろに並ぶ', () => {
+    const 日時あり = '1998-08-12';
 
-    expect([時期不明, undefined, orderのみ, 日時あり].sort(compareTimeRef)).toEqual([
-      日時あり,
-      orderのみ,
-      時期不明,
-      undefined,
-    ]);
+    expect([undefined, 日時あり].sort(compareTimeRef)).toEqual([日時あり, undefined]);
   });
 });

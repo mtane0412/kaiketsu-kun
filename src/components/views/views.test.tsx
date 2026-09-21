@@ -36,7 +36,7 @@ describe('TimelineView', () => {
       expect.stringContaining('連絡が取れなくなっている'),
       expect.stringContaining('金銭の問題があった可能性'),
     ]);
-    expect(within(時系列).getAllByText('8月12日 夜7時').length).toBeGreaterThan(0);
+    expect(within(時系列).getAllByText('1998年8月12日 19:00').length).toBeGreaterThan(0);
   });
 
   it('出来事の束を表示しない（語られる出来事は、すべて誰かの証言として並べる）', () => {
@@ -138,7 +138,7 @@ const 捜索の記述: Claim = {
   viaPersonIds: [],
   content: '警察が別荘を捜索した。',
   mentionedPersonIds: [],
-  when: { text: '8月15日', earliest: '1998-08-15' },
+  when: '1998-08-15',
 };
 
 describe('TimelineView への書き足し', () => {

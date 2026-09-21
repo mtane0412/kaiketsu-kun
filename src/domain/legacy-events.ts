@@ -14,7 +14,7 @@
  */
 import { compareTimeRef } from './time-ref';
 import { timelineKeyOf, type TimelineKey } from './timeline-order';
-import type { Claim, Id, TimeRef } from './types';
+import type { Claim, Id } from './types';
 
 /** 廃止した出来事です。 */
 export type LegacyEvent = { id: Id; title: string };
@@ -37,23 +37,16 @@ const TRAILING_EVENT_TOKENS_PATTERN = /(?:\s*@\[[^\]]*\]\(event:[^)\s]+\))+\s*$/
 
 const EVENT_KEY_PREFIX = 'event:';
 
-/** 時刻参照が、並び順を持たない頃の時系列に並べるための情報（earliest または order）を持つかどうかを返します。 */
-function isLegacySortable(ref: TimeRef | undefined): boolean {
-  return ref?.earliest !== undefined || ref?.order !== undefined;
-}
-
-/** 出来事の束の中の、当時の表示順（述べる日時の早い順、同じなら述べられた時点の早い順）で、束ねていた証言を返します。 */
+/** 出来事の束の中の、当時の表示順（述べる日時の早い順）で、束ねていた証言を返します。 */
 function bundledClaims(claims: LegacyClaim[], eventId: Id): LegacyClaim[] {
-  return claims
-    .filter((claim) => claim.eventId === eventId)
-    .sort((a, b) => compareTimeRef(a.when, b.when) || compareTimeRef(a.statedAt, b.statedAt));
+  return claims.filter((claim) => claim.eventId === eventId).sort((a, b) => compareTimeRef(a.when, b.when));
 }
 
 /**
  * 並び順（timelineOrder）を持たない頃のデータの、当時の表示順を返します。要素は 'event:出来事のID' または 'claim:証言のID' です。
  *
- * 当時の位置は証言が述べる日時で決まっていました。日時を持つ項目を早い順に、次に並び順の数値（TimeRef.order）だけを
- * 持つ項目を小さい順に、最後にどちらも持たない項目を、出来事、証言（述べられた時点の早い順）の順で並べます。
+ * 当時の位置は証言が述べる日時で決まっていました。日時を持つ項目を早い順に、日時を持たない項目を
+ * 出来事、証言（案件への登録順）の順で並べます。
  * 出来事の束の位置は、束ねた証言が述べる日時のうち最も早いものです。
  */
 function legacyTimelineOrder(events: LegacyEvent[], claims: LegacyClaim[]): string[] {
@@ -62,16 +55,15 @@ function legacyTimelineOrder(events: LegacyEvent[], claims: LegacyClaim[]): stri
       key: `${EVENT_KEY_PREFIX}${event.id}`,
       when: bundledClaims(claims, event.id)
         .map((claim) => claim.when)
-        .find(isLegacySortable),
+        .find((when) => when !== undefined),
     })),
     ...claims
       .filter((claim) => claim.eventId === undefined)
-      .sort((a, b) => compareTimeRef(a.statedAt, b.statedAt))
       .map((claim) => ({ key: timelineKeyOf(claim.id), when: claim.when })),
   ];
   return [
-    ...items.filter((item) => isLegacySortable(item.when)).sort((a, b) => compareTimeRef(a.when, b.when)),
-    ...items.filter((item) => !isLegacySortable(item.when)),
+    ...items.filter((item) => item.when !== undefined).sort((a, b) => compareTimeRef(a.when, b.when)),
+    ...items.filter((item) => item.when === undefined),
   ].map((item) => item.key);
 }
 
