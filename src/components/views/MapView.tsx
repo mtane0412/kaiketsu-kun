@@ -11,7 +11,7 @@
 import dynamic from 'next/dynamic';
 import { useMemo, useState } from 'react';
 import { buildMapTrail, groupStopsByPlace, type MapPin, type UnmappedReason } from '@/domain/case-views';
-import type { Case, Id } from '@/domain/types';
+import type { Case } from '@/domain/types';
 import { ClaimCard } from './ClaimCard';
 
 /** 地図の高さです。読み込み中の表示にも同じ高さを確保し、読み込みの前後で画面が動かないようにします。 */
@@ -32,11 +32,9 @@ const UNMAPPED_REASONS: { reason: UnmappedReason; label: string }[] = [
 
 type MapViewProps = {
   target: Case;
-  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
-  activeClaimId?: Id;
 };
 
-export function MapView({ target, activeClaimId }: MapViewProps) {
+export function MapView({ target }: MapViewProps) {
   const trail = useMemo(() => buildMapTrail(target), [target]);
   const pins = useMemo(() => groupStopsByPlace(trail.stops), [trail]);
   const path = useMemo(() => trail.stops.map((stop) => stop.coordinates), [trail]);
@@ -83,7 +81,7 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
             </p>
           </div>
           <ul aria-label="選択中の証言">
-            <ClaimCard view={activeStop.view} showSpeaker tab="map" isActive={activeStop.view.claim.id === activeClaimId} />
+            <ClaimCard view={activeStop.view} showSpeaker tab="map" />
           </ul>
         </section>
       ) : (
@@ -105,13 +103,7 @@ export function MapView({ target, activeClaimId }: MapViewProps) {
                 <h4 className="mb-1 text-xs font-medium text-muted-foreground">{label}</h4>
                 <ul aria-label={label} className="space-y-2">
                   {items.map((item) => (
-                    <ClaimCard
-                      key={item.view.claim.id}
-                      view={item.view}
-                      showSpeaker
-                      tab="map"
-                      isActive={item.view.claim.id === activeClaimId}
-                    />
+                    <ClaimCard key={item.view.claim.id} view={item.view} showSpeaker tab="map" />
                   ))}
                 </ul>
               </div>
