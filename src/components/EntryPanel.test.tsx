@@ -31,6 +31,20 @@ vi.mock('react-easy-crop', () => ({
   },
 }));
 
+/** 地図（差し替え）をクリックしたときに選ばれる地点です。 */
+const 湖のほとり = { latitude: 35.5, longitude: 138.75 };
+
+// jsdom は地図を描画できないため、ボタンで地点を選ぶ部品に差し替える（座標欄そのものは CoordinateField.test.tsx で検証する）
+vi.mock('./forms/CoordinateMap', () => ({
+  default: function CoordinateMapStub({ onPick }: { onPick: (picked: { latitude: number; longitude: number }) => void }) {
+    return (
+      <button type="button" onClick={() => onPick(湖のほとり)}>
+        地図をクリック
+      </button>
+    );
+  },
+}));
+
 beforeEach(() => {
   useCaseStore.getState().replaceCase(sampleFictionalCase);
 });
@@ -501,5 +515,49 @@ describe('EntryPanel（メモのメンションと、関連するエンティテ
     await user.click(screen.getAllByRole('button', { name: /を編集$/ })[0]!);
 
     expect(screen.queryByRole('heading', { name: '関連するエンティティ' })).not.toBeInTheDocument();
+  });
+});
+
+describe('EntryPanel（場所の座標）', () => {
+  const 別荘 = () => useCaseStore.getState().currentCase.places.find((place) => place.id === 'place-villa');
+
+  it('場所のフォームで地図から地点を選んで保存すると、緯度と経度を保存する', async () => {
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
+
+    await user.click(await screen.findByRole('button', { name: '地図をクリック' }));
+    await user.click(screen.getByRole('button', { name: '場所を保存' }));
+
+    expect(別荘()).toMatchObject({ name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 });
+  });
+
+  it('座標を変更せずに保存すると、登録済みの座標を引き継ぐ', async () => {
+    // 前提: 別荘には座標を登録してある
+    useCaseStore.getState().upsert('places', { id: 'place-villa', name: '湖畔の別荘', ...湖のほとり });
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
+
+    expect(screen.getByText('緯度 35.50000・経度 138.75000')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '場所を保存' }));
+
+    expect(別荘()).toMatchObject(湖のほとり);
+  });
+
+  it('編集で「座標を削除」を選んで保存すると、登録済みの座標を取り除く', async () => {
+    useCaseStore.getState().upsert('places', { id: 'place-villa', name: '湖畔の別荘', ...湖のほとり });
+    const user = userEvent.setup();
+    render(<EntryPanel initial={{ key: 'places', id: 'place-villa' }} />);
+
+    await user.click(screen.getByRole('button', { name: '座標を削除' }));
+    await user.click(screen.getByRole('button', { name: '場所を保存' }));
+
+    expect(別荘()).not.toHaveProperty('latitude');
+    expect(別荘()).not.toHaveProperty('longitude');
+  });
+
+  it('人物のフォームには、座標の欄を出さない', () => {
+    render(<EntryPanel />);
+
+    expect(screen.queryByRole('group', { name: '座標' })).not.toBeInTheDocument();
   });
 });

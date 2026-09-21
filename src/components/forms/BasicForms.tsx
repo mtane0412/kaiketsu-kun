@@ -21,9 +21,10 @@ import {
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
-import type { Person, Place } from '@/domain/types';
+import type { Coordinates, Person, Place } from '@/domain/types';
 import { useCaseStore, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, SubmitButton, TextField } from './fields';
+import { CoordinateField } from './CoordinateField';
 import { ImageField } from './ImageField';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
@@ -130,16 +131,22 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
+  const [coordinates, setCoordinates] = useState<Coordinates | undefined>(
+    initial?.latitude !== undefined && initial.longitude !== undefined
+      ? { latitude: initial.latitude, longitude: initial.longitude }
+      : undefined,
+  );
   const { field: noteField, note, newEntries } = useNoteField('place', initial);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    // 緯度経度は入力欄が無いため、編集時は既存の値を引き継ぐ
     const place: Place = { id: initial?.id ?? nanoid(), name: name.trim() };
-    if (initial?.latitude !== undefined) place.latitude = initial.latitude;
-    if (initial?.longitude !== undefined) place.longitude = initial.longitude;
+    if (coordinates) {
+      place.latitude = coordinates.latitude;
+      place.longitude = coordinates.longitude;
+    }
     if (imageDataUrl) place.imageDataUrl = imageDataUrl;
     if (note) place.note = note;
 
@@ -156,6 +163,7 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="名前" value={name} onChange={setName} required />
       <ImageField label="画像" shape="rect" value={imageDataUrl} onChange={setImageDataUrl} />
+      <CoordinateField label="座標" value={coordinates} onChange={setCoordinates} />
       {noteField}
       <FormError message={error} />
       <SubmitButton label="場所を保存" />

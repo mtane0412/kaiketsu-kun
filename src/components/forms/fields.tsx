@@ -1,14 +1,14 @@
 /**
  * 入力フォームで共有する部品（テキスト欄・時刻入力欄・エラー表示・保存ボタン）
  *
- * 画像欄は ImageField.tsx にあります。
+ * 画像欄は ImageField.tsx、座標欄は CoordinateField.tsx にあります。
  */
 'use client';
 
 import { useId } from 'react';
 import type { TimeRefDraft } from '@/domain/time-ref-draft';
 
-const INPUT_CLASS =
+export const INPUT_CLASS =
   'w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-sky-500 focus:outline-none';
 export const LABEL_CLASS = 'mb-1 block text-xs font-medium text-slate-600';
 
