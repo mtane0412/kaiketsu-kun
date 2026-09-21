@@ -5,7 +5,7 @@
  * 1. ケースの切り替え（サイドバーの頭）。いま開いているケースの名前を示し、保存済みの他のケースとケースの一覧へ移れます。
  * 2. 表示の切り替え（時系列・証言者別・地図）。以前はボードの上のタブでしたが、ナビゲーションとしてここへ移しました。
  * 3. 登録済みの一覧（人物・場所・証言）。以前はボードを覆うオーバーレイ（EntryPanel）でしたが、
- *    常に見える場所に置き、選ぶとボードの横の詳細ペインが開くようにしました。
+ *    常に見える場所に置き、選ぶとメインのカラムがその詳細に切り替わるようにしました。
  * 足元には、めったに使わない操作（ケース名の変更・JSONの書き出し・ケースの削除）をメニューに畳んでいます（CaseSettingsMenu）。
  *
  * 一覧はどれも折りたためます。証言は数が多くサイドバーを占めてしまうため、最初は折りたたんでおきます。
@@ -13,7 +13,8 @@
  * 証言には「＋」を置きません。証言は時系列ボードの書き足したい位置から書くため、並び順の中での位置が決まる入り口に一本化しています。
  *
  * 注意: 一覧のリンクには、いま開いている表示（?tab=）を引き継ぎます。詳細から「ボードに戻る」で元の表示に戻れるようにするためです。
- * 詳細を開いている間、表示の切り替えは、詳細を開いたままのURL（withTab）へ移ります。
+ * 表示の切り替えは、詳細を開いている間も、詳細を閉じてボードへ戻ります。
+ * メインのカラムは1つ（ボードか詳細のどちらか一方）のため、押したときに必ずメインのカラムが切り替わるようにするためです。
  * useSearchParams・usePathname を使うため、呼び出し側では Suspense の中に置いてください。
  */
 'use client';
@@ -55,13 +56,11 @@ import {
   claimHref,
   newPersonHref,
   newPlaceHref,
-  parseDetailKind,
   parseTab,
   personHref,
   placeHref,
   TAB_SEARCH_PARAM,
   TABS,
-  withTab,
   type TabKey,
 } from './routes';
 import { useCaseId } from './useCaseId';
@@ -164,8 +163,6 @@ export function CaseSidebar() {
   const pathname = usePathname();
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
 
-  /** 詳細を開いている場合は、表示を切り替えても詳細を閉じないよう、いまのパスにタブだけを付け替えます。 */
-  const isDetailOpen = parseDetailKind(pathname) !== undefined;
   /** 一覧の行が、いま開いている詳細かどうかを判定します。リンク先のうち、クエリを除いた部分で見分けます。 */
   const isCurrentHref = (href: string) => href.split('?')[0] === pathname;
 
@@ -235,7 +232,7 @@ export function CaseSidebar() {
                     isActive={item.key === tab}
                     render={
                       <Link
-                        href={isDetailOpen ? withTab(pathname, item.key) : boardHref(caseId, item.key)}
+                        href={boardHref(caseId, item.key)}
                         aria-current={item.key === tab ? 'page' : undefined}
                       />
                     }

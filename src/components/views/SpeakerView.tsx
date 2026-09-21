@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { groupClaimsBySpeaker } from '@/domain/case-views';
-import type { Case, Id } from '@/domain/types';
+import type { Case } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
 import { ClaimCard } from './ClaimCard';
 
@@ -14,11 +14,9 @@ const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
 
 type SpeakerViewProps = {
   target: Case;
-  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
-  activeClaimId?: Id;
 };
 
-export function SpeakerView({ target, activeClaimId }: SpeakerViewProps) {
+export function SpeakerView({ target }: SpeakerViewProps) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);
 
   if (groups.length === 0) {
@@ -43,7 +41,6 @@ export function SpeakerView({ target, activeClaimId }: SpeakerViewProps) {
                 view={view}
                 showSpeaker={false}
                 tab="speaker"
-                isActive={view.claim.id === activeClaimId}
               />
             ))}
           </ul>

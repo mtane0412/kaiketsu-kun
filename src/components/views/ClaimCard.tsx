@@ -10,8 +10,6 @@
  * カード全体が、証言の詳細ページへのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
  * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
- * 詳細を開いている証言のカード（isActive）は、枠を強調し、画面の外にある場合は見える位置までスクロールします。
- * 詳細の関連リンクから別の証言へ移ったときに、ボード上の位置を見失わないようにするためです。
  *
  * カードの下段（述べる場所・言及している人物・資料内の位置）は、項目名を文字で書かずアイコンで示します。
  * 1件のカードに「開く」「述べる場所」「言及」のような短い文字が散らばると、証言そのものより項目名が目に付くためです。
@@ -24,7 +22,7 @@
 
 import { AtSign, BookMarked, ChevronRight, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
@@ -61,19 +59,11 @@ type ClaimCardProps = {
   showSpeaker: boolean;
   /** このカードを表示しているタブです。詳細ページへのリンクに、戻り先として引き継ぎます。 */
   tab: TabKey;
-  /** この証言の詳細を開いているかどうかです。 */
-  isActive?: boolean;
 };
 
-export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
   const { claim } = view;
   const caseId = useCaseId();
-  const cardRef = useRef<HTMLLIElement>(null);
-
-  useEffect(() => {
-    // すでに見えているカードは動かさない（block: 'nearest'）
-    if (isActive) cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [isActive]);
 
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
@@ -101,10 +91,9 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
 
   return (
     <li
-      ref={cardRef}
       className={`relative rounded-lg border p-3 text-sm transition-colors hover:border-foreground/30 ${
-        isActive ? 'ring-2 ring-ring' : ''
-      } ${isUserSpeculation ? 'border-dashed border-speculation-foreground/40 bg-speculation' : 'bg-card'}`}
+        isUserSpeculation ? 'border-dashed border-speculation-foreground/40 bg-speculation' : 'bg-card'
+      }`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isUserSpeculation && (
@@ -122,7 +111,6 @@ export function ClaimCard({ view, showSpeaker, tab, isActive = false }: ClaimCar
         )}
         <Link
           href={claimHref(caseId, claim.id, tab)}
-          aria-current={isActive ? 'true' : undefined}
           aria-label={`「${claimLabelOf(view)}」を開く`}
           className="ml-auto flex text-muted-foreground after:absolute after:inset-0 hover:text-foreground"
         >

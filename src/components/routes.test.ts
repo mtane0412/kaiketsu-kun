@@ -13,7 +13,6 @@ import {
   parseTab,
   personHref,
   placeHref,
-  withTab,
 } from './routes';
 
 /** テストで使うケースのIDです。 */
@@ -130,17 +129,5 @@ describe('parseDetailKind', () => {
     expect(parseDetailKind('/cases/case-villa')).toBeUndefined();
     expect(parseDetailKind('/')).toBeUndefined();
     expect(parseDetailKind('/cases/case-villa/claims')).toBeUndefined();
-  });
-});
-
-describe('withTab', () => {
-  it('詳細のURLに、開いているタブをクエリとして付け直す', () => {
-    // 検証: 詳細を開いたままタブだけを切り替えるために使う
-    expect(withTab('/cases/case-villa/claims/claim-neighbor', 'map')).toBe(
-      '/cases/case-villa/claims/claim-neighbor?tab=map'
-    );
-    expect(withTab('/cases/case-villa/claims/claim-neighbor', 'timeline')).toBe(
-      '/cases/case-villa/claims/claim-neighbor'
-    );
   });
 });

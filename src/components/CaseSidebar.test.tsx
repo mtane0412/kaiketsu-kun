@@ -50,15 +50,13 @@ describe('CaseSidebar', () => {
       expect(within(表示).getByRole('link', { name: '地図' })).not.toHaveAttribute('aria-current');
     });
 
-    it('詳細を開いている間は、詳細を開いたまま表示だけを切り替えるリンクにする', async () => {
+    it('詳細を開いている間も、詳細を閉じてボードへ戻るリンクにする', async () => {
       resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
       サイドバーを描画する();
 
+      // 検証: ボードと詳細は1カラムで入れ替わるため、表示の切り替えは必ずボードへ戻る
       const 表示 = await screen.findByRole('list', { name: '表示の切り替え' });
-      expect(within(表示).getByRole('link', { name: '地図' })).toHaveAttribute(
-        'href',
-        '/cases/case-lakeside/persons/person-neighbor?tab=map'
-      );
+      expect(within(表示).getByRole('link', { name: '地図' })).toHaveAttribute('href', '/cases/case-lakeside?tab=map');
     });
   });
 

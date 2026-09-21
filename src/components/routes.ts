@@ -103,17 +103,9 @@ const DETAIL_PATH_PATTERNS: { kind: DetailKind; pattern: RegExp }[] = [
 ];
 
 /**
- * URLのパスから、ボードの横に開いている詳細の種類を読み取ります。詳細のURLでない場合は undefined を返します。
- * ボード（CaseBoard）は、この結果で2ペインの表示に切り替えます。
+ * URLのパスから、いま開いている詳細の種類を読み取ります。詳細のURLでない場合は undefined を返します。
+ * ボード（CaseBoard）は、この結果で、メインのカラムをボードと詳細のどちらにするかを切り替えます。
  */
 export function parseDetailKind(pathname: string): DetailKind | undefined {
   return DETAIL_PATH_PATTERNS.find(({ pattern }) => pattern.test(pathname))?.kind;
-}
-
-/**
- * URLのパスに、表示するタブのクエリを付け直します。
- * 詳細を開いたまま表示だけを切り替えるために、いま開いているパスへ新しいタブを付けて使います。
- */
-export function withTab(pathname: string, tab: TabKey): string {
-  return `${pathname}${tabQuery(tab)}`;
 }

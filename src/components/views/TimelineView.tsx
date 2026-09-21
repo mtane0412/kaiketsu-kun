@@ -35,7 +35,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import { formatTimeRef } from '@/domain/time-ref';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
-import type { Case, Id } from '@/domain/types';
+import type { Case } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
@@ -51,8 +51,6 @@ type ComposerTarget =
 
 type TimelineViewProps = {
   target: Case;
-  /** 詳細を開いている証言のIDです。その証言のカードを強調します。 */
-  activeClaimId?: Id;
 };
 
 /** ボードの項目の名前を返します。ボタンの名前と読み上げに使います。 */
@@ -101,7 +99,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
   );
 }
 
-export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
+export function TimelineView({ target }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -156,7 +154,7 @@ export function TimelineView({ target, activeClaimId }: TimelineViewProps) {
     <>
       {view.claim.when && <p className="mb-1 text-xs font-medium text-muted-foreground">{formatTimeRef(view.claim.when)}</p>}
       <ul>
-        <ClaimCard view={view} showSpeaker tab="timeline" isActive={view.claim.id === activeClaimId} />
+        <ClaimCard view={view} showSpeaker tab="timeline" />
       </ul>
     </>
   );
