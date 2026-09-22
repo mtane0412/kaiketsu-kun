@@ -3,11 +3,17 @@
  *
  * グラフは、人物と証言の両方をノードに置く二部グラフです（証言同士・人物同士を直接つなぐことは、伝聞の経路を除いてしません）。
  * 「誰が・誰を経由して・誰について述べたか」というこのアプリのモデルを、そのまま図にすることを狙っています。
- * エッジは次の3種類で、すべて証言（Claim）から導出します。関係（Relationship）は、入力する手段をまだ持たないため使用しません。
+ * エッジは次の4種類です。前の3種類は証言（Claim）から導出し、関係（relates）だけは人物どうしの関係（Relationship）から作ります。
  *
  * - 発言（speaks）: 発言者の人物 → 証言。ユーザーの推測は、ユーザーのノード（USER_GRAPH_NODE_ID）から張ります
  * - 経由（via）: 証言 → 最初に伝えた人物 → 次に伝えた人物…（Claim.viaPersonIds の順）。伝聞が伝わってきた向きに張ります
  * - 言及（mentions）: 証言 → その証言が言及している人物
+ * - 関係（relates）: 人物 → 人物（Relationship.fromPersonId → toPersonId）。ユーザーが証言から導いた結論です
+ *
+ * 関係のエッジだけは証言を経由しないため、他の3種類とは性質が違います。読み手がその違いを図の上で見分けられるよう、
+ * 向きの有無（Relationship.directed）と根拠の有無（Relationship.basisClaimIds）をエッジに載せ、描画側（GraphView）が
+ * 線の形を変えられるようにします。関係の名前（Relationship.label）も載せます。線の形だけでは何の関係かが分からないため、
+ * 描画側が線ごとの名前として使います。関係のエッジは、証言から導いたエッジをすべて並べた後ろに置きます。
  *
  * 証言に1度も登場しない人物も、孤立したノードとして残します。登録しただけの人物が図から消えると、
  * 登録済みかどうかがグラフだけでは分からなくなるためです。
@@ -23,7 +29,15 @@ import type { Case, Id } from './types';
 export type GraphNodeKind = 'person' | 'claim' | 'user';
 
 /** グラフのエッジの種類です。 */
-export type GraphEdgeKind = 'speaks' | 'via' | 'mentions';
+export type GraphEdgeKind = 'speaks' | 'via' | 'mentions' | 'relates';
+
+/** 関係のエッジ（relates）だけが持つ、線の描き分けに使う情報です。 */
+export type GraphEdgeRelation = {
+  /** true の場合は from から to への片方向、false の場合は双方向の関係です。 */
+  directed: boolean;
+  /** 根拠の証言が1件以上登録されているかどうかです。 */
+  hasBasis: boolean;
+};
 
 /** グラフの1つのノードです。 */
 export type GraphNode = {
@@ -49,6 +63,10 @@ export type GraphEdge = {
   sourceId: string;
   /** 終点のノードのID（GraphNode.id）です。 */
   targetId: string;
+  /** 関係のエッジ（relates）だけが持つ、関係の名前（Relationship.label）です。 */
+  label?: string;
+  /** 関係のエッジ（relates）だけが持つ、向きの有無と根拠の有無です。 */
+  relation?: GraphEdgeRelation;
 };
 
 /** グラフビュー全体です。 */
@@ -78,6 +96,23 @@ export function claimNodeId(claimId: Id): string {
  */
 function edgeOf(kind: GraphEdgeKind, claimNodeIdOfEdge: string, sourceId: string, targetId: string): GraphEdge {
   return { id: `${kind}:${claimNodeIdOfEdge}:${sourceId}->${targetId}`, kind, sourceId, targetId };
+}
+
+/**
+ * 人物どうしの関係を、人物から人物へのエッジにします。
+ *
+ * エッジのIDには関係のIDを使います。同じ2人の間に複数の関係（例えば「雇用主」と「金銭トラブル？」）を登録できるため、
+ * 両端のノードだけからIDを決めると、エッジがぶつかるためです。
+ */
+function relationshipEdgesOf(target: Case): GraphEdge[] {
+  return target.relationships.map((relationship) => ({
+    id: `relates:${relationship.id}`,
+    kind: 'relates',
+    sourceId: personNodeId(relationship.fromPersonId),
+    targetId: personNodeId(relationship.toPersonId),
+    label: relationship.label,
+    relation: { directed: relationship.directed, hasBasis: relationship.basisClaimIds.length > 0 },
+  }));
 }
 
 /**
@@ -130,5 +165,8 @@ export function buildCaseGraph(target: Case): CaseGraph {
     ];
   });
 
-  return { nodes: [...personNodes, ...userNodes, ...claimNodes], edges };
+  return {
+    nodes: [...personNodes, ...userNodes, ...claimNodes],
+    edges: [...edges, ...relationshipEdgesOf(target)],
+  };
 }

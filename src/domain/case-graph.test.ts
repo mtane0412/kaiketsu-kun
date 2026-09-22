@@ -144,3 +144,74 @@ describe('buildCaseGraph', () => {
     expect(持ち主のノード).toMatchObject({ kind: 'person', iconText: '主' });
   });
 });
+
+describe('buildCaseGraph（人物どうしの関係）', () => {
+  it('登録された関係を、人物から人物へのエッジにし、ケースへの登録順に並べる', () => {
+    // 前提: サンプルのケースには「別荘の持ち主 → 管理人（雇用主）」と「管理人 と 別荘の持ち主（金銭トラブル？）」がある
+    const graph = buildCaseGraph(sampleFictionalCase);
+
+    expect(エッジの並び(graph, 'relates')).toEqual([
+      'person:person-owner→person:person-caretaker',
+      'person:person-caretaker→person:person-owner',
+    ]);
+  });
+
+  it('関係のエッジを、証言から導いたエッジの後に並べる', () => {
+    // 前提: 証言から導いたエッジ（発言・経由・言及）を先に描き、関係のエッジを重ねる
+    const 種類の並び = buildCaseGraph(sampleFictionalCase).edges.map((edge) => edge.kind);
+
+    const 最初の関係 = 種類の並び.indexOf('relates');
+    expect(最初の関係).toBeGreaterThan(0);
+    expect(種類の並び.slice(最初の関係).every((kind) => kind === 'relates')).toBe(true);
+  });
+
+  it('関係のエッジに、向きの有無と根拠の有無を載せる', () => {
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      relationships: [
+        {
+          id: 'relationship-employment',
+          fromPersonId: 'person-owner',
+          toPersonId: 'person-caretaker',
+          label: '雇用主',
+          directed: true,
+          basisClaimIds: ['claim-caretaker'],
+        },
+        {
+          id: 'relationship-acquaintance',
+          fromPersonId: 'person-owner',
+          toPersonId: 'person-neighbor',
+          label: '面識がある',
+          directed: false,
+          basisClaimIds: [],
+        },
+      ],
+    };
+
+    const 関係のエッジ = buildCaseGraph(ケース).edges.filter((edge) => edge.kind === 'relates');
+
+    expect(関係のエッジ.map((edge) => edge.relation)).toEqual([
+      { directed: true, hasBasis: true },
+      { directed: false, hasBasis: false },
+    ]);
+  });
+
+  it('関係のエッジに、関係の名前を載せる', () => {
+    const 関係のエッジ = buildCaseGraph(sampleFictionalCase).edges.filter((edge) => edge.kind === 'relates');
+
+    expect(関係のエッジ.map((edge) => edge.label)).toEqual(['雇用主', '金銭トラブル？']);
+  });
+
+  it('関係が1件も無いケースでは、関係のエッジを作らない', () => {
+    const ケース: Case = { ...sampleFictionalCase, relationships: [] };
+
+    expect(buildCaseGraph(ケース).edges.some((edge) => edge.kind === 'relates')).toBe(false);
+  });
+
+  it('同じ2人の間に複数の関係があっても、エッジのIDが重ならない', () => {
+    const graph = buildCaseGraph(sampleFictionalCase);
+    const 関係のエッジ = graph.edges.filter((edge) => edge.kind === 'relates');
+
+    expect(new Set(関係のエッジ.map((edge) => edge.id)).size).toBe(関係のエッジ.length);
+  });
+});
