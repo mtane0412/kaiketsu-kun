@@ -105,6 +105,16 @@ describe('PersonDetail', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
+  it('人物どうしの関係を登録・編集できる節を並べる', () => {
+    // 前提: 別荘の持ち主は、管理人との関係を2件持つ
+    resetMockNavigation('/cases/case-lakeside/persons/person-owner');
+    render(<PersonDetail personId="person-owner" />);
+
+    const 関係 = screen.getByRole('region', { name: '関係' });
+    expect(within(関係).getByText('雇用主（別荘の持ち主から管理人へ）')).toBeInTheDocument();
+    expect(within(関係).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
+  });
+
   it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<PersonDetail personId="person-deleted" />);
 
@@ -116,6 +126,12 @@ describe('PersonDetail', () => {
 describe('PlaceDetail', () => {
   beforeEach(() => {
     resetMockNavigation('/cases/case-lakeside/places/place-villa');
+  });
+
+  it('人物どうしの関係の節は並べない', () => {
+    render(<PlaceDetail placeId="place-villa" />);
+
+    expect(screen.queryByRole('region', { name: '関係' })).not.toBeInTheDocument();
   });
 
   it('場所の名前を見出しにして、編集フォームに現在の内容を表示する', () => {
