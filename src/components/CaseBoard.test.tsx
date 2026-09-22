@@ -62,6 +62,19 @@ describe('CaseBoard', () => {
     expect(await screen.findByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
   });
 
+  it('「グラフ」に切り替えるとグラフビューを表示し、ノードが人物の詳細ページへのリンクになる', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    await 表示を切り替える(user, 'グラフ');
+
+    const 図 = screen.getByRole('group', { name: '人物と証言のつながり' });
+    expect(within(図).getByRole('link', { name: '人物: 管理人' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/persons/person-caretaker?tab=graph'
+    );
+  });
+
   it('「地図」に切り替えると地図ビューを表示し、証言のメンションが場所の詳細ページへのリンクになる', async () => {
     const user = userEvent.setup();
     renderBoard();

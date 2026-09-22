@@ -19,7 +19,7 @@
  */
 'use client';
 
-import { ChevronRight, Clock, FolderOpen, Layers, MapPin, MessageSquare, Plus, Users } from 'lucide-react';
+import { ChevronRight, Clock, FolderOpen, Layers, MapPin, MessageSquare, Plus, Share2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo, type ReactNode } from 'react';
@@ -71,6 +71,7 @@ const CASE_LIST_LABEL = 'ケースの一覧';
 /** 表示の切り替え（時系列・証言者別・地図）のアイコンです。 */
 const TAB_ICONS: Record<TabKey, ReactNode> = {
   timeline: <Clock />,
+  graph: <Share2 />,
   speaker: <Users />,
   map: <MapPin />,
 };
