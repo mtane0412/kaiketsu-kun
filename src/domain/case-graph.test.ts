@@ -80,6 +80,18 @@ describe('buildCaseGraph', () => {
     ]);
   });
 
+  it('複数の証言が同じ伝聞の経路を通っても、エッジのIDは重複しない', () => {
+    // 前提: 経由のエッジは人物と人物をつなぐため、元になった証言をIDに含めないと、同じ経路を通る証言同士でIDがぶつかる
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, viaPersonIds: ['person-police', 'person-newspaper'] })),
+    };
+
+    const graph = buildCaseGraph(ケース);
+
+    expect(new Set(graph.edges.map((edge) => edge.id)).size).toBe(graph.edges.length);
+  });
+
   it('証言から、その証言が言及している人物へ、言及のエッジを張る', () => {
     const graph = buildCaseGraph(sampleFictionalCase);
 

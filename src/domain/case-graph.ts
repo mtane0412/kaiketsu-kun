@@ -70,9 +70,14 @@ export function claimNodeId(claimId: Id): string {
   return `claim:${claimId}`;
 }
 
-/** エッジを組み立てます。IDは、種類と両端のノードの組み合わせから決めます。 */
-function edgeOf(kind: GraphEdgeKind, sourceId: string, targetId: string): GraphEdge {
-  return { id: `${kind}:${sourceId}->${targetId}`, kind, sourceId, targetId };
+/**
+ * エッジを組み立てます。IDは、種類・元になった証言・両端のノードの組み合わせから決めます。
+ *
+ * IDに元になった証言を含めるのは、伝聞の経路（via）のエッジが人物と人物をつなぐためです。
+ * 複数の証言が同じ経路（例えば「県警 → 架空日報」）を通ると、証言を含めないIDはぶつかります。
+ */
+function edgeOf(kind: GraphEdgeKind, claimNodeIdOfEdge: string, sourceId: string, targetId: string): GraphEdge {
+  return { id: `${kind}:${claimNodeIdOfEdge}:${sourceId}->${targetId}`, kind, sourceId, targetId };
 }
 
 /**
@@ -116,12 +121,12 @@ export function buildCaseGraph(target: Case): CaseGraph {
 
     // 伝聞の経路は、証言を起点に、伝えた順の人物を数珠つなぎにする
     const viaNodeIds = view.claim.viaPersonIds.map(personNodeId);
-    const viaEdges = viaNodeIds.map((nodeId, index) => edgeOf('via', viaNodeIds[index - 1] ?? claimId, nodeId));
+    const viaEdges = viaNodeIds.map((nodeId, index) => edgeOf('via', claimId, viaNodeIds[index - 1] ?? claimId, nodeId));
 
     return [
-      ...speakerIds.map((speakerId) => edgeOf('speaks', speakerId, claimId)),
+      ...speakerIds.map((speakerId) => edgeOf('speaks', claimId, speakerId, claimId)),
       ...viaEdges,
-      ...view.claim.mentionedPersonIds.map((personId) => edgeOf('mentions', claimId, personNodeId(personId))),
+      ...view.claim.mentionedPersonIds.map((personId) => edgeOf('mentions', claimId, claimId, personNodeId(personId))),
     ];
   });
 
