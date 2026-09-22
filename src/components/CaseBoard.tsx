@@ -2,7 +2,7 @@
  * ボード全体
  *
  * 画面を「左のサイドバー（CaseSidebar）」と「メインの1カラム」の2つに分けます。
- * サイドバーは、ケースの切り替え・表示の切り替え（時系列・証言者別・地図）・登録済みの一覧（人物・場所・証言）を担います。
+ * サイドバーは、ケースの切り替え・表示の切り替え（時系列・グラフ・証言者別・地図）・登録済みの一覧（人物・場所・証言）を担います。
  * メインのカラムは、ボード（いま開いている表示）か、証言・人物・場所の詳細のどちらか一方だけを表示します。
  * 以前はボードの上にタブを並べ、「登録済みの一覧」をボードを覆うオーバーレイで開いていましたが、
  * どちらもナビゲーションのため、サイドバーに集約しました。
@@ -30,6 +30,7 @@ import { useCurrentCase } from '@/stores/useCaseStore';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { CaseSidebar } from './CaseSidebar';
 import { parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind } from './routes';
+import { GraphView } from './views/GraphView';
 import { MapView } from './views/MapView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
@@ -77,6 +78,7 @@ export function CaseBoard({ children }: CaseBoardProps) {
           {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画し、隠すだけにする */}
           <div className="mx-auto min-w-0 max-w-4xl" hidden={detailKind !== undefined}>
             {activeTab === 'timeline' && <TimelineView target={currentCase} />}
+            {activeTab === 'graph' && <GraphView target={currentCase} />}
             {activeTab === 'speaker' && <SpeakerView target={currentCase} />}
             {activeTab === 'map' && <MapView target={currentCase} />}
           </div>

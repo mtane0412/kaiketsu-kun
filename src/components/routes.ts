@@ -9,7 +9,7 @@
  * Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するためです。
  * アプリが振るID（nanoid）では起こらず、読み込んだJSONに「new」と書かれていた場合だけ起こりえます。
  * parseDetailKind も、URLの判定を Next.js の優先順位に合わせています。
- * ボードの表示の切り替え（サイドバーの「時系列」「証言者別」「地図」）はURLのクエリ（?tab=）に持たせます。
+ * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「地図」）はURLのクエリ（?tab=）に持たせます。
  * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
 import type { MentionKind } from '@/domain/mention';
@@ -17,6 +17,7 @@ import type { Id } from '@/domain/types';
 
 export const TABS = [
   { key: 'timeline', label: '時系列' },
+  { key: 'graph', label: 'グラフ' },
   { key: 'speaker', label: '証言者別' },
   { key: 'map', label: '地図' },
 ] as const;
