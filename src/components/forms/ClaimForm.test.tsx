@@ -74,6 +74,40 @@ describe('ClaimForm', () => {
     expect(onDone).toHaveBeenCalledOnce();
   });
 
+  it('書き終えた文章の途中に「@」を差し込むと、後ろに続く登録済みの名前で候補を絞り、名前を重複させずに確定する', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    const 内容欄 = screen.getByLabelText('内容');
+
+    await user.type(内容欄, '別荘の持ち主が郵便受けを見ていた。');
+    // 先頭にカーソルを移して「@」だけを打つ（名前は打ち直さない）
+    await user.type(内容欄, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
+    await user.click(screen.getByRole('option', { name: '人物 別荘の持ち主' }));
+
+    expect(内容欄).toHaveValue('@別荘の持ち主が郵便受けを見ていた。');
+
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+    expect(lastSavedClaim()).toMatchObject({
+      content: '@[別荘の持ち主](person:person-owner)が郵便受けを見ていた。',
+      mentionedPersonIds: ['person-owner'],
+    });
+  });
+
+  it('文章の途中に「@」を差し込むと、後ろに続く語に一致する候補だけに絞り込む', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    const 内容欄 = screen.getByLabelText('内容');
+
+    await user.type(内容欄, '別荘に明かりがついていた。');
+    await user.type(内容欄, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
+
+    // 検証: 「別荘」を含む候補だけを示し、含まない人物は示さない
+    expect(screen.getByRole('option', { name: '人物 別荘の持ち主' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '場所 湖畔の別荘' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '人物 隣家の住人' })).not.toBeInTheDocument();
+  });
+
   it('本文の先頭に「@人物:」と書いても発言者にはならず、言及している人物として保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);

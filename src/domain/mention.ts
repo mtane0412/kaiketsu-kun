@@ -259,26 +259,66 @@ export function claimToDraft(claim: Claim, target: Case): ClaimDraft {
   return { text, mentions };
 }
 
+/** findMentionQuery が参照する、下書きとケースの語です。 */
+export type MentionQueryContext = {
+  /** 下書きで確定済みのメンションの表示名 */
+  confirmedLabels: string[];
+  /** 候補の絞り込みに使う、登録済みのエンティティの語（表示名と別名）。カーソルより後ろの語を検索語に取り込むために使用します。 */
+  candidateWords: string[];
+};
+
+/** 検索語と、候補を選んだときに置き換える入力欄の範囲（start 以上 end 未満）です。 */
+export type MentionQuery = { start: number; query: string; end: number };
+
+/**
+ * カーソルより後ろに続く文字列のうち、登録済みの語の一部として現れる最長の長さを返します。
+ *
+ * 1文字ずつ伸ばしながら、どの語にも含まれなくなった時点で止めます。
+ * 英字の大文字と小文字は、候補の絞り込み（MentionTextarea の buildOptions）と揃えて区別しません。
+ * 例えば「小原勝幸」が登録済みで本文が「小原を梢が…」の場合、「小原」までは含まれ、「小原を」は含まれないため 2 を返します。
+ *
+ * @param rest 「@」の次から入力欄の終わりまでの文字列
+ * @param from 伸ばし始める長さ（カーソルまでに入力済みの文字数）
+ * @param candidateWords 候補の絞り込みに使う語
+ */
+function matchedWordLength(rest: string, from: number, candidateWords: string[]): number {
+  const normalizedWords = candidateWords.map((word) => word.toLowerCase());
+  let length = from;
+  while (length < rest.length) {
+    const next = rest.slice(0, length + 1).toLowerCase();
+    // 空白や改行は語の区切りとみなし、それ以上は伸ばさない
+    if (/\s/.test(rest[length]!)) break;
+    if (!normalizedWords.some((word) => word.includes(next))) break;
+    length += 1;
+  }
+  return length;
+}
+
 /**
  * カーソルの直前で入力中のメンションの検索語を返します。候補を表示しない場合は null を返します。
  *
  * @param text 入力欄の文字列
  * @param caret カーソルの位置
- * @param confirmedLabels 下書きで確定済みのメンションの表示名
+ * @param context 下書きで確定済みの表示名と、候補の絞り込みに使う語
  *
- * 注意: 日本語の文章は単語を空白で区切らないため、確定済みの表示名に続く文字は文章の続きとみなします。
+ * 日本語の文章は単語を空白で区切らないため、カーソルの位置だけでは名前の終わりが分かりません。
+ * そこで、カーソルより後ろに続く文字列が登録済みの語の一部として現れる間は、その範囲を検索語と置換範囲に含めます。
+ * これにより、既にある文章の中に「@」を差し込むだけで、名前を打ち直さずに候補を絞り込め、
+ * 選んだときに元の名前が重複して残ることもありません
+ * （「小原勝幸」「小原三男」が登録済みで「@小原を梢が…」と書いた場合、検索語は「小原」になり、候補は2人に絞られます）。
+ * どの語にも含まれない場合は、カーソルまでを検索語とします（新規作成の名前は打った分だけを使います）。
+ *
+ * 注意: 確定済みの表示名に続く文字は文章の続きとみなします。
  * このため、確定済みの「山田」がある下書きでは「@山田花子」の候補を開けません（先に「山田花子」を入力してください）。
  */
-export function findMentionQuery(
-  text: string,
-  caret: number,
-  confirmedLabels: string[]
-): { start: number; query: string } | null {
+export function findMentionQuery(text: string, caret: number, context: MentionQueryContext): MentionQuery | null {
   if (caret === 0) return null;
   const start = text.lastIndexOf('@', caret - 1);
   if (start === -1) return null;
-  const query = text.slice(start + 1, caret);
-  if (/\s/.test(query)) return null;
-  if (confirmedLabels.some((label) => query.startsWith(label))) return null;
-  return { start, query };
+  const typed = text.slice(start + 1, caret);
+  if (/\s/.test(typed)) return null;
+  if (context.confirmedLabels.some((label) => typed.startsWith(label))) return null;
+  const rest = text.slice(start + 1);
+  const length = matchedWordLength(rest, typed.length, context.candidateWords);
+  return { start, query: rest.slice(0, length), end: start + 1 + length };
 }

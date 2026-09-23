@@ -251,22 +251,113 @@ describe('findMentionQuery', () => {
   it('カーソルの直前にある「@」以降の文字列を、候補の検索語として返す', () => {
     const text = '庭に@持ち';
 
-    expect(findMentionQuery(text, text.length, [])).toEqual({ start: 2, query: '持ち' });
+    expect(findMentionQuery(text, text.length, { confirmedLabels: [], candidateWords: [] })).toEqual({
+      start: 2,
+      query: '持ち',
+      end: 5,
+    });
   });
 
   it('「@」の直後では、空の検索語を返す', () => {
-    expect(findMentionQuery('@', 1, [])).toEqual({ start: 0, query: '' });
+    expect(findMentionQuery('@', 1, { confirmedLabels: [], candidateWords: [] })).toEqual({
+      start: 0,
+      query: '',
+      end: 1,
+    });
   });
 
   it('「@」が無い場合と、検索語に空白や改行が含まれる場合は null を返す', () => {
-    expect(findMentionQuery('庭に持ち', 4, [])).toBeNull();
-    expect(findMentionQuery('@管理人 が見た', 8, [])).toBeNull();
+    expect(findMentionQuery('庭に持ち', 4, { confirmedLabels: [], candidateWords: [] })).toBeNull();
+    expect(findMentionQuery('@管理人 が見た', 8, { confirmedLabels: [], candidateWords: [] })).toBeNull();
   });
 
   it('確定済みのメンションに続けて文章を書いている間は null を返す（候補を開き直さないため）', () => {
     const text = '@別荘の持ち主の姿が';
 
-    expect(findMentionQuery(text, text.length, ['別荘の持ち主'])).toBeNull();
+    expect(findMentionQuery(text, text.length, { confirmedLabels: ['別荘の持ち主'], candidateWords: [] })).toBeNull();
+  });
+
+  it('カーソルの後ろに登録済みの名前が続く場合は、その名前を検索語とし、範囲を名前の終わりまで広げる', () => {
+    // 「山田さんが来た」の先頭に「@」を差し込んだ状態を表します
+    const text = '@山田さんが来た';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['山田'] })).toEqual({
+      start: 0,
+      query: '山田',
+      end: 3,
+    });
+  });
+
+  it('前方一致する名前が複数ある場合は、最も長い名前を採用する', () => {
+    const text = '@山田花子さんが来た';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['山田', '山田花子'] })).toEqual({
+      start: 0,
+      query: '山田花子',
+      end: 5,
+    });
+  });
+
+  it('名前の途中にカーソルがある場合も、範囲を名前の終わりまで広げる', () => {
+    // 「@山田さんが来た」の「山」まで書いたところにカーソルがある状態を表します
+    const text = '@山田さんが来た';
+
+    expect(findMentionQuery(text, 2, { confirmedLabels: [], candidateWords: ['山田'] })).toEqual({
+      start: 0,
+      query: '山田',
+      end: 3,
+    });
+  });
+
+  it('登録済みの名前の一部だけが文中にある場合は、一致する範囲までを検索語にする', () => {
+    // 「小原を梢が目撃している。」の先頭に「@」を差し込んだ状態を表します
+    const text = '@小原を梢が目撃している。';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['小原勝幸', '小原三男'] })).toEqual({
+      start: 0,
+      query: '小原',
+      end: 3,
+    });
+  });
+
+  it('名前の途中にだけ現れる語でも、一致する範囲までを検索語にする', () => {
+    const text = '@梢が目撃している。';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['山田梢'] })).toEqual({
+      start: 0,
+      query: '梢',
+      end: 2,
+    });
+  });
+
+  it('英字の大文字と小文字は区別せずに照合する（候補の絞り込みと揃えるため）', () => {
+    const text = '@smith が目撃している。';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['Smith'] })).toEqual({
+      start: 0,
+      query: 'smith',
+      end: 6,
+    });
+  });
+
+  it('どの名前にも含まれない文字で始まる場合は、カーソルまでを範囲とする', () => {
+    const text = '@庭に誰かがいた。';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['小原勝幸'] })).toEqual({
+      start: 0,
+      query: '',
+      end: 1,
+    });
+  });
+
+  it('カーソルの後ろの文字列が登録済みの名前で始まらない場合は、カーソルまでを範囲とする', () => {
+    const text = '@持ち山田さんが来た';
+
+    expect(findMentionQuery(text, 3, { confirmedLabels: [], candidateWords: ['山田'] })).toEqual({
+      start: 0,
+      query: '持ち',
+      end: 3,
+    });
   });
 });
 
