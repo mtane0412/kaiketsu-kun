@@ -22,6 +22,15 @@ async function typeAndChoose(user: UserEvent, text: string, optionName: string |
   await user.click(screen.getByRole('option', { name: optionName }));
 }
 
+/** 開いている日時のピッカーで、年月を切り替えて日を選びます（「決定」は押しません）。 */
+async function chooseDate(user: UserEvent, year: number, month: number, day: number) {
+  const 年の欄 = screen.getByLabelText('年');
+  await user.clear(年の欄);
+  await user.type(年の欄, String(year));
+  await user.selectOptions(screen.getByLabelText('月'), String(month));
+  await user.click(screen.getByRole('button', { name: `${year}年${month}月${day}日` }));
+}
+
 /** 「発言者」のパネルを開きます。すでに開いている場合は何もしません。 */
 async function openSpeakerPanel(user: UserEvent) {
   if (screen.queryByRole('group', { name: '発言者を選ぶ' })) return;
@@ -231,7 +240,8 @@ describe('ClaimForm', () => {
       render(<ClaimForm onDone={vi.fn()} />);
 
       await typeAndChoose(user, '@date', '日付を選ぶ');
-      fireEvent.change(screen.getByLabelText('日付を選ぶ'), { target: { value: '1998-08-12' } });
+      await chooseDate(user, 1998, 8, 12);
+      await user.click(screen.getByRole('button', { name: '決定' }));
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
       expect(lastSavedClaim()).toMatchObject({
@@ -245,7 +255,9 @@ describe('ClaimForm', () => {
       render(<ClaimForm onDone={vi.fn()} />);
 
       await typeAndChoose(user, '@datetime', '日時を選ぶ');
-      fireEvent.change(screen.getByLabelText('日時を選ぶ'), { target: { value: '1998-08-12T19:00' } });
+      await chooseDate(user, 1998, 8, 12);
+      await user.selectOptions(screen.getByLabelText('時'), '19');
+      await user.click(screen.getByRole('button', { name: '決定' }));
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
       expect(lastSavedClaim()).toMatchObject({

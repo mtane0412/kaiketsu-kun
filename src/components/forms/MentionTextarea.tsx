@@ -5,8 +5,8 @@
  * 一致する名前が無い種類については「新規作成」の選択肢を示します。
  * withDate を指定した入力欄（証言の本文）では、「@」に続けて日時を書くと、日時のメンションの候補も示します
  * （受け付ける表記は src/domain/date-input.ts を参照してください）。
- * 「@date」「@datetime」（日本語では「@日付」「@日時」）と書くと、候補から日時のピッカーを開けます。
- * ピッカーで選んだ値はそのまま時刻参照の形式のため、日時のメンションに変換して本文に差し込みます。
+ * 「@date」「@datetime」（日本語では「@日付」「@日時」）と書くと、候補から日時のピッカー（DateTimePicker.tsx）を開けます。
+ * ピッカーは「決定」を押したときにだけ時刻参照を返すため、その値を日時のメンションに変換して本文に差し込みます。
  * 登録済みの名前を正確に入力して空白で区切った場合は、候補を選ばなくてもメンションとして確定します。
  * カーソルより後ろに続く文字列が登録済みの語の一部として現れる間は、その範囲も絞り込みと置換の対象に含めます。
  * 書き終えた文章の中に「@」を差し込むだけで候補が絞り込まれ、選んでも名前が重複しません（findMentionQuery）。
@@ -26,7 +26,7 @@
 
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { matchDatePickerTriggers, parseDateInput, type DatePickerKind } from '@/domain/date-input';
-import { INPUT_CLASS } from './fields';
+import { DateTimePicker } from './DateTimePicker';
 import { DATE_MENTION_LABEL, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   MENTION_KINDS,
@@ -69,10 +69,10 @@ type MentionOption =
   | { type: 'create'; kind: MentionKind; name: string }
   | { type: 'picker'; picker: DatePickerKind };
 
-/** 日時のピッカーの表示名と、対応する入力欄の型です。 */
-const DATE_PICKERS: Record<DatePickerKind, { label: string; inputType: string }> = {
-  date: { label: '日付を選ぶ', inputType: 'date' },
-  datetime: { label: '日時を選ぶ', inputType: 'datetime-local' },
+/** 日時のピッカーを開く候補の表示名です。 */
+const DATE_PICKER_LABELS: Record<DatePickerKind, string> = {
+  date: '日付を選ぶ',
+  datetime: '日時を選ぶ',
 };
 
 /**
@@ -146,7 +146,6 @@ export function MentionTextarea({
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
   /** 開いている日時のピッカーです。開いていない場合は null です。 */
   const [openPicker, setOpenPicker] = useState<{ kind: DatePickerKind; start: number; end: number } | null>(null);
-  const pickerRef = useRef<HTMLInputElement>(null);
 
   // 新規作成では入力済みの文字列と確定後の文字列が同じになり得るため、文字列の変化を条件にせず描画のたびに確認する
   useLayoutEffect(() => {
@@ -154,15 +153,6 @@ export function MentionTextarea({
     textareaRef.current?.setSelectionRange(caretAfterUpdate.current, caretAfterUpdate.current);
     caretAfterUpdate.current = null;
   });
-
-  // ピッカーは、開いた直後にフォーカスを移してカレンダーを開く（候補を選んでからの操作を1回減らすため）
-  useLayoutEffect(() => {
-    const input = pickerRef.current;
-    if (openPicker === null || input === null || document.activeElement === input) return;
-    input.focus();
-    // showPicker はカレンダーを開くブラウザの機能で、未対応の環境では入力欄へのフォーカスだけを行う
-    if (typeof input.showPicker === 'function') input.showPicker();
-  }, [openPicker]);
 
   const segments = parseDraft(value);
 
@@ -350,19 +340,12 @@ export function MentionTextarea({
         />
       </div>
       {openPicker !== null && (
-        <div className="absolute z-10 mt-1 rounded border border-border bg-background p-2 shadow-lg">
-          <input
-            ref={pickerRef}
-            type={DATE_PICKERS[openPicker.kind].inputType}
-            aria-label={DATE_PICKERS[openPicker.kind].label}
-            className={INPUT_CLASS}
-            onChange={(event) => {
-              if (event.target.value) insertDateMention(openPicker.start, openPicker.end, event.target.value);
-            }}
-            onKeyDown={(event) => {
-              // 日時を選ばずに書き続けられるよう、Escapeキーでピッカーを閉じて本文に戻る
-              if (event.key !== 'Escape') return;
-              event.preventDefault();
+        <div className="absolute z-10 mt-1">
+          <DateTimePicker
+            kind={openPicker.kind}
+            onSelect={(when) => insertDateMention(openPicker.start, openPicker.end, when)}
+            onCancel={() => {
+              // 日時を選ばずに書き続けられるよう、本文に戻って同じ「@」では候補を開き直さない
               setOpenPicker(null);
               setDismissedStart(openPicker.start);
               textareaRef.current?.focus();
@@ -395,7 +378,7 @@ export function MentionTextarea({
               onClick={() => choose(option)}
             >
               {option.type === 'picker' ? (
-                <span className="text-foreground">{DATE_PICKERS[option.picker].label}</span>
+                <span className="text-foreground">{DATE_PICKER_LABELS[option.picker]}</span>
               ) : option.type === 'existing' ? (
                 <>
                   <span className="mr-1 rounded bg-muted px-1 text-xs text-muted-foreground">
