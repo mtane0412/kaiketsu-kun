@@ -1,9 +1,9 @@
 /**
  * グラフビュー（人物と証言のつながりを図で表す表示）のテスト
  */
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
 import { resetMockNavigation } from '@/test/mock-navigation';
@@ -15,6 +15,24 @@ beforeEach(() => {
   // ノードのリンク先の組み立てにケースのIDをURLから読み取るため、ケースのボードのURLから始める
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
+
+/**
+ * 図（SVG）に、画面上の大きさを与えます。
+ * jsdom は要素の大きさを持たないため、これが無いとマウスの位置を図の座標へ直せず、拡大縮小やドラッグを確かめられません。
+ */
+function 図に大きさを与える() {
+  vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 600,
+    height: 300,
+    right: 600,
+    bottom: 300,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+}
 
 describe('GraphView', () => {
   it('人物のノードを、その人物の詳細ページへのリンクとして描く', () => {
@@ -233,5 +251,324 @@ describe('GraphView（人物どうしの関係）', () => {
     await user.click(screen.getByRole('checkbox', { name: '関係を表示' }));
 
     expect(配置を読む()).toEqual(消す前の配置);
+  });
+});
+
+describe('GraphView（拡大縮小と移動）', () => {
+  /** 図（SVG）を返します。 */
+  function 図を取り出す(): SVGElement {
+    return screen.getByRole('group', { name: '人物と証言のつながり' }) as unknown as SVGElement;
+  }
+
+  /** 図の表示範囲（viewBox属性）を読みます。 */
+  function 表示範囲を読む(): { x: number; y: number; width: number; height: number } {
+    const [x, y, width, height] = (図を取り出す().getAttribute('viewBox') ?? '').split(' ').map(Number);
+    return { x: x!, y: y!, width: width!, height: height! };
+  }
+
+  /** 図のノード（丸）の中心のx座標を、ノードのIDごとに読みます。 */
+  function ノードの位置を読む(container: HTMLElement): Record<string, string> {
+    const 位置: Record<string, string> = {};
+    container.querySelectorAll<SVGElement>('[data-node-id]').forEach((ノード) => {
+      位置[ノード.getAttribute('data-node-id')!] = ノード.querySelector('circle')?.getAttribute('cx') ?? '';
+    });
+    return 位置;
+  }
+
+  beforeEach(() => {
+    図に大きさを与える();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('「拡大」を押すと、表示範囲が狭くなる', async () => {
+    const user = userEvent.setup();
+    render(<GraphView target={sampleFictionalCase} />);
+    const 拡大前 = 表示範囲を読む();
+
+    await user.click(screen.getByRole('button', { name: '拡大' }));
+
+    expect(表示範囲を読む().width).toBeLessThan(拡大前.width);
+  });
+
+  it('「縮小」を押すと、表示範囲が広くなる', async () => {
+    const user = userEvent.setup();
+    render(<GraphView target={sampleFictionalCase} />);
+    const 縮小前 = 表示範囲を読む();
+
+    await user.click(screen.getByRole('button', { name: '縮小' }));
+
+    expect(表示範囲を読む().width).toBeGreaterThan(縮小前.width);
+  });
+
+  it('拡大しても、ノードの配置は計算し直さない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const 拡大前の位置 = ノードの位置を読む(container);
+
+    await user.click(screen.getByRole('button', { name: '拡大' }));
+
+    expect(ノードの位置を読む(container)).toEqual(拡大前の位置);
+  });
+
+  it('いまの倍率を数字で示す', async () => {
+    const user = userEvent.setup();
+    render(<GraphView target={sampleFictionalCase} />);
+    expect(screen.getByText('100%')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '拡大' }));
+
+    expect(screen.queryByText('100%')).not.toBeInTheDocument();
+  });
+
+  it('「表示を戻す」を押すと、図の全体が収まる表示範囲に戻す', async () => {
+    const user = userEvent.setup();
+    render(<GraphView target={sampleFictionalCase} />);
+    const もとの表示範囲 = 表示範囲を読む();
+
+    await user.click(screen.getByRole('button', { name: '拡大' }));
+    await user.click(screen.getByRole('button', { name: '表示を戻す' }));
+
+    expect(表示範囲を読む()).toEqual(もとの表示範囲);
+  });
+
+  it('マウスホイールを上に回すと拡大する', () => {
+    render(<GraphView target={sampleFictionalCase} />);
+    const 拡大前 = 表示範囲を読む();
+
+    fireEvent.wheel(図を取り出す(), { deltaY: -100, clientX: 300, clientY: 150 });
+
+    expect(表示範囲を読む().width).toBeLessThan(拡大前.width);
+  });
+
+  it('マウスホイールを下に回すと縮小する', () => {
+    render(<GraphView target={sampleFictionalCase} />);
+    const 縮小前 = 表示範囲を読む();
+
+    fireEvent.wheel(図を取り出す(), { deltaY: 100, clientX: 300, clientY: 150 });
+
+    expect(表示範囲を読む().width).toBeGreaterThan(縮小前.width);
+  });
+
+  it('図の背景をドラッグすると、表示範囲が動く', () => {
+    render(<GraphView target={sampleFictionalCase} />);
+    const 移動前 = 表示範囲を読む();
+
+    fireEvent.pointerDown(図を取り出す(), { clientX: 300, clientY: 150, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 360, clientY: 150, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 360, clientY: 150, pointerId: 1 });
+
+    // 図を右へ引っ張ったため、見えている窓は左（xが小さい方）へ動く
+    expect(表示範囲を読む().x).toBeLessThan(移動前.x);
+    expect(表示範囲を読む().width).toBeCloseTo(移動前.width, 5);
+  });
+});
+
+describe('GraphView（ノードを手で動かす）', () => {
+  /** 指定したノードの要素を返します。 */
+  function ノードを取り出す(container: HTMLElement, nodeId: string): SVGElement {
+    const ノード = container.querySelector<SVGElement>(`[data-node-id="${nodeId}"]`);
+    if (!ノード) throw new Error(`ノードが見つかりません: ${nodeId}`);
+    return ノード;
+  }
+
+  /** ノードの丸の中心の座標を読みます。 */
+  function 丸の中心を読む(container: HTMLElement, nodeId: string): { x: number; y: number } {
+    const 丸 = ノードを取り出す(container, nodeId).querySelector('circle');
+    return { x: Number(丸?.getAttribute('cx')), y: Number(丸?.getAttribute('cy')) };
+  }
+
+  /** ノードを、画面の座標で指定した量だけドラッグします。 */
+  function ドラッグする(ノード: SVGElement, 移動量: { x: number; y: number }) {
+    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 100 + 移動量.x, clientY: 100 + 移動量.y, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 100 + 移動量.x, clientY: 100 + 移動量.y, pointerId: 1 });
+  }
+
+  beforeEach(() => {
+    図に大きさを与える();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('ノードをドラッグすると、そのノードが動く', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+
+    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+
+    const 動かした後 = 丸の中心を読む(container, 'person:person-caretaker');
+    expect(動かした後.x).toBeGreaterThan(動かす前.x);
+    expect(動かした後.y).toBeGreaterThan(動かす前.y);
+  });
+
+  it('ノードをドラッグしても、他のノードは動かさない', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const 動かす前 = 丸の中心を読む(container, 'person:person-owner');
+
+    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+
+    expect(丸の中心を読む(container, 'person:person-owner')).toEqual(動かす前);
+  });
+
+  /**
+   * ノードをクリックし、リンクをたどる既定の動作が止められたかどうかを返します。
+   *
+   * Reactのイベントは、要素ではなく描画先のまとまり（container）にまとめて登録されます。
+   * そのため、その外側にある body でクリックを受け取り、そこまで伝わった時点で既定の動作が
+   * 止められているかを確かめます。
+   */
+  function クリックの既定の動作が止まるか(ノード: SVGElement, 初期化 = {}): boolean {
+    let 止まった = false;
+    const 記録する = (event: Event) => {
+      止まった = event.defaultPrevented;
+    };
+    document.body.addEventListener('click', 記録する);
+    fireEvent.click(ノード, 初期化);
+    document.body.removeEventListener('click', 記録する);
+    return 止まった;
+  }
+
+  it('ノードをドラッグしたときは、そのノードの詳細ページを開かない', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+
+    ドラッグする(ノード, { x: 60, y: 30 });
+
+    // マウスで押したときのクリックは detail が 1 以上になる（キーボードで開いた場合は 0）
+    expect(クリックの既定の動作が止まるか(ノード, { detail: 1 })).toBe(true);
+  });
+
+  it('動かさずに押した場合は、詳細ページへのリンクをそのまま働かせる', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+
+    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 100, clientY: 100, pointerId: 1 });
+
+    expect(クリックの既定の動作が止まるか(ノード, { detail: 1 })).toBe(false);
+  });
+
+  it('ドラッグの後でも、キーボードで開いたリンクは打ち消さない', () => {
+    // 前提: キーボード（Enter・Space）で押したときのクリックは、マウスの押し下げを伴わないため detail が 0 になる
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+
+    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+
+    const 別のノード = ノードを取り出す(container, 'person:person-owner');
+    expect(クリックの既定の動作が止まるか(別のノード, { detail: 0 })).toBe(false);
+  });
+
+  it('2本目の指で触れても、1本目の指のドラッグを乱さない', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+
+    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    const 掴んだ直後の位置 = 丸の中心を読む(container, 'person:person-caretaker');
+    // 2本目の指の動きは、1本目の指のドラッグには関係しないため、ノードを動かさない
+    fireEvent.pointerMove(window, { clientX: 400, clientY: 400, pointerId: 2 });
+
+    expect(丸の中心を読む(container, 'person:person-caretaker')).toEqual(掴んだ直後の位置);
+  });
+
+  it('2本目の指を離しても、1本目の指のドラッグは続く', () => {
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+
+    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 100, clientY: 100, pointerId: 2 });
+    fireEvent.pointerMove(window, { clientX: 160, clientY: 130, pointerId: 1 });
+
+    expect(丸の中心を読む(container, 'person:person-caretaker').x).toBeGreaterThan(動かす前.x);
+  });
+
+  it('「表示を戻す」を押すと、手で動かしたノードももとの位置に戻す', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+
+    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+    await user.click(screen.getByRole('button', { name: '表示を戻す' }));
+
+    expect(丸の中心を読む(container, 'person:person-caretaker')).toEqual(動かす前);
+  });
+});
+
+describe('GraphView（つながりの強調）', () => {
+  /** 薄く描かれている要素のIDを集めます。 */
+  function 薄いノードのID(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll<SVGElement>('[data-node-id][data-dimmed="true"]')).map(
+      (ノード) => ノード.getAttribute('data-node-id')!
+    );
+  }
+
+  it('ノードにマウスを重ねると、つながっていないノードを薄くする', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+
+    await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
+
+    // 前提: 管理人は自分の証言とだけ線でつながっており、無関係な人物は薄くなる
+    expect(薄いノードのID(container)).not.toContain('person:person-caretaker');
+    expect(薄いノードのID(container)).toContain('person:person-neighbor');
+  });
+
+  it('マウスを重ねたノードにつながる線は、薄くしない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+
+    await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
+
+    const 管理人の発言の線 = container.querySelector('[data-edge-kind="speaks"][data-dimmed="false"]');
+    expect(管理人の発言の線).not.toBeNull();
+  });
+
+  it('マウスを離すと、薄い表示を元に戻す', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const ノード = container.querySelector<SVGElement>('[data-node-id="person:person-caretaker"]')!;
+
+    await user.hover(ノード);
+    await user.unhover(ノード);
+
+    expect(薄いノードのID(container)).toHaveLength(0);
+  });
+});
+
+describe('GraphView（表示するものの絞り込み）', () => {
+  it('「証言を表示」を外すと、証言のノードを描かない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    expect(container.querySelector('[data-node-id^="claim:"]')).not.toBeNull();
+
+    await user.click(screen.getByRole('checkbox', { name: '証言を表示' }));
+
+    expect(container.querySelector('[data-node-id^="claim:"]')).toBeNull();
+    expect(container.querySelector('[data-node-id^="person:"]')).not.toBeNull();
+  });
+
+  it('「人物を表示」を外すと、人物のノードを描かない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+
+    await user.click(screen.getByRole('checkbox', { name: '人物を表示' }));
+
+    expect(container.querySelector('[data-node-id^="person:"]')).toBeNull();
+    expect(container.querySelector('[data-node-id^="claim:"]')).not.toBeNull();
+  });
+
+  it('絞り込んでも、残ったノードの位置は変えない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const 絞り込む前 = container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx');
+
+    await user.click(screen.getByRole('checkbox', { name: '証言を表示' }));
+
+    expect(container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx')).toBe(絞り込む前);
   });
 });
