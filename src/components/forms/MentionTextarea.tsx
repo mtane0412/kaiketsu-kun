@@ -8,6 +8,8 @@
  * 「@date」「@datetime」（日本語では「@日付」「@日時」）と書くと、候補から日時のピッカーを開けます。
  * ピッカーで選んだ値はそのまま時刻参照の形式のため、日時のメンションに変換して本文に差し込みます。
  * 登録済みの名前を正確に入力して空白で区切った場合は、候補を選ばなくてもメンションとして確定します。
+ * 「@」に続く文字列が登録済みの名前で始まる場合は、その名前の終わりまでを絞り込みと置換の範囲に含めます。
+ * 書き終えた文章の中に「@」を差し込むだけで候補が絞り込まれ、選んでも名前が重複しません（findMentionQuery）。
  * 入力欄には `@表示名` の素の文字列を表示し、確定したメンションは value.mentions に保持します
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
  *
@@ -143,7 +145,7 @@ export function MentionTextarea({
   /** Escapeキーで候補を閉じた「@」の位置です。同じ「@」については候補を開き直しません。 */
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
   /** 開いている日時のピッカーです。開いていない場合は null です。 */
-  const [openPicker, setOpenPicker] = useState<{ kind: DatePickerKind; start: number } | null>(null);
+  const [openPicker, setOpenPicker] = useState<{ kind: DatePickerKind; start: number; end: number } | null>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
 
   // 新規作成では入力済みの文字列と確定後の文字列が同じになり得るため、文字列の変化を条件にせず描画のたびに確認する
@@ -164,11 +166,10 @@ export function MentionTextarea({
 
   const segments = parseDraft(value);
 
-  const found = findMentionQuery(
-    value.text,
-    caret,
-    value.mentions.map((mention) => mention.label)
-  );
+  const found = findMentionQuery(value.text, caret, {
+    confirmedLabels: value.mentions.map((mention) => mention.label),
+    candidateLabels: candidates.map((candidate) => candidate.label),
+  });
   const query = found !== null && found.start !== dismissedStart ? found : null;
   const options = query === null ? [] : buildOptions(query.query, candidates, withDate);
   const isOpen = query !== null && options.length > 0 && openPicker === null;
@@ -185,7 +186,8 @@ export function MentionTextarea({
   const findTypedMention = (text: string, nextCaret: number): DraftMention[] => {
     if (!/\s/.test(text[nextCaret - 1] ?? '')) return [];
     const labels = value.mentions.map((mention) => mention.label);
-    const typed = findMentionQuery(text, nextCaret - 1, labels);
+    // 打った文字だけで判断するため、カーソルより後ろの名前は取り込まない（candidateLabels を空にする）
+    const typed = findMentionQuery(text, nextCaret - 1, { confirmedLabels: labels, candidateLabels: [] });
     if (typed === null) return [];
     const matched = candidates.filter((candidate) => candidate.label === typed.query);
     return matched.length === 1
@@ -197,8 +199,8 @@ export function MentionTextarea({
       : [];
   };
 
-  /** 日時のメンションを、検索語の「@」の位置に差し込みます。ピッカーで値を選んだときに呼び出します。 */
-  const insertDateMention = (start: number, when: string) => {
+  /** 日時のメンションを、検索語の範囲（start 以上 end 未満）に差し込みます。ピッカーで値を選んだときに呼び出します。 */
+  const insertDateMention = (start: number, end: number, when: string) => {
     const mention = dateMentionOf(when);
     const inserted = `@${mention.label}`;
     caretAfterUpdate.current = start + inserted.length;
@@ -206,7 +208,7 @@ export function MentionTextarea({
     setOpenPicker(null);
     setSelectedIndex(null);
     onChange({
-      text: value.text.slice(0, start) + inserted + value.text.slice(caret),
+      text: value.text.slice(0, start) + inserted + value.text.slice(end),
       mentions: [...value.mentions.filter((item) => item.label !== mention.label), mention],
     });
     textareaRef.current?.focus();
@@ -215,7 +217,7 @@ export function MentionTextarea({
   const choose = (option: MentionOption) => {
     if (query === null) return;
     if (option.type === 'picker') {
-      setOpenPicker({ kind: option.picker, start: query.start });
+      setOpenPicker({ kind: option.picker, start: query.start, end: query.end });
       return;
     }
     const mention = option.type === 'existing' ? option.mention : onCreate(option.kind, option.name);
@@ -226,7 +228,7 @@ export function MentionTextarea({
     setCaret(nextCaret);
     setSelectedIndex(null);
     onChange({
-      text: value.text.slice(0, query.start) + inserted + value.text.slice(caret),
+      text: value.text.slice(0, query.start) + inserted + value.text.slice(query.end),
       mentions: [
         ...value.mentions.filter((item) => item.label !== mentionLabel),
         { kind, id: mentionId, label: mentionLabel },
@@ -354,7 +356,7 @@ export function MentionTextarea({
             aria-label={DATE_PICKERS[openPicker.kind].label}
             className={INPUT_CLASS}
             onChange={(event) => {
-              if (event.target.value) insertDateMention(openPicker.start, event.target.value);
+              if (event.target.value) insertDateMention(openPicker.start, openPicker.end, event.target.value);
             }}
             onKeyDown={(event) => {
               // 日時を選ばずに書き続けられるよう、Escapeキーでピッカーを閉じて本文に戻る
