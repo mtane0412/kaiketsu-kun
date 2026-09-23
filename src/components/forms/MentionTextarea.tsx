@@ -8,7 +8,7 @@
  * 「@date」「@datetime」（日本語では「@日付」「@日時」）と書くと、候補から日時のピッカーを開けます。
  * ピッカーで選んだ値はそのまま時刻参照の形式のため、日時のメンションに変換して本文に差し込みます。
  * 登録済みの名前を正確に入力して空白で区切った場合は、候補を選ばなくてもメンションとして確定します。
- * 「@」に続く文字列が登録済みの名前で始まる場合は、その名前の終わりまでを絞り込みと置換の範囲に含めます。
+ * カーソルより後ろに続く文字列が登録済みの語の一部として現れる間は、その範囲も絞り込みと置換の対象に含めます。
  * 書き終えた文章の中に「@」を差し込むだけで候補が絞り込まれ、選んでも名前が重複しません（findMentionQuery）。
  * 入力欄には `@表示名` の素の文字列を表示し、確定したメンションは value.mentions に保持します
  * （本文用のトークンへの変換は src/domain/mention.ts の draftToContent が行います）。
@@ -168,7 +168,8 @@ export function MentionTextarea({
 
   const found = findMentionQuery(value.text, caret, {
     confirmedLabels: value.mentions.map((mention) => mention.label),
-    candidateLabels: candidates.map((candidate) => candidate.label),
+    // 絞り込みと同じ語（表示名と別名）を渡し、カーソルより後ろに続く名前を検索語に取り込む
+    candidateWords: candidates.flatMap((candidate) => [candidate.label, ...(candidate.keywords ?? [])]),
   });
   const query = found !== null && found.start !== dismissedStart ? found : null;
   const options = query === null ? [] : buildOptions(query.query, candidates, withDate);
@@ -186,8 +187,8 @@ export function MentionTextarea({
   const findTypedMention = (text: string, nextCaret: number): DraftMention[] => {
     if (!/\s/.test(text[nextCaret - 1] ?? '')) return [];
     const labels = value.mentions.map((mention) => mention.label);
-    // 打った文字だけで判断するため、カーソルより後ろの名前は取り込まない（candidateLabels を空にする）
-    const typed = findMentionQuery(text, nextCaret - 1, { confirmedLabels: labels, candidateLabels: [] });
+    // 打った文字だけで判断するため、カーソルより後ろの名前は取り込まない（candidateWords を空にする）
+    const typed = findMentionQuery(text, nextCaret - 1, { confirmedLabels: labels, candidateWords: [] });
     if (typed === null) return [];
     const matched = candidates.filter((candidate) => candidate.label === typed.query);
     return matched.length === 1

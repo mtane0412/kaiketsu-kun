@@ -94,6 +94,20 @@ describe('ClaimForm', () => {
     });
   });
 
+  it('文章の途中に「@」を差し込むと、後ろに続く語に一致する候補だけに絞り込む', async () => {
+    const user = userEvent.setup();
+    render(<ClaimForm onDone={vi.fn()} />);
+    const 内容欄 = screen.getByLabelText('内容');
+
+    await user.type(内容欄, '別荘に明かりがついていた。');
+    await user.type(内容欄, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
+
+    // 検証: 「別荘」を含む候補だけを示し、含まない人物は示さない
+    expect(screen.getByRole('option', { name: '人物 別荘の持ち主' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '場所 湖畔の別荘' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '人物 隣家の住人' })).not.toBeInTheDocument();
+  });
+
   it('本文の先頭に「@人物:」と書いても発言者にはならず、言及している人物として保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
