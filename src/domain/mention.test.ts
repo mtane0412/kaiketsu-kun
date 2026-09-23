@@ -330,6 +330,16 @@ describe('findMentionQuery', () => {
     });
   });
 
+  it('英字の大文字と小文字は区別せずに照合する（候補の絞り込みと揃えるため）', () => {
+    const text = '@smith が目撃している。';
+
+    expect(findMentionQuery(text, 1, { confirmedLabels: [], candidateWords: ['Smith'] })).toEqual({
+      start: 0,
+      query: 'smith',
+      end: 6,
+    });
+  });
+
   it('どの名前にも含まれない文字で始まる場合は、カーソルまでを範囲とする', () => {
     const text = '@庭に誰かがいた。';
 

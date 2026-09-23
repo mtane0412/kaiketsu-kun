@@ -274,6 +274,7 @@ export type MentionQuery = { start: number; query: string; end: number };
  * カーソルより後ろに続く文字列のうち、登録済みの語の一部として現れる最長の長さを返します。
  *
  * 1文字ずつ伸ばしながら、どの語にも含まれなくなった時点で止めます。
+ * 英字の大文字と小文字は、候補の絞り込み（MentionTextarea の buildOptions）と揃えて区別しません。
  * 例えば「小原勝幸」が登録済みで本文が「小原を梢が…」の場合、「小原」までは含まれ、「小原を」は含まれないため 2 を返します。
  *
  * @param rest 「@」の次から入力欄の終わりまでの文字列
@@ -281,12 +282,13 @@ export type MentionQuery = { start: number; query: string; end: number };
  * @param candidateWords 候補の絞り込みに使う語
  */
 function matchedWordLength(rest: string, from: number, candidateWords: string[]): number {
+  const normalizedWords = candidateWords.map((word) => word.toLowerCase());
   let length = from;
   while (length < rest.length) {
-    const next = rest.slice(0, length + 1);
+    const next = rest.slice(0, length + 1).toLowerCase();
     // 空白や改行は語の区切りとみなし、それ以上は伸ばさない
     if (/\s/.test(rest[length]!)) break;
-    if (!candidateWords.some((word) => word.includes(next))) break;
+    if (!normalizedWords.some((word) => word.includes(next))) break;
     length += 1;
   }
   return length;
