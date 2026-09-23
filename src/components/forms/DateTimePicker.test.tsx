@@ -175,6 +175,33 @@ describe('DateTimePicker', () => {
     expect(screen.getByLabelText('月')).toHaveValue('9');
   });
 
+  it('年を打ち直しても、その年月に日が実在する間は選択を保つ', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<DateTimePicker kind="date" onSelect={onSelect} onCancel={vi.fn()} />);
+
+    await showMonth(user, 1998, 1);
+    await user.click(screen.getByRole('button', { name: '1998年1月31日' }));
+    // 年を訂正するために打ち直すと、入力の途中で年が空になる
+    await user.clear(screen.getByLabelText('年'));
+    await user.type(screen.getByLabelText('年'), '1997');
+    await user.click(screen.getByRole('button', { name: '決定' }));
+
+    // 1997年1月にも31日があるため、選び直さずにそのまま決定できる
+    expect(onSelect).toHaveBeenCalledWith('1997-01-31');
+  });
+
+  it('年が空の間は「決定」を押せない', async () => {
+    const user = userEvent.setup();
+    render(<DateTimePicker kind="date" onSelect={vi.fn()} onCancel={vi.fn()} />);
+
+    await showMonth(user, 1998, 1);
+    await user.click(screen.getByRole('button', { name: '1998年1月31日' }));
+    await user.clear(screen.getByLabelText('年'));
+
+    expect(screen.getByRole('button', { name: '決定' })).toBeDisabled();
+  });
+
   it('日を選んだ後に別の月へ移ると、その月に無い日の選択を解除する', async () => {
     const user = userEvent.setup();
     render(<DateTimePicker kind="date" onSelect={vi.fn()} onCancel={vi.fn()} />);

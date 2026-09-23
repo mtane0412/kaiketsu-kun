@@ -93,12 +93,16 @@ export function DateTimePicker({ kind, onSelect, onCancel }: DateTimePickerProps
   const days = Array.from({ length: dayCount }, (_, index) => index + 1);
   const blanks = year === null ? [] : Array.from({ length: firstWeekdayOf(year, month) }, (_, index) => index);
 
-  /** 年月を移します。移した先に選んでいた日が無い場合は、日の選択を解除します。 */
+  /**
+   * 年月を移します。移した先に選んでいた日が無い場合は、日の選択を解除します。
+   * 注意: 年を打ち直す途中は入力欄が空になりますが、その一時的な状態では選択を解除しません
+   * （打ち直した年に同じ日があるのに選び直しを強いることになるためです）。年が空の間は「決定」を押せません。
+   */
   const showMonth = (nextYearText: string, nextMonth: number) => {
     setYearText(nextYearText);
     setMonth(nextMonth);
-    const nextYear = YEAR_PATTERN.test(nextYearText) ? Number(nextYearText) : null;
-    if (day !== null && (nextYear === null || day > daysInMonth(nextYear, nextMonth))) setDay(null);
+    if (!YEAR_PATTERN.test(nextYearText)) return;
+    if (day !== null && day > daysInMonth(Number(nextYearText), nextMonth)) setDay(null);
   };
 
   /** 前後の月へ移します。年をまたぐ場合は年も移します。 */
@@ -240,7 +244,7 @@ export function DateTimePicker({ kind, onSelect, onCancel }: DateTimePickerProps
         <button
           type="button"
           className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
-          disabled={day === null}
+          disabled={year === null || day === null}
           onClick={confirm}
         >
           決定
