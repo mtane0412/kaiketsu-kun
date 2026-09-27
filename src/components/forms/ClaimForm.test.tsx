@@ -573,6 +573,38 @@ describe('ClaimForm の発言者と経由の選択', () => {
     expect(screen.queryByRole('group', { name: '発言者を選ぶ' })).not.toBeInTheDocument();
   });
 
+  describe('「発言者を選ぶ」のパネルの高さ', () => {
+    /** 「発言者」のボタンが、画面（高さ768px）の中で指定の位置にあるものとして、パネルを開きます。 */
+    async function openSpeakerPanelAt(user: UserEvent, top: number, bottom: number) {
+      const ボタン = screen.getByRole('button', { name: /^発言者/ });
+      vi.spyOn(ボタン, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, top, 100, bottom - top));
+      await user.click(ボタン);
+      return screen.getByRole('group', { name: '発言者を選ぶ' });
+    }
+
+    it('画面の下の方で上向きに開く場合、パネルが画面の上端からはみ出さない高さに収める', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      const パネル = await openSpeakerPanelAt(user, 500, 528);
+
+      // ボタンの上端（500px）から、ボタンとの間隔（4px）と画面の端との余白（8px）を引いた高さ
+      expect(パネル).toHaveClass('bottom-full');
+      expect(パネル.style.maxHeight).toBe('488px');
+    });
+
+    it('画面の上の方で下向きに開く場合、パネルが画面の下端からはみ出さない高さに収める', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+
+      const パネル = await openSpeakerPanelAt(user, 100, 128);
+
+      // 画面の高さ（768px）からボタンの下端（128px）・間隔（4px）・余白（8px）を引いた高さ
+      expect(パネル).not.toHaveClass('bottom-full');
+      expect(パネル.style.maxHeight).toBe('628px');
+    });
+  });
+
   it('ボード上の簡易表示（compact）でも発言者と経由を選べる', async () => {
     const user = userEvent.setup();
     render(<ClaimForm compact onDone={vi.fn()} />);

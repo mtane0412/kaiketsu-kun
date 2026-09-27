@@ -10,12 +10,20 @@
  *
  * パネルは、ボタンをもう一度押す・Escapeキーを押す・パネルの外を押す、のいずれかで閉じます。
  * ボード上の入力欄は画面の下端にも上端にも開くため、パネルは、開く時点でボタンの上下のうち空きが広い側に開きます。
+ * 注意: 開く側の空きよりパネルが高い場合は、パネルの高さを空きに収め、はみ出す分はパネルの中でスクロールします
+ * （画面の端からはみ出すと、パネルの一部を見ることも押すこともできなくなるためです）。
  */
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { formatViaLabel, USER_SPEAKER_LABEL } from '@/domain/case-views';
 import type { Claim, Id, Speaker } from '@/domain/types';
+
+/** パネルとボタンの間隔（px）です。パネルの mt-1 / mb-1 と揃えます。 */
+const PANEL_GAP = 4;
+
+/** パネルと画面の端との間に空ける余白（px）です。 */
+const VIEWPORT_MARGIN = 8;
 
 /** 入力中の発言者と経由です。どちらも選んだ順に並びます。 */
 export type SpeakerDraft = { personIds: Id[]; viaPersonIds: Id[] };
@@ -125,6 +133,8 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   const [isOpen, setIsOpen] = useState(false);
   /** パネルをボタンの上側に開くかどうかです。開く時点の画面内の位置から決めます。 */
   const [opensUpward, setOpensUpward] = useState(false);
+  /** パネルの最大の高さ（px）です。開く時点の、開く側の空きから決めます。 */
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -146,7 +156,10 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   const toggleOpen = () => {
     if (!isOpen && toggleRef.current) {
       const rect = toggleRef.current.getBoundingClientRect();
-      setOpensUpward(window.innerHeight - rect.bottom < rect.top);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const upward = spaceBelow < rect.top;
+      setOpensUpward(upward);
+      setMaxPanelHeight((upward ? rect.top : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
     }
     setIsOpen(!isOpen);
   };
@@ -175,7 +188,8 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
           id={panelId}
           role="group"
           aria-label="発言者を選ぶ"
-          className={`absolute left-0 z-10 w-72 space-y-3 rounded border border-border bg-background p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
+          style={{ maxHeight: maxPanelHeight }}
+          className={`absolute left-0 z-10 w-72 space-y-3 overflow-y-auto rounded border border-border bg-background p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
         >
           <PersonChecklist
             legend="発言者"

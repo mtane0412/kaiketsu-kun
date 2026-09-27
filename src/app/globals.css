@@ -173,3 +173,11 @@
     @apply font-sans;
   }
 }
+
+/*
+ * Leaflet の地図は、ズームのボタンなどに大きな z-index（400〜1000）を持つため、
+ * 地図の中に閉じ込めないと、固定ヘッダーやダイアログ、ポップアップの上に重なってしまいます。
+ */
+.leaflet-container {
+  isolation: isolate;
+}
