@@ -10,12 +10,24 @@
  *
  * パネルは、ボタンをもう一度押す・Escapeキーを押す・パネルの外を押す、のいずれかで閉じます。
  * ボード上の入力欄は画面の下端にも上端にも開くため、パネルは、開く時点でボタンの上下のうち空きが広い側に開きます。
+ * 開いたまま画面の高さが変わった場合（スマートフォンでキーボードが出た場合など）は、向きと高さを決め直します。
+ * 空きは、実際に見えている表示領域（visualViewport）の上端・下端から測ります。キーボードは表示領域だけを縮め、
+ * window の高さと resize イベントが変わらない場合があるためです。
+ * 注意: visualViewport を持たない環境では、window の高さ（上端は0）を表示領域として扱います。
+ * 注意: 開く側の空きよりパネルが高い場合は、パネルの高さを空きに収め、はみ出す分はパネルの中でスクロールします
+ * （画面の端からはみ出すと、パネルの一部を見ることも押すこともできなくなるためです）。
  */
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { formatViaLabel, USER_SPEAKER_LABEL } from '@/domain/case-views';
 import type { Claim, Id, Speaker } from '@/domain/types';
+
+/** パネルとボタンの間隔（px）です。パネルの mt-1 / mb-1 と揃えます。 */
+const PANEL_GAP = 4;
+
+/** パネルと画面の端との間に空ける余白（px）です。 */
+const VIEWPORT_MARGIN = 8;
 
 /** 入力中の発言者と経由です。どちらも選んだ順に並びます。 */
 export type SpeakerDraft = { personIds: Id[]; viaPersonIds: Id[] };
@@ -123,11 +135,42 @@ type SpeakerPickerProps = {
 
 export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: SpeakerPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  /** パネルをボタンの上側に開くかどうかです。開く時点の画面内の位置から決めます。 */
+  /** パネルをボタンの上側に開くかどうかです。開く時点（と画面の高さが変わった時点）の画面内の位置から決めます。 */
   const [opensUpward, setOpensUpward] = useState(false);
+  /** パネルの最大の高さ（px）です。開く側の空きから決めます。 */
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
+
+  /** ボタンの今の位置から、パネルを開く向きと最大の高さを決めます。 */
+  const placePanel = () => {
+    if (!toggleRef.current) return;
+    const rect = toggleRef.current.getBoundingClientRect();
+    // 表示領域の上端・下端（ボタンの位置と同じく、window の左上を原点とする座標）
+    const viewport = window.visualViewport;
+    const viewportTop = viewport ? viewport.offsetTop : 0;
+    const viewportBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+    const spaceAbove = rect.top - viewportTop;
+    const spaceBelow = viewportBottom - rect.bottom;
+    const upward = spaceBelow < spaceAbove;
+    setOpensUpward(upward);
+    setMaxPanelHeight((upward ? spaceAbove : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
+  };
+
+  // 開いたまま画面の高さや表示領域の位置が変わったら、向きと高さを決め直す
+  useEffect(() => {
+    if (!isOpen) return;
+    const viewport = window.visualViewport;
+    window.addEventListener('resize', placePanel);
+    viewport?.addEventListener('resize', placePanel);
+    viewport?.addEventListener('scroll', placePanel);
+    return () => {
+      window.removeEventListener('resize', placePanel);
+      viewport?.removeEventListener('resize', placePanel);
+      viewport?.removeEventListener('scroll', placePanel);
+    };
+  }, [isOpen]);
 
   // パネルの外を押したら閉じる
   useEffect(() => {
@@ -144,10 +187,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   const currentLabel = `${speakerNames}${formatViaLabel(namesOf(value.viaPersonIds))}`;
 
   const toggleOpen = () => {
-    if (!isOpen && toggleRef.current) {
-      const rect = toggleRef.current.getBoundingClientRect();
-      setOpensUpward(window.innerHeight - rect.bottom < rect.top);
-    }
+    if (!isOpen) placePanel();
     setIsOpen(!isOpen);
   };
 
@@ -175,7 +215,8 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
           id={panelId}
           role="group"
           aria-label="発言者を選ぶ"
-          className={`absolute left-0 z-10 w-72 space-y-3 rounded border border-border bg-background p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
+          style={{ maxHeight: maxPanelHeight }}
+          className={`absolute left-0 z-10 w-72 space-y-3 overflow-y-auto rounded border border-border bg-background p-2 text-sm shadow-lg ${opensUpward ? 'bottom-full mb-1' : 'mt-1'}`}
         >
           <PersonChecklist
             legend="発言者"

@@ -19,6 +19,8 @@
  * （メンション・言及のアイコン・「本文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
  * 本文も同じく手前に置いています。カード全体がリンクだと本文をドラッグして選択・コピーできないためで、
  * 本文の上での押下は詳細を開きません（詳細は、本文以外のどこを押しても開きます）。
+ * 注意: 手前に置く要素の z-index がカードの外へ漏れないよう、カードには isolate を付けています。
+ * 外すと、カードより上に開いたポップアップ（日時のピッカーなど）の上に、後に描画されるカードの本文が重なります。
  */
 'use client';
 
@@ -94,7 +96,7 @@ export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
 
   return (
     <li
-      className={`relative rounded-lg border p-3 text-sm transition-colors hover:border-foreground/30 ${
+      className={`relative isolate rounded-lg border p-3 text-sm transition-colors hover:border-foreground/30 ${
         isUserSpeculation ? 'border-dashed border-speculation-foreground/40 bg-speculation' : 'bg-card'
       }`}
     >

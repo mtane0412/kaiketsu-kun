@@ -319,6 +319,18 @@ describe('SpeakerView', () => {
   });
 });
 
+describe('証言カードの重なり順', () => {
+  it('カードの中で手前に出す要素が、カードの外（上に開いた日時のピッカーなど）より手前に出ないよう、カードごとに重なり順を閉じ込める', () => {
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const 住人の証言 = screen.getByText(/明かりがついていて/).closest('li');
+
+    // isolate（isolation: isolate）が無いと、カード内の z-10 がページ全体の重なり順に加わり、
+    // 後に描画されるカードの本文が、ポップアップ（z-10）の上に重なって見えてしまう
+    expect(住人の証言).toHaveClass('isolate');
+  });
+});
+
 describe('エンティティの画像の表示', () => {
   const 住人の画像 = 'data:image/jpeg;base64,住人';
   const 別荘の画像 = 'data:image/jpeg;base64,別荘';
