@@ -2,7 +2,7 @@
  * ボード全体
  *
  * 画面を「左のサイドバー（CaseSidebar）」と「メインの1カラム」の2つに分けます。
- * サイドバーは、ケースの切り替え・表示の切り替え（時系列・グラフ・証言者別・地図）・登録済みの一覧（人物・場所・証言）を担います。
+ * サイドバーは、ケースの切り替え・表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図）・登録済みの一覧（人物・場所・証言）を担います。
  * メインのカラムは、ボード（いま開いている表示）か、証言・人物・場所の詳細のどちらか一方だけを表示します。
  * 以前はボードの上にタブを並べ、「登録済みの一覧」をボードを覆うオーバーレイで開いていましたが、
  * どちらもナビゲーションのため、サイドバーに集約しました。
@@ -20,6 +20,7 @@
  * 注意: このコンポーネントはレイアウト（src/app/cases/[caseId]/layout.tsx）に置きます。レイアウトはページを移っても
  * 再マウントされないため、証言を開閉しても、入力中の内容を保ちます。
  * 保存済みのケースの復元は CaseGate が担います。このコンポーネントは CaseGate の中に置いてください。
+ * 人物の動きのビューは人物の数だけ列が増えるため、そのタブのときだけボードの幅の上限を外します。
  * useSearchParams・usePathname を使うため、ページでは Suspense の中に置いてください。
  */
 'use client';
@@ -32,6 +33,7 @@ import { CaseSidebar } from './CaseSidebar';
 import { parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind } from './routes';
 import { GraphView } from './views/GraphView';
 import { MapView } from './views/MapView';
+import { PersonLaneView } from './views/PersonLaneView';
 import { SpeakerView } from './views/SpeakerView';
 import { TimelineView } from './views/TimelineView';
 
@@ -76,10 +78,14 @@ export function CaseBoard({ children }: CaseBoardProps) {
 
         <div className="flex-1 p-4">
           {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画し、隠すだけにする */}
-          <div className="mx-auto min-w-0 max-w-4xl" hidden={detailKind !== undefined}>
+          <div
+            className={`mx-auto min-w-0 ${activeTab === 'lanes' ? 'max-w-none' : 'max-w-4xl'}`}
+            hidden={detailKind !== undefined}
+          >
             {activeTab === 'timeline' && <TimelineView target={currentCase} />}
             {activeTab === 'graph' && <GraphView target={currentCase} />}
             {activeTab === 'speaker' && <SpeakerView target={currentCase} />}
+            {activeTab === 'lanes' && <PersonLaneView target={currentCase} />}
             {activeTab === 'map' && <MapView target={currentCase} />}
           </div>
 

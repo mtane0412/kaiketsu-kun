@@ -62,6 +62,15 @@ describe('CaseBoard', () => {
     expect(await screen.findByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
   });
 
+  it('「人物の動き」に切り替えると、人物ごとの列に証言を並べた表を表示する', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    await 表示を切り替える(user, '人物の動き');
+
+    expect(await screen.findByRole('table', { name: '人物の動き' })).toBeInTheDocument();
+  });
+
   it('「グラフ」に切り替えるとグラフビューを表示し、ノードが人物の詳細ページへのリンクになる', async () => {
     const user = userEvent.setup();
     renderBoard();
