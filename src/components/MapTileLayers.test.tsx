@@ -38,7 +38,8 @@ describe('MapTileLayers', () => {
 
     expect(screen.getByRole('link', { name: '地理院タイル' })).toBeInTheDocument();
     const tileUrls = [...container.querySelectorAll('img.leaflet-tile')].map((tile) => tile.getAttribute('src'));
-    // 前提: jsdom では地図の大きさが0のためタイルが1枚も読み込まれない場合がある。読み込まれたタイルはすべて淡色地図であること
+    // 検証: タイルが1枚以上読み込まれ、そのすべてが淡色地図であること
+    expect(tileUrls.length).toBeGreaterThan(0);
     expect(tileUrls.every((url) => url?.includes('/pale/'))).toBe(true);
   });
 
@@ -48,6 +49,7 @@ describe('MapTileLayers', () => {
 
     expect(screen.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
     const tileUrls = [...container.querySelectorAll('img.leaflet-tile')].map((tile) => tile.getAttribute('src'));
+    expect(tileUrls.length).toBeGreaterThan(0);
     expect(tileUrls.every((url) => url?.startsWith('https://tile.openstreetmap.org/'))).toBe(true);
   });
 });

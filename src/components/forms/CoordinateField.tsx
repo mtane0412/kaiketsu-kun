@@ -122,6 +122,16 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
             ))}
           </ul>
         )}
+        {results && results.length > 0 && (
+          // Nominatim の利用条件のため、候補を表示するときは OpenStreetMap の出典を示す
+          <p className="text-[11px] text-muted-foreground">
+            候補の出典: 国土地理院、&copy;{' '}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">
+              OpenStreetMap
+            </a>{' '}
+            contributors
+          </p>
+        )}
         <div className={`overflow-hidden rounded border border-border bg-muted ${MAP_HEIGHT_CLASS}`}>
           <CoordinateMap value={value} onPick={onChange} />
         </div>

@@ -65,12 +65,16 @@ describe('CoordinateField', () => {
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
     await user.click(screen.getByRole('button', { name: '検索' }));
     const 候補 = await screen.findByRole('list', { name: '座標の候補' });
+    // 検証: 候補の一覧には、OpenStreetMap の出典を表示する（Nominatim の利用条件のため）
+    expect(screen.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
     await user.click(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' }));
 
     expect(searchCoordinates).toHaveBeenCalledWith('永田町');
     expect(onChange).toHaveBeenLastCalledWith({ latitude: 35.677414, longitude: 139.744382 });
     expect(await screen.findByText('ピンの位置: 35.677414,139.744382')).toBeInTheDocument();
     expect(screen.getByText('緯度 35.67741・経度 139.74438')).toBeInTheDocument();
+    // 検証: 候補の一覧と共に、出典の表示も閉じる
+    expect(screen.queryByRole('link', { name: 'OpenStreetMap' })).not.toBeInTheDocument();
     // 検証: 候補を選んだ後は、候補の一覧を閉じる
     expect(screen.queryByRole('list', { name: '座標の候補' })).not.toBeInTheDocument();
   });

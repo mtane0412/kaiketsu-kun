@@ -1,22 +1,23 @@
 /**
  * 住所・地名から座標を調べる処理（国土地理院の住所検索API・OpenStreetMap の Nominatim）のテスト
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GEOCODING_MAX_RESULTS, searchCoordinates } from './geocoding';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GEOCODING_MAX_RESULTS, NOMINATIM_MIN_INTERVAL_MS, searchCoordinates } from './geocoding';
 
 const 国土地理院のURL = 'https://msearch.gsi.go.jp/address-search/AddressSearch';
 const NominatimのURL = 'https://nominatim.openstreetmap.org/search';
 
-type 差し替える応答 = { body: unknown; ok?: boolean; status?: number } | Error;
+type 差し替える応答 = { body: unknown; ok?: boolean; status?: number } | Error | DOMException;
 
 /**
  * fetch を差し替えます。呼び出されたURLが国土地理院か Nominatim かで、返す応答を切り替えます。
- * Error を渡した検索先は、通信に失敗したものとして扱います。
+ * Error・DOMException を渡した検索先は、その例外で fetch が失敗したものとして扱います。
  */
 const 応答を差し替える = (応答: { 国土地理院: 差し替える応答; Nominatim: 差し替える応答 }) => {
   const fetchMock = vi.fn(async (url: string) => {
     const 選んだ応答 = url.startsWith(国土地理院のURL) ? 応答.国土地理院 : 応答.Nominatim;
-    if (選んだ応答 instanceof Error) throw 選んだ応答;
+    // 注意: jsdom の DOMException は Error を継承していないため、両方を確かめる
+    if (選んだ応答 instanceof Error || 選んだ応答 instanceof DOMException) throw 選んだ応答;
     return { ok: 選んだ応答.ok ?? true, status: 選んだ応答.status ?? 200, json: async () => 選んだ応答.body };
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -31,7 +32,15 @@ const 永田町の応答 = [
 /** Nominatim の応答（緯度・経度は文字列）です。 */
 const エッフェル塔の応答 = [{ lat: '48.8582599', lon: '2.2945006', display_name: 'エッフェル塔, パリ, フランス' }];
 
-afterEach(() => {
+// Nominatim の呼び出し間隔の待ち時間を、テストの中で進められるようにする
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(async () => {
+  // 前のテストの待ち時間が、次のテストに持ち越されないようにする
+  await vi.runAllTimersAsync();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -59,8 +68,10 @@ describe('searchCoordinates', () => {
     await searchCoordinates('  エッフェル塔  ');
 
     const 検索語 = encodeURIComponent('エッフェル塔');
-    expect(fetchMock).toHaveBeenCalledWith(`${国土地理院のURL}?q=${検索語}`);
-    expect(fetchMock).toHaveBeenCalledWith(`${NominatimのURL}?format=jsonv2&limit=${GEOCODING_MAX_RESULTS}&accept-language=ja&q=${検索語}`);
+    // 検証: 応答しない検索先を打ち切れるよう、中断の合図（signal）も渡している
+    const 中断の合図 = expect.objectContaining({ signal: expect.any(AbortSignal) });
+    expect(fetchMock).toHaveBeenCalledWith(`${国土地理院のURL}?q=${検索語}`, 中断の合図);
+    expect(fetchMock).toHaveBeenCalledWith(`${NominatimのURL}?format=jsonv2&limit=${GEOCODING_MAX_RESULTS}&accept-language=ja&q=${検索語}`, 中断の合図);
   });
 
   it('候補が無い場合は、空の配列を返す', async () => {
@@ -105,6 +116,44 @@ describe('searchCoordinates', () => {
 
     expect(search.results.map((result) => result.title)).toEqual(['エッフェル塔, パリ, フランス']);
     expect(search.warnings).toEqual(['国土地理院の応答を読み取れませんでした。見つかった候補だけを表示しています。']);
+  });
+
+  it('片方の検索先が時間内に応答しない場合は、もう片方の候補を返し、応答が無かったことを知らせる', async () => {
+    応答を差し替える({ 国土地理院: { body: 永田町の応答 }, Nominatim: new DOMException('signal timed out', 'TimeoutError') });
+
+    const search = await searchCoordinates('永田町');
+
+    expect(search.results.map((result) => result.title)).toEqual(['東京都千代田区永田町一丁目７番']);
+    expect(search.warnings).toEqual(['OpenStreetMapで検索できませんでした（応答がありませんでした）。見つかった候補だけを表示しています。']);
+  });
+
+  it.each([
+    { label: '緯度が空の文字列', 候補: { lat: '', lon: '2.2945006', display_name: '名前だけの地点' } },
+    { label: '緯度が範囲外（90より大きい）', 候補: { lat: '95', lon: '2.2945006', display_name: '北極より北の地点' } },
+    { label: '経度が範囲外（180より大きい）', 候補: { lat: '48.8', lon: '200', display_name: '日付変更線の先の地点' } },
+  ])('Nominatim の座標が正しくない場合（$label）は、読み取れなかったことを知らせる', async ({ 候補 }) => {
+    応答を差し替える({ 国土地理院: { body: 永田町の応答 }, Nominatim: { body: [候補] } });
+
+    const search = await searchCoordinates('永田町');
+
+    expect(search.results.map((result) => result.title)).toEqual(['東京都千代田区永田町一丁目７番']);
+    expect(search.warnings).toEqual(['OpenStreetMapの応答を読み取れませんでした。見つかった候補だけを表示しています。']);
+  });
+
+  it('続けて検索した場合は、Nominatim を前回の呼び出しから決められた間隔をあけて呼び出す（利用ルールで1秒に1回までのため）', async () => {
+    const fetchMock = 応答を差し替える({ 国土地理院: { body: [] }, Nominatim: { body: エッフェル塔の応答 } });
+    const Nominatimの呼び出し回数 = () => fetchMock.mock.calls.filter(([url]) => url.startsWith(NominatimのURL)).length;
+
+    await searchCoordinates('エッフェル塔');
+    const 二回目の検索 = searchCoordinates('凱旋門');
+
+    // 前提: 間隔が空くまでは、2回目の Nominatim の呼び出しを待たせる
+    await vi.advanceTimersByTimeAsync(NOMINATIM_MIN_INTERVAL_MS - 1);
+    expect(Nominatimの呼び出し回数()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await 二回目の検索;
+    expect(Nominatimの呼び出し回数()).toBe(2);
   });
 
   it('両方の検索先で失敗した場合は、それぞれの理由を含む例外を投げる', async () => {
