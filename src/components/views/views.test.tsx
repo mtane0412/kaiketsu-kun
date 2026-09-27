@@ -9,6 +9,7 @@ import type { Case, Claim } from '@/domain/types';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { openedCase, openTestCase } from '@/test/open-case';
+import { PersonLaneView } from './PersonLaneView';
 import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
 
@@ -316,6 +317,73 @@ describe('SpeakerView', () => {
     render(<SpeakerView target={{ ...sampleFictionalCase, claims: [], relationships: [] }} />);
 
     expect(screen.getByText('証言がまだ登録されていません。時系列のボードから書き足してください。')).toBeInTheDocument();
+  });
+});
+
+describe('PersonLaneView', () => {
+  it('登場する人物を列の見出しにし、証言を時系列ボードの並び順で行に並べ、行の見出しに日時を示す', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 表 = screen.getByRole('table', { name: '人物の動き' });
+    expect(within(表).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      '日時',
+      expect.stringContaining('別荘の持ち主'),
+      expect.stringContaining('隣家の住人'),
+      expect.stringContaining('管理人'),
+      expect.stringContaining('県道の防犯カメラ'),
+      expect.stringContaining('架空日報 朝刊'),
+    ]);
+    // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ（夜8時10分）→ 隣家の住人（夜9時）→ 架空日報 → ユーザーの推測
+    expect(within(表).getAllByRole('rowheader').map((header) => header.textContent)).toEqual([
+      '1998年8月12日 19:00',
+      '1998年8月12日 20:10',
+      '1998年8月12日 21:00',
+      '日時不明',
+      '日時不明',
+    ]);
+  });
+
+  it('証言を、発言した人物と言及された人物の両方の列に置き、どちらなのかを示す', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 管理人の証言の行 = screen.getAllByRole('row')[1]!;
+    const セル = within(管理人の証言の行).getAllByRole('cell');
+    // 列の並び: 別荘の持ち主・隣家の住人・管理人・県道の防犯カメラ・架空日報 朝刊
+    expect(within(セル[0]!).getByText('言及')).toBeInTheDocument();
+    expect(within(セル[0]!).getByText(/見回りをしたとき/)).toBeInTheDocument();
+    expect(セル[1]).toBeEmptyDOMElement();
+    expect(within(セル[2]!).getByText('発言')).toBeInTheDocument();
+    expect(within(セル[2]!).getByText(/見回りをしたとき/)).toBeInTheDocument();
+  });
+
+  it('人物の動きを追えるよう、証言が述べる場所をカードの上部に示す', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 管理人の証言の行 = screen.getAllByRole('row')[1]!;
+    const 管理人のセル = within(管理人の証言の行).getAllByRole('cell')[2]!;
+    const カード = within(管理人のセル).getByText(/見回りをしたとき/).closest('li')!;
+    const 上部 = カード.firstElementChild as HTMLElement;
+    expect(within(上部).getByText('湖畔の別荘')).toBeInTheDocument();
+    // 場所は上部にまとめ、下段では繰り返さない
+    expect(within(カード).getAllByText('湖畔の別荘')).toHaveLength(1);
+  });
+
+  it('証言のカードは、人物の動きのタブを戻り先に引き継いだ、詳細ページへのリンクになる', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 管理人の証言の行 = screen.getAllByRole('row')[1]!;
+    expect(within(管理人の証言の行).getAllByRole('link', { name: /を開く$/ })[0]).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/claims/claim-caretaker?tab=lanes'
+    );
+  });
+
+  it('人物の登場する証言が1件も無い場合は、案内を表示する', () => {
+    render(<PersonLaneView target={{ ...sampleFictionalCase, claims: [], relationships: [] }} />);
+
+    expect(
+      screen.getByText('人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。')
+    ).toBeInTheDocument();
   });
 });
 

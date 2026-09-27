@@ -22,6 +22,7 @@ describe('parseTab', () => {
   it('URLの tab の値を、ボードのタブとして読み取る', () => {
     expect(parseTab('map')).toBe('map');
     expect(parseTab('speaker')).toBe('speaker');
+    expect(parseTab('lanes')).toBe('lanes');
   });
 
   it('tab が無い場合と、知らない値の場合は、時系列のタブとして扱う', () => {

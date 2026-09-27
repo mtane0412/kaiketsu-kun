@@ -1,7 +1,8 @@
 /**
  * 証言1件の表示
  *
- * 時系列ビューと証言者別ビューで共有します。
+ * 時系列ビュー・証言者別ビュー・人物の動きビューで共有します。
+ * 人物の動きビューでは、人物がどこにいたかを追えるよう、述べる場所を下段ではなくカードの上部に目立たせます（emphasizePlace）。
  * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
  * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
@@ -63,9 +64,11 @@ type ClaimCardProps = {
   showSpeaker: boolean;
   /** このカードを表示しているタブです。詳細ページへのリンクに、戻り先として引き継ぎます。 */
   tab: TabKey;
+  /** 述べる場所を、下段ではなくカードの上部に場所の色で示すかどうかです。人物の動きビューで使います。 */
+  emphasizePlace?: boolean;
 };
 
-export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false }: ClaimCardProps) {
   const { claim } = view;
   const caseId = useCaseId();
 
@@ -110,6 +113,13 @@ export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
           view.speakerPersons.map((person) => (
             <EntityAvatar key={person.id} imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="sm" />
           ))}
+        {emphasizePlace && view.place && (
+          <span className={`flex items-center gap-0.5 rounded px-1 py-0.5 font-medium ${MENTION_STYLES.place}`}>
+            <MapPin className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">述べる場所</span>
+            {view.place.name}
+          </span>
+        )}
         {showSpeaker && <span className="font-semibold">{view.speakerLabel}</span>}
         {view.viaPersons.length > 0 && (
           <span className="text-muted-foreground">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
@@ -136,7 +146,7 @@ export function ClaimCard({ view, showSpeaker, tab }: ClaimCardProps) {
       )}
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-        {view.place && (
+        {!emphasizePlace && view.place && (
           <DetailRow label="述べる場所" icon={<MapPin className="size-3.5" />}>
             {view.place.name}
           </DetailRow>

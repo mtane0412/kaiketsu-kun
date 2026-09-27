@@ -4,6 +4,7 @@
  * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
  * 時系列ボードには証言だけを並べます。ボード上の位置はケースの並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 人物の動きビューは、時系列の並び順の行 × 人物の列に、各人物が発言・言及された証言を配置します（buildPersonLanes）。
  * 地図ビューは、時系列の並び順のうち、座標のある場所を述べる証言だけをたどります（buildMapTrail）。
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 人物・場所の詳細では、その人物・場所から証言を逆引きします（buildPersonDetail・buildPlaceDetail）。
@@ -175,6 +176,66 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
   return [...personGroups, userGroup]
     .filter((group) => group.claims.length > 0)
     .map((group) => ({ ...group, claims: sortByTimelineOrder(target, group.claims) }));
+}
+
+/** 人物の動きビューで、証言がその人物にとって何であるかです。speaker は本人の発言、mentioned は本文で言及されたことを表します。 */
+export type LaneRole = 'speaker' | 'mentioned';
+
+/** 人物の動きビューの1列（人物）です。 */
+export type PersonLane = {
+  personId: Id;
+  label: string;
+  imageDataUrl?: string;
+  iconText: string;
+};
+
+/** 人物の動きビューの1行（証言）です。 */
+export type PersonLaneRow = {
+  key: TimelineKey;
+  view: ClaimView;
+  /** 列の人物ごとの役割です。その人物が登場しない列のキーは持ちません。 */
+  roles: Partial<Record<Id, LaneRole>>;
+};
+
+/** 人物の動きビュー全体です。 */
+export type PersonLanes = {
+  lanes: PersonLane[];
+  rows: PersonLaneRow[];
+};
+
+/** 証言に登場する人物ごとの役割を返します。発言者が自分自身に言及していても、発言を優先します。 */
+function laneRolesOf(claim: Claim): Partial<Record<Id, LaneRole>> {
+  const roles: Partial<Record<Id, LaneRole>> = {};
+  for (const personId of claim.mentionedPersonIds) roles[personId] = 'mentioned';
+  if (claim.speaker.kind === 'person') {
+    for (const personId of claim.speaker.personIds) roles[personId] = 'speaker';
+  }
+  return roles;
+}
+
+/**
+ * 人物の動きビューを組み立てます。
+ * 行は証言で、時系列ボードの並び順（buildTimeline）のとおりに並べます。
+ * 列は、いずれかの証言に発言者か言及された人物として登場する人物で、ケースへの登録順に並べます。
+ * 経由した人物（Claim.viaPersonIds）は、証言を伝えただけで動きの主体ではないため、列にも役割にも含めません。
+ * どの人物も登場しない証言（人物に言及しないユーザーの推測など）は、置く列が無いため行にしません。
+ */
+export function buildPersonLanes(target: Case): PersonLanes {
+  const rows = buildTimeline(target)
+    .items.map(({ key, view }): PersonLaneRow => ({ key, view, roles: laneRolesOf(view.claim) }))
+    .filter((row) => Object.keys(row.roles).length > 0);
+
+  const appearingIds = new Set(rows.flatMap((row) => Object.keys(row.roles)));
+  const lanes = target.persons
+    .filter((person) => appearingIds.has(person.id))
+    .map((person) => ({
+      personId: person.id,
+      label: person.name,
+      imageDataUrl: person.imageDataUrl,
+      iconText: personIconText(person),
+    }));
+
+  return { lanes, rows };
 }
 
 /** 地図ビューでたどる1地点（座標のある場所を述べる証言）です。 */

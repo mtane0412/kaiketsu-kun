@@ -7,6 +7,7 @@ import {
   buildMapTrail,
   buildPersonDetail,
   buildPlaceDetail,
+  buildPersonLanes,
   buildTimeline,
   claimLabelOf,
   findRelatedEntities,
@@ -144,6 +145,67 @@ describe('groupClaimsBySpeaker', () => {
     const 防犯カメラ = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
 
     expect(防犯カメラ?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
+  });
+});
+
+describe('buildPersonLanes', () => {
+  it('発言者か言及された人物として証言に登場する人物を、ケースへの登録順に列にする。経由しただけの人物は列にしない', () => {
+    // 前提: 県警と書籍は、証言を伝えた経由としてだけ登場する
+    const { lanes } = buildPersonLanes(sampleFictionalCase);
+
+    expect(lanes.map((lane) => lane.label)).toEqual(['別荘の持ち主', '隣家の住人', '管理人', '県道の防犯カメラ', '架空日報 朝刊']);
+  });
+
+  it('証言を時系列ボードの並び順で行にし、各列には、その人物が発言したか言及されたかを示す', () => {
+    // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測
+    const { lanes, rows } = buildPersonLanes(sampleFictionalCase);
+    const 役割の表 = rows.map((row) => [row.view.claim.id, ...lanes.map((lane) => row.roles[lane.personId] ?? '-')]);
+
+    expect(役割の表).toEqual([
+      ['claim-caretaker', 'mentioned', '-', 'speaker', '-', '-'],
+      ['claim-police-camera', 'mentioned', '-', '-', 'speaker', '-'],
+      ['claim-neighbor', 'mentioned', 'speaker', '-', '-', '-'],
+      ['claim-report', 'mentioned', '-', '-', '-', 'speaker'],
+      ['claim-user-guess', 'mentioned', 'mentioned', 'mentioned', '-', '-'],
+    ]);
+  });
+
+  it('発言者が本文で自分自身に言及していても、その人物の列では発言として扱う', () => {
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      claims: [
+        {
+          id: 'claim-self',
+          speaker: { kind: 'person', personIds: ['person-neighbor'] },
+          viaPersonIds: [],
+          content: '@[隣家の住人](person:person-neighbor)はその夜、家にいた。',
+          mentionedPersonIds: ['person-neighbor'],
+        },
+      ],
+      timelineOrder: [],
+    };
+
+    const { rows } = buildPersonLanes(ケース);
+
+    expect(rows[0]?.roles['person-neighbor']).toBe('speaker');
+  });
+
+  it('どの人物も登場しない証言（人物に言及しないユーザーの推測）は行にしない', () => {
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      claims: [
+        {
+          id: 'claim-lonely-guess',
+          speaker: { kind: 'user' },
+          viaPersonIds: [],
+          content: 'あの夜は雨だったのではないか。',
+          mentionedPersonIds: [],
+        },
+      ],
+      timelineOrder: [],
+    };
+
+    expect(buildPersonLanes(ケース)).toEqual({ lanes: [], rows: [] });
   });
 });
 
