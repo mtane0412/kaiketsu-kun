@@ -10,6 +10,7 @@
  *
  * パネルは、ボタンをもう一度押す・Escapeキーを押す・パネルの外を押す、のいずれかで閉じます。
  * ボード上の入力欄は画面の下端にも上端にも開くため、パネルは、開く時点でボタンの上下のうち空きが広い側に開きます。
+ * 開いたまま画面の高さが変わった場合（スマートフォンでキーボードが出た場合など）は、向きと高さを決め直します。
  * 注意: 開く側の空きよりパネルが高い場合は、パネルの高さを空きに収め、はみ出す分はパネルの中でスクロールします
  * （画面の端からはみ出すと、パネルの一部を見ることも押すこともできなくなるためです）。
  */
@@ -131,13 +132,30 @@ type SpeakerPickerProps = {
 
 export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: SpeakerPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  /** パネルをボタンの上側に開くかどうかです。開く時点の画面内の位置から決めます。 */
+  /** パネルをボタンの上側に開くかどうかです。開く時点（と画面の高さが変わった時点）の画面内の位置から決めます。 */
   const [opensUpward, setOpensUpward] = useState(false);
-  /** パネルの最大の高さ（px）です。開く時点の、開く側の空きから決めます。 */
+  /** パネルの最大の高さ（px）です。開く側の空きから決めます。 */
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
+
+  /** ボタンの今の位置から、パネルを開く向きと最大の高さを決めます。 */
+  const placePanel = () => {
+    if (!toggleRef.current) return;
+    const rect = toggleRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const upward = spaceBelow < rect.top;
+    setOpensUpward(upward);
+    setMaxPanelHeight((upward ? rect.top : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
+  };
+
+  // 開いたまま画面の高さが変わったら、向きと高さを決め直す
+  useEffect(() => {
+    if (!isOpen) return;
+    window.addEventListener('resize', placePanel);
+    return () => window.removeEventListener('resize', placePanel);
+  }, [isOpen]);
 
   // パネルの外を押したら閉じる
   useEffect(() => {
@@ -154,13 +172,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   const currentLabel = `${speakerNames}${formatViaLabel(namesOf(value.viaPersonIds))}`;
 
   const toggleOpen = () => {
-    if (!isOpen && toggleRef.current) {
-      const rect = toggleRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const upward = spaceBelow < rect.top;
-      setOpensUpward(upward);
-      setMaxPanelHeight((upward ? rect.top : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
-    }
+    if (!isOpen) placePanel();
     setIsOpen(!isOpen);
   };
 

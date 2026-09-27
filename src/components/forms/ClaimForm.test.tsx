@@ -6,7 +6,7 @@
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { ClaimForm } from './ClaimForm';
@@ -574,6 +574,11 @@ describe('ClaimForm の発言者と経由の選択', () => {
   });
 
   describe('「発言者を選ぶ」のパネルの高さ', () => {
+    // 画面の高さ・ボタンの位置のモックを、後続のテストに持ち越さない
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     /** 「発言者」のボタンが、画面（高さ768px）の中で指定の位置にあるものとして、パネルを開きます。 */
     async function openSpeakerPanelAt(user: UserEvent, top: number, bottom: number) {
       const ボタン = screen.getByRole('button', { name: /^発言者/ });
@@ -602,6 +607,19 @@ describe('ClaimForm の発言者と経由の選択', () => {
       // 画面の高さ（768px）からボタンの下端（128px）・間隔（4px）・余白（8px）を引いた高さ
       expect(パネル).not.toHaveClass('bottom-full');
       expect(パネル.style.maxHeight).toBe('628px');
+    });
+
+    it('開いたまま画面の高さが変わった場合（スマートフォンでキーボードが出た場合など）、向きと高さを決め直す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+      const パネル = await openSpeakerPanelAt(user, 100, 128);
+
+      // 画面の高さが 768px から 200px に縮むと、下の空き（72px）より上の空き（100px）が広くなる
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(200);
+      fireEvent(window, new Event('resize'));
+
+      expect(パネル).toHaveClass('bottom-full');
+      expect(パネル.style.maxHeight).toBe('88px');
     });
   });
 
