@@ -15,7 +15,7 @@
  * ボードと詳細のどちらが入れ替わったのかが分かりづらかったため、メインのカラムを1つに戻しました。
  *
  * 詳細を開いている間、ボードはHTMLの hidden で隠すだけにして、要素は残します。書き足しの入力中の内容を保つためです。
- * ただし hidden の要素は表示されないため、ボードのスクロール位置までは保てません。
+ * hidden で隠すとページのスクロール位置が失われるため、詳細から戻ったときの位置は useBoardScrollRestoration が復元します。
  *
  * 注意: このコンポーネントはレイアウト（src/app/cases/[caseId]/layout.tsx）に置きます。レイアウトはページを移っても
  * 再マウントされないため、証言を開閉しても、入力中の内容を保ちます。
@@ -26,10 +26,11 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { CaseSidebar } from './CaseSidebar';
+import { useBoardScrollRestoration } from './useBoardScrollRestoration';
 import { parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind } from './routes';
 import { GraphView } from './views/GraphView';
 import { MapView } from './views/MapView';
@@ -58,6 +59,8 @@ export function CaseBoard({ children }: CaseBoardProps) {
 
   const detailKind = parseDetailKind(pathname);
   const activeTabLabel = TABS.find((tab) => tab.key === activeTab)!.label;
+  const boardRef = useRef<HTMLDivElement>(null);
+  useBoardScrollRestoration(boardRef, detailKind === undefined, activeTab);
 
   return (
     <SidebarProvider>
@@ -79,6 +82,7 @@ export function CaseBoard({ children }: CaseBoardProps) {
         <div className="flex-1 p-4">
           {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画し、隠すだけにする */}
           <div
+            ref={boardRef}
             className={`mx-auto min-w-0 ${activeTab === 'lanes' ? 'max-w-none' : 'max-w-4xl'}`}
             hidden={detailKind !== undefined}
           >
