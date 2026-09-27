@@ -1,7 +1,7 @@
 /**
  * 座標の入力欄（住所・地名の検索、地図のクリック、座標の削除）
  *
- * 座標は、住所・地名の検索（国土地理院の住所検索API）の候補から選ぶか、地図をクリックして決めます。
+ * 座標は、住所・地名の検索（国土地理院の住所検索API・OpenStreetMap の Nominatim）の候補から選ぶか、地図をクリックして決めます。
  * 住所の無い地点や架空の場所は検索で見つからないため、地図のクリックだけでも座標を決められます。
  * 検索は「検索」を押したとき（または検索欄で Enter を押したとき）だけ行います。
  */
@@ -44,15 +44,20 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
   const [query, setQuery] = useState('');
   /** 検索の候補です。検索していない場合と、候補を選んだ後は null です。 */
   const [results, setResults] = useState<GeocodingResult[] | null>(null);
+  /** 一部の検索先で失敗した場合に知らせる文です。 */
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
     setError(null);
     setResults(null);
+    setWarnings([]);
     setSearching(true);
     try {
-      setResults(await searchCoordinates(query));
+      const search = await searchCoordinates(query);
+      setResults(search.results);
+      setWarnings(search.warnings);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -71,6 +76,7 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
   const handleSelect = (result: GeocodingResult) => {
     onChange({ latitude: result.latitude, longitude: result.longitude });
     setResults(null);
+    setWarnings([]);
   };
 
   return (
@@ -86,13 +92,18 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleQueryKeyDown}
-            placeholder="住所・地名で検索（日本国内）"
+            placeholder="住所・地名で検索"
             className={INPUT_CLASS}
           />
           <button type="button" onClick={() => void handleSearch()} disabled={searching} className={SUB_BUTTON_CLASS}>
             検索
           </button>
         </div>
+        {warnings.length > 0 && (
+          <p role="status" className="whitespace-pre-line text-xs text-muted-foreground">
+            {warnings.join('\n')}
+          </p>
+        )}
         {results?.length === 0 && (
           <p className="text-xs text-muted-foreground">候補が見つかりませんでした。地図をクリックして座標を決めてください。</p>
         )}

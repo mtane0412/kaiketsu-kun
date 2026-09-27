@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('CoordinateField', () => {
   it('住所を検索して候補を選ぶと、その座標を登録し、地図のピンと表示に反映する', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([永田町, 永田町二丁目]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町, 永田町二丁目], warnings: [] });
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<座標の入力欄 onChange={onChange} />);
@@ -76,7 +76,7 @@ describe('CoordinateField', () => {
   });
 
   it('検索欄で Enter を押すと検索し、フォームは送信しない', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([永田町]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町], warnings: [] });
     const onSubmit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -101,7 +101,7 @@ describe('CoordinateField', () => {
   });
 
   it('候補が無い場合は、地図で決めるよう案内する', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [], warnings: [] });
     const user = userEvent.setup();
     render(<座標の入力欄 onChange={vi.fn()} />);
 
@@ -120,6 +120,22 @@ describe('CoordinateField', () => {
     await user.click(screen.getByRole('button', { name: '検索' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('住所を検索できませんでした（通信に失敗しました）');
+  });
+
+  it('片方の検索先で失敗した場合は、見つかった候補と共に、失敗したことを表示する', async () => {
+    vi.mocked(searchCoordinates).mockResolvedValue({
+      results: [永田町],
+      warnings: ['OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。'],
+    });
+    const user = userEvent.setup();
+    render(<座標の入力欄 onChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
+    await user.click(screen.getByRole('button', { name: '検索' }));
+
+    const 候補 = await screen.findByRole('list', { name: '座標の候補' });
+    expect(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。');
   });
 
   it('地図をクリックすると、その地点の座標を登録する（住所の無い場所のため）', async () => {
