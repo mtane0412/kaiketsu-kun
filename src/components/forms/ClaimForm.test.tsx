@@ -4,7 +4,7 @@
  * 本文に「@」でメンションを書き、場所・言及している人物を本文から導出することと、
  * 発言者と経由（発言者の話を伝えた人物や媒体）を、投稿ボタンの横の「発言者」から選ぶことを検証します。
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -574,10 +574,21 @@ describe('ClaimForm の発言者と経由の選択', () => {
   });
 
   describe('「発言者を選ぶ」のパネルの高さ', () => {
-    // 画面の高さ・ボタンの位置のモックを、後続のテストに持ち越さない
+    // 画面の高さ・ボタンの位置・表示領域（visualViewport）のモックを、後続のテストに持ち越さない
     afterEach(() => {
       vi.restoreAllMocks();
+      Reflect.deleteProperty(window, 'visualViewport');
     });
+
+    /**
+     * 表示領域（visualViewport）を持つブラウザとして、表示領域の位置と高さを設定します。
+     * 注意: テスト環境（jsdom）には visualViewport が無いため、これを呼ばないテストは window.innerHeight から計算します。
+     */
+    function setVisualViewport(offsetTop: number, height: number) {
+      const 表示領域 = Object.assign(new EventTarget(), { offsetTop, height });
+      Object.defineProperty(window, 'visualViewport', { value: 表示領域, configurable: true });
+      return 表示領域;
+    }
 
     /** 「発言者」のボタンが、画面（高さ768px）の中で指定の位置にあるものとして、パネルを開きます。 */
     async function openSpeakerPanelAt(user: UserEvent, top: number, bottom: number) {
@@ -620,6 +631,40 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
       expect(パネル).toHaveClass('bottom-full');
       expect(パネル.style.maxHeight).toBe('88px');
+    });
+
+    it('キーボードが表示領域だけを縮めた場合も、表示領域の下端に収まる高さに決め直す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+      const 表示領域 = setVisualViewport(0, 768);
+      const パネル = await openSpeakerPanelAt(user, 100, 128);
+
+      // window の高さ（768px）は変わらず、表示領域の高さだけが 300px に縮む
+      Object.assign(表示領域, { height: 300 });
+      act(() => {
+        表示領域.dispatchEvent(new Event('resize'));
+      });
+
+      // 表示領域の下端（300px）からボタンの下端（128px）・間隔（4px）・余白（8px）を引いた高さ
+      expect(パネル).not.toHaveClass('bottom-full');
+      expect(パネル.style.maxHeight).toBe('160px');
+    });
+
+    it('表示領域がページの中でずれた場合（キーボードの表示中にスクロールした場合など）、ずれた位置から決め直す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={vi.fn()} />);
+      const 表示領域 = setVisualViewport(0, 300);
+      const パネル = await openSpeakerPanelAt(user, 150, 178);
+
+      // 表示領域が 100px 下へずれると、表示領域の上端は 100px、下端は 400px になる
+      Object.assign(表示領域, { offsetTop: 100 });
+      act(() => {
+        表示領域.dispatchEvent(new Event('scroll'));
+      });
+
+      // 上の空き（50px）より下の空き（222px）が広いため下向きに開き、222px から間隔と余白を引いた高さ
+      expect(パネル).not.toHaveClass('bottom-full');
+      expect(パネル.style.maxHeight).toBe('210px');
     });
   });
 

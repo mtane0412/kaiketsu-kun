@@ -11,6 +11,9 @@
  * パネルは、ボタンをもう一度押す・Escapeキーを押す・パネルの外を押す、のいずれかで閉じます。
  * ボード上の入力欄は画面の下端にも上端にも開くため、パネルは、開く時点でボタンの上下のうち空きが広い側に開きます。
  * 開いたまま画面の高さが変わった場合（スマートフォンでキーボードが出た場合など）は、向きと高さを決め直します。
+ * 空きは、実際に見えている表示領域（visualViewport）の上端・下端から測ります。キーボードは表示領域だけを縮め、
+ * window の高さと resize イベントが変わらない場合があるためです。
+ * 注意: visualViewport を持たない環境では、window の高さ（上端は0）を表示領域として扱います。
  * 注意: 開く側の空きよりパネルが高い場合は、パネルの高さを空きに収め、はみ出す分はパネルの中でスクロールします
  * （画面の端からはみ出すと、パネルの一部を見ることも押すこともできなくなるためです）。
  */
@@ -144,17 +147,29 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
   const placePanel = () => {
     if (!toggleRef.current) return;
     const rect = toggleRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const upward = spaceBelow < rect.top;
+    // 表示領域の上端・下端（ボタンの位置と同じく、window の左上を原点とする座標）
+    const viewport = window.visualViewport;
+    const viewportTop = viewport ? viewport.offsetTop : 0;
+    const viewportBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+    const spaceAbove = rect.top - viewportTop;
+    const spaceBelow = viewportBottom - rect.bottom;
+    const upward = spaceBelow < spaceAbove;
     setOpensUpward(upward);
-    setMaxPanelHeight((upward ? rect.top : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
+    setMaxPanelHeight((upward ? spaceAbove : spaceBelow) - PANEL_GAP - VIEWPORT_MARGIN);
   };
 
-  // 開いたまま画面の高さが変わったら、向きと高さを決め直す
+  // 開いたまま画面の高さや表示領域の位置が変わったら、向きと高さを決め直す
   useEffect(() => {
     if (!isOpen) return;
+    const viewport = window.visualViewport;
     window.addEventListener('resize', placePanel);
-    return () => window.removeEventListener('resize', placePanel);
+    viewport?.addEventListener('resize', placePanel);
+    viewport?.addEventListener('scroll', placePanel);
+    return () => {
+      window.removeEventListener('resize', placePanel);
+      viewport?.removeEventListener('resize', placePanel);
+      viewport?.removeEventListener('scroll', placePanel);
+    };
   }, [isOpen]);
 
   // パネルの外を押したら閉じる
