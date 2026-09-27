@@ -70,6 +70,8 @@ export function CoordinateField({ label, value, onChange }: CoordinateFieldProps
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
     // 場所のフォームの中に置くため、Enter でフォームを送信しない
     event.preventDefault();
+    // 検索中は「検索」ボタンと同じく受け付けない（同じ検索を重ねて呼び出さないため）
+    if (searching) return;
     void handleSearch();
   };
 

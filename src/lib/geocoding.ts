@@ -118,7 +118,8 @@ function waitForNominatimTurn(): Promise<void> {
 
 /**
  * URL を呼び出し、応答の JSON を返します。
- * 通信に失敗した場合、GEOCODING_TIMEOUT_MS 以内に応答が無い場合、HTTP のエラーの場合は、検索先の名前を含む例外を投げます。
+ * 通信に失敗した場合、GEOCODING_TIMEOUT_MS 以内に応答が無い場合、HTTP のエラーの場合、応答が JSON として読めない場合は、
+ * 検索先の名前を含む例外を投げます。
  */
 async function fetchJson(sourceName: string, url: string): Promise<unknown> {
   let response: Response;
@@ -134,7 +135,11 @@ async function fetchJson(sourceName: string, url: string): Promise<unknown> {
   if (!response.ok) {
     throw new Error(`${sourceName}で検索できませんでした（HTTP ${response.status}）`);
   }
-  return response.json();
+  try {
+    return await response.json();
+  } catch (caught) {
+    throw new Error(`${sourceName}の応答を読み取れませんでした`, { cause: caught });
+  }
 }
 
 function errorMessage(caught: unknown): string {

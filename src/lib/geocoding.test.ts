@@ -156,6 +156,23 @@ describe('searchCoordinates', () => {
     expect(Nominatimの呼び出し回数()).toBe(2);
   });
 
+  it('片方の検索先の応答が JSON として読めない場合は、もう片方の候補を返し、どの検索先で失敗したかを知らせる', async () => {
+    // 前提: Nominatim が JSON ではない応答（例: メンテナンス中の HTML ページ）を返した
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.startsWith(国土地理院のURL)
+          ? { ok: true, status: 200, json: async () => 永田町の応答 }
+          : { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token < in JSON'); } },
+      ),
+    );
+
+    const search = await searchCoordinates('永田町');
+
+    expect(search.results.map((result) => result.title)).toEqual(['東京都千代田区永田町一丁目７番']);
+    expect(search.warnings).toEqual(['OpenStreetMapの応答を読み取れませんでした。見つかった候補だけを表示しています。']);
+  });
+
   it('両方の検索先で失敗した場合は、それぞれの理由を含む例外を投げる', async () => {
     応答を差し替える({ 国土地理院: new TypeError('Failed to fetch'), Nominatim: { body: null, ok: false, status: 503 } });
 

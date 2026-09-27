@@ -95,6 +95,25 @@ describe('CoordinateField', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('検索中に検索欄で Enter を押しても、重ねて検索しない', async () => {
+    // 前提: 1回目の検索の応答がまだ返ってこない
+    let 検索を終える: (search: { results: typeof 永田町[]; warnings: string[] }) => void = () => {};
+    vi.mocked(searchCoordinates).mockReturnValue(new Promise((resolve) => (検索を終える = resolve)));
+    const user = userEvent.setup();
+    render(<座標の入力欄 onChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('住所・地名で検索'), '永田町{Enter}');
+    await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
+
+    expect(searchCoordinates).toHaveBeenCalledTimes(1);
+
+    // 検証: 検索が終わった後は、Enter で再び検索できる
+    検索を終える({ results: [永田町], warnings: [] });
+    await screen.findByRole('list', { name: '座標の候補' });
+    await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
+    expect(searchCoordinates).toHaveBeenCalledTimes(2);
+  });
+
   it('日本語入力の変換を確定する Enter では、検索しない', () => {
     render(<座標の入力欄 onChange={vi.fn()} />);
 
