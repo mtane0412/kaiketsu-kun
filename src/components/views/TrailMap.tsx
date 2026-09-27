@@ -1,8 +1,8 @@
 /**
- * 時系列の並び順をたどるための地図（地理院タイルの表示、番号付きのピン、地点を順に結ぶ線）
+ * 時系列の並び順をたどるための地図（地図の画像の表示、番号付きのピン、地点を順に結ぶ線）
  *
  * Leaflet は window を前提にしているため、この部品は next/dynamic の ssr: false で読み込みます（MapView.tsx）。
- * 地図の種類は、ピンと線が見やすい淡色地図を最初に表示し、右上の選択肢で標準地図に切り替えられます。
+ * 地図の種類は、ピンと線が見やすい淡色地図を最初に表示し、右上の選択肢で標準地図や OpenStreetMap に切り替えられます。
  * ピンは場所ごとに1つで、その場所を述べる証言の順番（例「1・3」）を表示します。選択中の証言のピンは赤で示します。
  * 注意: Leaflet の既定のピン画像はバンドラー経由では読み込めないため、画像を使わない divIcon でピンを描きます。
  */
@@ -14,8 +14,8 @@ import { useEffect } from 'react';
 import { MapContainer, Marker, Polyline, useMap } from 'react-leaflet';
 import type { MapPin } from '@/domain/case-views';
 import type { Coordinates } from '@/domain/types';
-import { MAX_ZOOM, MIN_ZOOM } from '@/lib/gsi-tiles';
-import { GsiTileLayers } from '../GsiTileLayers';
+import { MAX_ZOOM, MIN_ZOOM } from '@/lib/map-tiles';
+import { MapTileLayers } from '../MapTileLayers';
 
 /** 最初にすべてのピンが収まる範囲を表示するときの余白（px）と、拡大の上限（地点が1つだけの場合に拡大しすぎないため）です。 */
 const FIT_PADDING: [number, number] = [40, 40];
@@ -68,7 +68,7 @@ export default function TrailMap({ pins, path, activeOrder, onSelectPin }: Trail
       maxZoom={MAX_ZOOM}
       className="h-full w-full"
     >
-      <GsiTileLayers defaultStyle="pale" />
+      <MapTileLayers defaultStyle="pale" />
       <Polyline positions={path.map(toLatLng)} pathOptions={PATH_STYLE} />
       {pins.map((pin) => (
         <Marker

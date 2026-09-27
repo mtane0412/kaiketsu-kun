@@ -1,8 +1,9 @@
 /**
- * 座標を決めるための地図（地理院タイルの表示、クリックでの地点の選択、ピンの表示）
+ * 座標を決めるための地図（地図の画像の表示、クリックでの地点の選択、ピンの表示）
  *
  * Leaflet は window を前提にしているため、この部品は next/dynamic の ssr: false で読み込みます（CoordinateField.tsx）。
- * 地図の画像は国土地理院の地理院タイルです（GsiTileLayers.tsx）。地点を探しやすい標準地図を最初に表示し、右上の選択肢で淡色地図に切り替えられます。
+ * 地図の画像は MapTileLayers.tsx が表示します。地点を探しやすい標準地図（地理院タイル）を最初に表示し、
+ * 右上の選択肢で淡色地図や、海外の地名が分かる OpenStreetMap に切り替えられます。
  */
 'use client';
 
@@ -10,8 +11,8 @@ import 'leaflet/dist/leaflet.css';
 import { useEffect } from 'react';
 import { CircleMarker, MapContainer, useMap, useMapEvents } from 'react-leaflet';
 import type { Coordinates } from '@/domain/types';
-import { MAX_ZOOM, MIN_ZOOM } from '@/lib/gsi-tiles';
-import { GsiTileLayers } from '../GsiTileLayers';
+import { MAX_ZOOM, MIN_ZOOM } from '@/lib/map-tiles';
+import { MapTileLayers } from '../MapTileLayers';
 
 /** 座標が無い場合に表示する範囲（日本全体が収まる中心とズームレベル）です。 */
 const JAPAN_CENTER: [number, number] = [36.5, 137.5];
@@ -42,7 +43,7 @@ export default function CoordinateMap({ value, onPick }: CoordinateMapProps) {
       maxZoom={MAX_ZOOM}
       className="h-full w-full cursor-crosshair"
     >
-      <GsiTileLayers defaultStyle="standard" />
+      <MapTileLayers defaultStyle="standard" />
       <PickHandler onPick={onPick} />
       {value && (
         <>

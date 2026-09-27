@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('CoordinateField', () => {
   it('住所を検索して候補を選ぶと、その座標を登録し、地図のピンと表示に反映する', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([永田町, 永田町二丁目]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町, 永田町二丁目], warnings: [] });
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<座標の入力欄 onChange={onChange} />);
@@ -65,18 +65,22 @@ describe('CoordinateField', () => {
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
     await user.click(screen.getByRole('button', { name: '検索' }));
     const 候補 = await screen.findByRole('list', { name: '座標の候補' });
+    // 検証: 候補の一覧には、OpenStreetMap の出典を表示する（Nominatim の利用条件のため）
+    expect(screen.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
     await user.click(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' }));
 
     expect(searchCoordinates).toHaveBeenCalledWith('永田町');
     expect(onChange).toHaveBeenLastCalledWith({ latitude: 35.677414, longitude: 139.744382 });
     expect(await screen.findByText('ピンの位置: 35.677414,139.744382')).toBeInTheDocument();
     expect(screen.getByText('緯度 35.67741・経度 139.74438')).toBeInTheDocument();
+    // 検証: 候補の一覧と共に、出典の表示も閉じる
+    expect(screen.queryByRole('link', { name: 'OpenStreetMap' })).not.toBeInTheDocument();
     // 検証: 候補を選んだ後は、候補の一覧を閉じる
     expect(screen.queryByRole('list', { name: '座標の候補' })).not.toBeInTheDocument();
   });
 
   it('検索欄で Enter を押すと検索し、フォームは送信しない', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([永田町]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町], warnings: [] });
     const onSubmit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -91,6 +95,25 @@ describe('CoordinateField', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('検索中に検索欄で Enter を押しても、重ねて検索しない', async () => {
+    // 前提: 1回目の検索の応答がまだ返ってこない
+    let 検索を終える: (search: { results: typeof 永田町[]; warnings: string[] }) => void = () => {};
+    vi.mocked(searchCoordinates).mockReturnValue(new Promise((resolve) => (検索を終える = resolve)));
+    const user = userEvent.setup();
+    render(<座標の入力欄 onChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('住所・地名で検索'), '永田町{Enter}');
+    await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
+
+    expect(searchCoordinates).toHaveBeenCalledTimes(1);
+
+    // 検証: 検索が終わった後は、Enter で再び検索できる
+    検索を終える({ results: [永田町], warnings: [] });
+    await screen.findByRole('list', { name: '座標の候補' });
+    await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
+    expect(searchCoordinates).toHaveBeenCalledTimes(2);
+  });
+
   it('日本語入力の変換を確定する Enter では、検索しない', () => {
     render(<座標の入力欄 onChange={vi.fn()} />);
 
@@ -101,7 +124,7 @@ describe('CoordinateField', () => {
   });
 
   it('候補が無い場合は、地図で決めるよう案内する', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue([]);
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [], warnings: [] });
     const user = userEvent.setup();
     render(<座標の入力欄 onChange={vi.fn()} />);
 
@@ -120,6 +143,22 @@ describe('CoordinateField', () => {
     await user.click(screen.getByRole('button', { name: '検索' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('住所を検索できませんでした（通信に失敗しました）');
+  });
+
+  it('片方の検索先で失敗した場合は、見つかった候補と共に、失敗したことを表示する', async () => {
+    vi.mocked(searchCoordinates).mockResolvedValue({
+      results: [永田町],
+      warnings: ['OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。'],
+    });
+    const user = userEvent.setup();
+    render(<座標の入力欄 onChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
+    await user.click(screen.getByRole('button', { name: '検索' }));
+
+    const 候補 = await screen.findByRole('list', { name: '座標の候補' });
+    expect(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。');
   });
 
   it('地図をクリックすると、その地点の座標を登録する（住所の無い場所のため）', async () => {
