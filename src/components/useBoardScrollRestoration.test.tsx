@@ -58,6 +58,19 @@ describe('useBoardScrollRestoration', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it('表示を切り替えたあと、スクロールせずに詳細を開いて閉じても、切り替えたときの位置に戻す', () => {
+    const { rerender } = render(<Board isVisible tab="timeline" />);
+    スクロールする(1200);
+
+    // 表示を切り替えても、スクロールのイベントは起きない
+    rerender(<Board isVisible tab="speaker" />);
+    rerender(<Board isVisible={false} tab="speaker" />);
+    スクロールする(0);
+    rerender(<Board isVisible tab="speaker" />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 1200);
+  });
+
   it('ボードを表示したまま表示を切り替えただけでは、スクロール位置を動かさない', () => {
     const { rerender } = render(<Board isVisible tab="timeline" />);
     スクロールする(1200);

@@ -27,13 +27,15 @@ export function useBoardScrollRestoration(
   const wasVisibleRef = useRef(isBoardVisible);
 
   useEffect(() => {
-    const handleScroll = () => {
+    const saveScroll = () => {
       // ボードを隠した直後に、ページが短くなってスクロール位置が変わる。その位置で上書きしないよう、隠れている間は記録しない
       if (boardRef.current?.hidden) return;
       savedRef.current = { tab, y: window.scrollY };
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    // 表示を切り替えただけではスクロールのイベントが起きないため、切り替えた時点の位置もここで記録する
+    saveScroll();
+    window.addEventListener('scroll', saveScroll, { passive: true });
+    return () => window.removeEventListener('scroll', saveScroll);
   }, [boardRef, tab]);
 
   // 描画の前に戻さないと、一番上のボードが一瞬見えてしまうため、レイアウトの確定直後に復元する
