@@ -32,10 +32,11 @@ const SECTION_LABEL = '照合';
 
 /**
  * 編集・削除のボタンの、読み上げ用の名前を組み立てます。
- * 1件の証言が複数の照合を持つため、ボタンの名前には相手の証言の名前を含めて、どの照合への操作かを区別できるようにします。
+ * 1件の証言が複数の照合を持ち、同じ相手との間にも種類の異なる照合を登録できるため、
+ * ボタンの名前には相手の証言の名前と照合の種類を含めて、どの照合への操作かを区別できるようにします。
  */
 function actionLabelOf(view: ClaimCrossCheckView, action: string): string {
-  return `「${claimLabelOf(view.other)}」との照合を${action}`;
+  return `「${claimLabelOf(view.other)}」との照合（${CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}）を${action}`;
 }
 
 /** 入力フォームの状態です。編集の場合は、対象の照合のIDを持ちます。 */

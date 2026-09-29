@@ -91,7 +91,7 @@ describe('CrossCheckSection', () => {
     const user = userEvent.setup();
     隣家の住人の照合を描画();
 
-    await user.click(screen.getByRole('button', { name: /見回りをしたとき.*との照合を編集/ }));
+    await user.click(screen.getByRole('button', { name: /見回りをしたとき.*との照合（食い違う）を編集/ }));
     const 編集 = screen.getByRole('region', { name: '照合の編集' });
     // 検証: 編集では、登録済みの相手・種類・理由を初期値にする
     expect(within(編集).getByLabelText('相手の証言')).toHaveValue('claim-caretaker');
@@ -109,11 +109,32 @@ describe('CrossCheckSection', () => {
     });
   });
 
+  it('同じ相手との照合が複数ある場合も、編集・削除のボタンの名前を種類で区別する', () => {
+    // 前提: 管理人の証言との間に、食い違う照合に加えて、同じ事柄を述べている照合も登録されている
+    openTestCase({
+      ...sampleFictionalCase,
+      crossChecks: [
+        ...sampleFictionalCase.crossChecks,
+        {
+          id: 'cross-check-caretaker-neighbor-subject',
+          claimIds: ['claim-neighbor', 'claim-caretaker'],
+          kind: 'sameSubject',
+          reason: 'どちらも12日夜の別荘の様子を述べている。',
+        },
+      ],
+    });
+
+    隣家の住人の照合を描画();
+
+    expect(screen.getByRole('button', { name: /見回りをしたとき.*との照合（食い違う）を編集/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /見回りをしたとき.*との照合（同じ事柄を述べている）を編集/ })).toBeInTheDocument();
+  });
+
   it('照合を削除しても、照合した証言は残る', async () => {
     const user = userEvent.setup();
     隣家の住人の照合を描画();
 
-    await user.click(screen.getByRole('button', { name: /車が別荘の方向へ.*との照合を削除/ }));
+    await user.click(screen.getByRole('button', { name: /車が別荘の方向へ.*との照合（裏付ける）を削除/ }));
     await user.click(await screen.findByRole('button', { name: '削除する' }));
 
     const ケース = openedCase();
