@@ -174,6 +174,18 @@ describe('MapView', () => {
       await user.selectOptions(screen.getByLabelText('移動を確かめる人物'), 名前);
     }
 
+    it('移動を確かめる対象は、自ら移動するか運ばれる個人と物に限り、組織や記録・媒体は選べない', () => {
+      render(<MapView target={移動を確かめるケース} />);
+
+      const 選択肢 = within(screen.getByLabelText('移動を確かめる人物'))
+        .getAllByRole('option')
+        .map((option) => option.textContent);
+      expect(選択肢).toContain('別荘の持ち主');
+      expect(選択肢).toContain('隣家の住人');
+      expect(選択肢).not.toContain('県道の防犯カメラ');
+      expect(選択肢).not.toContain('架空日報 朝刊');
+    });
+
     it('人物を選ぶと、その人物の日時と座標のある証言だけを、日時の順にたどる', async () => {
       const user = userEvent.setup();
       render(<MapView target={移動を確かめるケース} />);

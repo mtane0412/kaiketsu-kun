@@ -23,6 +23,11 @@
  */
 import type { TimeRef } from './types';
 
+/** 1分・1時間・1日のミリ秒です。 */
+export const MINUTE_MS = 60 * 1000;
+export const HOUR_MS = 60 * MINUTE_MS;
+export const DAY_MS = 24 * HOUR_MS;
+
 /** 時刻参照が表す区間です（UTCのエポックミリ秒）。 */
 export type Interval = { start: number; end: number };
 

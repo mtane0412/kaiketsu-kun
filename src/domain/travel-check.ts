@@ -13,15 +13,17 @@
  * - 時刻は time-ref.ts と同じく、すべてUTCとして扱います。
  */
 import { buildPersonLanes, coordinatesOf, type ClaimView, type MapStop, type UnmappedReason } from './case-views';
-import { compareTimeRef, toInterval } from './time-ref';
-import type { Case, Coordinates, Id, Place, TimeRef } from './types';
+import { compareTimeRef, DAY_MS, HOUR_MS, MINUTE_MS, toInterval } from './time-ref';
+import type { Case, Coordinates, Id, PersonKind, Place, TimeRef } from './types';
 
 /** 地球の平均半径（メートル）です。 */
 const EARTH_RADIUS_METERS = 6_371_008.8;
 
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
+/**
+ * 移動を確かめる対象にする人物の種別です。自ら移動する個人と、運ばれて移動しうる物（車・凶器など）に限ります。
+ * 組織や記録・媒体（防犯カメラ・新聞など）は、徒歩や車の速さで移動を確かめる意味が無いため含めません。
+ */
+export const TRAVELING_PERSON_KINDS: ReadonlySet<PersonKind> = new Set(['individual', 'object']);
 
 /**
  * 想定する移動手段と速さ（時速キロメートル）です。

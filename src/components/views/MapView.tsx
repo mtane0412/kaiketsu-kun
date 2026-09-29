@@ -15,7 +15,7 @@
 import dynamic from 'next/dynamic';
 import { useId, useMemo, useState } from 'react';
 import { buildMapTrail, buildPersonLanes, groupStopsByPlace, type ClaimView, type MapPin } from '@/domain/case-views';
-import { buildPersonTravel, type TravelExcludedReason } from '@/domain/travel-check';
+import { buildPersonTravel, TRAVELING_PERSON_KINDS, type TravelExcludedReason } from '@/domain/travel-check';
 import type { Case, Id } from '@/domain/types';
 import { INPUT_CLASS, LABEL_CLASS } from '../forms/fields';
 import { ClaimCard } from './ClaimCard';
@@ -50,8 +50,8 @@ type MapViewProps = {
 export function MapView({ target }: MapViewProps) {
   const personFieldId = useId();
   const [personId, setPersonId] = useState<Id>(NO_PERSON);
-  // 選べる人物は、いずれかの証言に発言者か言及された人物として登場する人物です（人物の動きビューの列と同じです）
-  const persons = useMemo(() => buildPersonLanes(target).lanes, [target]);
+  // 選べる人物は、いずれかの証言に発言者か言及された人物として登場する、個人と物です（TRAVELING_PERSON_KINDS）
+  const persons = useMemo(() => buildPersonLanes(target, TRAVELING_PERSON_KINDS).lanes, [target]);
   // 選んだ人物が削除されたり、証言に登場しなくなったりした場合は、人物を選ばない表示に戻す
   const selectedPersonId = persons.some((person) => person.personId === personId) ? personId : NO_PERSON;
 

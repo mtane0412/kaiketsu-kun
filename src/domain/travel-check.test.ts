@@ -4,9 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from './sample-fictional-case';
 import { buildPersonTravel, distanceMeters, formatDistance, formatDuration } from './travel-check';
+import { MINUTE_MS } from './time-ref';
 import type { Case, Claim } from './types';
-
-const MINUTE_MS = 60 * 1000;
 
 describe('distanceMeters', () => {
   it('同じ地点同士の距離は0メートル', () => {
