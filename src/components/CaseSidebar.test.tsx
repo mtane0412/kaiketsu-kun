@@ -133,6 +133,24 @@ describe('CaseSidebar', () => {
       expect(within(一覧).queryByRole('link', { name: /明かりがついていて/ })).not.toBeInTheDocument();
     });
 
+    it('未完了の未了事項の件数を示し、未完了のものだけを、未了事項の詳細へのリンクで並べる', async () => {
+      const user = userEvent.setup();
+      サイドバーを描画する();
+
+      // 前提: 未完了の未了事項は、防犯カメラの映像の確認と管理人への再聴取の2件。天気の確認は完了している
+      const 見出し = await screen.findByRole('button', { name: /^未完了の未了事項/ });
+      expect(見出し).toHaveTextContent('2');
+      await user.click(見出し);
+
+      const 一覧 = await screen.findByRole('list', { name: '未完了の未了事項の一覧' });
+      expect(within(一覧).getAllByRole('link')).toHaveLength(2);
+      expect(within(一覧).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+        'href',
+        '/cases/case-lakeside/tasks/task-camera'
+      );
+      expect(within(一覧).queryByRole('link', { name: /天気/ })).not.toBeInTheDocument();
+    });
+
     it('開いている人物の詳細は、一覧でも現在地として示す', async () => {
       resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
       サイドバーを描画する();

@@ -67,7 +67,8 @@ const NO_INTERVIEW = '';
 type ClaimFormProps = {
   initial?: Claim;
   defaults?: ClaimDefaults;
-  onDone: () => void;
+  /** 保存できたときに、保存した証言のIDで呼び出します。 */
+  onDone: (claimId: Id) => void;
   /** 内容欄に初期フォーカスを置くかどうかです。ボード上で開いた入力欄にすぐ書き始められるようにします。 */
   autoFocus?: boolean;
   /** 見出しと本文の欄・「発言者」・投稿ボタンだけを表示するかどうかです。 */
@@ -184,7 +185,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       setError(caught instanceof Error ? caught.message : String(caught));
       return;
     }
-    onDone();
+    onDone(claim.id);
   };
 
   return (

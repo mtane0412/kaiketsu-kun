@@ -7,6 +7,8 @@
  * 仮説にひもづいた証言を削除すると、仮説からひもづけを外すため、確認の画面で仮説の件数を伝えます。
  * 読み手が他の証言と突き合わせた結果（照合）の一覧と登録・編集・削除は、CrossCheckSection が担います。
  * この証言を使っている仮説（支える・反する・対象の人物の動機・機会・手段）へのリンクは、HypothesisUsageSection が担います。
+ * この証言をひもづけた未了事項の一覧と、未了事項を追加する導線は、TaskLinkSection が担います。
+ * 未了事項にひもづいた証言を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
@@ -23,6 +25,7 @@ import { useMemo, useState } from 'react';
 import { buildClaimDetail, claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { findHypothesesUsingClaim } from '@/domain/hypotheses';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { findTasksLinkedTo } from '@/domain/tasks';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -30,6 +33,7 @@ import { ClaimLink } from './ClaimLink';
 import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { HypothesisUsageSection } from './HypothesisUsageSection';
+import { TaskLinkSection } from './TaskLinkSection';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM } from './routes';
@@ -89,11 +93,13 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const mentionedEntities = mentionedEntitiesOf(view);
   const crossCheckCount = currentCase.crossChecks.filter((crossCheck) => crossCheck.claimIds.includes(claimId)).length;
   const hypothesisCount = findHypothesesUsingClaim(currentCase, claimId).length;
-  // 証言の削除は照合と仮説も巻き込むため、消える照合と、ひもづけが外れる仮説があることを確認の画面で伝える
+  const taskCount = findTasksLinkedTo(currentCase, 'claim', claimId).length;
+  // 証言の削除は照合・仮説・未了事項も巻き込むため、消える照合と、ひもづけが外れる仮説・未了事項があることを確認の画面で伝える
   const deleteDescription = [
     'この証言をケースから削除します。',
     ...(crossCheckCount > 0 ? [`この証言を含む照合${crossCheckCount}件も削除します。`] : []),
     ...(hypothesisCount > 0 ? [`この証言をひもづけた仮説${hypothesisCount}件から、ひもづけを外します。`] : []),
+    ...(taskCount > 0 ? [`この証言をひもづけた未了事項${taskCount}件から、ひもづけを外します。`] : []),
     'この操作は取り消せません。',
   ].join('');
 
@@ -162,6 +168,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
       <CrossCheckSection claimId={claimId} tab={tab} />
 
       <HypothesisUsageSection claimId={claimId} tab={tab} />
+
+      <TaskLinkSection kind="claim" id={claimId} tab={tab} />
 
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">

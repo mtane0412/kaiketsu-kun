@@ -5,15 +5,18 @@
  * ケースの一覧はトップページ（/）です。
  * 証言・人物・場所の詳細は、それぞれ独立したページ（.../claims/<ID>・.../persons/<ID>・.../places/<ID>）として開きます。
  * 人物・場所を新しく登録するページは、それぞれの一覧の下（.../persons/new・.../places/new）に置きます。
- * 仮説の詳細（.../hypotheses/<ID>）と登録（.../hypotheses/new）も、同じ形で置きます。
+ * 仮説の詳細（.../hypotheses/<ID>）と登録（.../hypotheses/new）、未了事項の詳細（.../tasks/<ID>）と登録（.../tasks/new）も、同じ形で置きます。
+ * 未了事項の登録ページは、最初からひもづける証言・人物・場所をクエリ（?link=<種類>:<ID>）で受け取ります。
+ * 証言・人物・場所の詳細から「未了事項を追加」で開いたときに、その対象をひもづけた状態で始めるためです。
  * 注意: IDがちょうど「new」の人物・場所は、登録のページに隠れて詳細を開けません。
  * Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するためです。
  * アプリが振るID（nanoid）では起こらず、読み込んだJSONに「new」と書かれていた場合だけ起こりえます。
  * parseDetailKind も、URLの判定を Next.js の優先順位に合わせています。
- * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」）はURLのクエリ（?tab=）に持たせます。
+ * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」「未了事項」）はURLのクエリ（?tab=）に持たせます。
  * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
 import type { MentionKind } from '@/domain/mention';
+import type { TaskLinkKind } from '@/domain/tasks';
 import type { Id } from '@/domain/types';
 
 export const TABS = [
@@ -23,6 +26,7 @@ export const TABS = [
   { key: 'lanes', label: '人物の動き' },
   { key: 'map', label: '地図' },
   { key: 'hypotheses', label: '仮説' },
+  { key: 'tasks', label: '未了事項' },
 ] as const;
 
 export type TabKey = (typeof TABS)[number]['key'];
@@ -101,8 +105,56 @@ export function newHypothesisHref(caseId: Id, tab: TabKey): string {
   return `${caseBasePath(caseId)}/hypotheses/new${tabQuery(tab)}`;
 }
 
+/** 未了事項の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function taskHref(caseId: Id, taskId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/tasks/${encodeURIComponent(taskId)}${tabQuery(tab)}`;
+}
+
+/** 未了事項の登録ページで、最初からひもづける対象を持たせるクエリの名前です。 */
+export const TASK_LINK_SEARCH_PARAM = 'link';
+
+/** 未了事項に最初からひもづける対象（証言・人物・場所）です。 */
+export type TaskLinkTarget = { kind: TaskLinkKind; id: Id };
+
+/** 未了事項にひもづけられる対象の種類です。URLの値を見分けるために使います。 */
+const TASK_LINK_KINDS: readonly TaskLinkKind[] = ['claim', 'person', 'place'];
+
+/**
+ * 未了事項を新しく登録するページのURLを返します。tab は「ボードに戻る」の戻り先です。
+ * link を渡すと、その対象をひもづけた状態で登録を始めます。
+ */
+export function newTaskHref(caseId: Id, tab: TabKey, link?: TaskLinkTarget): string {
+  const params = new URLSearchParams();
+  if (tab !== DEFAULT_TAB) params.set(TAB_SEARCH_PARAM, tab);
+  if (link) params.set(TASK_LINK_SEARCH_PARAM, `${link.kind}:${link.id}`);
+  const query = params.toString();
+  return `${caseBasePath(caseId)}/tasks/new${query === '' ? '' : `?${query}`}`;
+}
+
+/**
+ * URLの link の値（<種類>:<ID>）を、未了事項に最初からひもづける対象として読み取ります。
+ * 注意: URLはユーザーが自由に書き換えられるため、形の合わない値は例外にせず、undefined として扱います。
+ */
+export function parseTaskLink(value: string | null): TaskLinkTarget | undefined {
+  if (value === null) return undefined;
+  const separatorIndex = value.indexOf(':');
+  const kind = TASK_LINK_KINDS.find((candidate) => candidate === value.slice(0, separatorIndex));
+  const id = value.slice(separatorIndex + 1);
+  if (separatorIndex < 0 || kind === undefined || id === '') return undefined;
+  return { kind, id };
+}
+
 /** ボードの横に並べる詳細の種類です。「new」で始まる種類は、まだ保存していないエンティティの登録フォームです。 */
-export type DetailKind = 'claim' | 'person' | 'place' | 'hypothesis' | 'newPerson' | 'newPlace' | 'newHypothesis';
+export type DetailKind =
+  | 'claim'
+  | 'person'
+  | 'place'
+  | 'hypothesis'
+  | 'task'
+  | 'newPerson'
+  | 'newPlace'
+  | 'newHypothesis'
+  | 'newTask';
 
 /**
  * URLのパス（クエリを含まない部分）から、開いている詳細の種類を見分けるための形です。
@@ -112,10 +164,12 @@ const DETAIL_PATH_PATTERNS: { kind: DetailKind; pattern: RegExp }[] = [
   { kind: 'newPerson', pattern: /^\/cases\/[^/]+\/persons\/new$/ },
   { kind: 'newPlace', pattern: /^\/cases\/[^/]+\/places\/new$/ },
   { kind: 'newHypothesis', pattern: /^\/cases\/[^/]+\/hypotheses\/new$/ },
+  { kind: 'newTask', pattern: /^\/cases\/[^/]+\/tasks\/new$/ },
   { kind: 'claim', pattern: /^\/cases\/[^/]+\/claims\/[^/]+$/ },
   { kind: 'person', pattern: /^\/cases\/[^/]+\/persons\/[^/]+$/ },
   { kind: 'place', pattern: /^\/cases\/[^/]+\/places\/[^/]+$/ },
   { kind: 'hypothesis', pattern: /^\/cases\/[^/]+\/hypotheses\/[^/]+$/ },
+  { kind: 'task', pattern: /^\/cases\/[^/]+\/tasks\/[^/]+$/ },
 ];
 
 /**

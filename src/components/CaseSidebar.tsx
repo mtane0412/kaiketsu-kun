@@ -3,13 +3,15 @@
  *
  * ボードの左に常に置き、次の3つを1か所にまとめます。
  * 1. ケースの切り替え（サイドバーの頭）。いま開いているケースの名前を示し、保存済みの他のケースとケースの一覧へ移れます。
- * 2. 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説）。以前はボードの上のタブでしたが、ナビゲーションとしてここへ移しました。
+ * 2. 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・未了事項）。以前はボードの上のタブでしたが、ナビゲーションとしてここへ移しました。
  * 3. 登録済みの一覧（人物・場所・証言）。以前はボードを覆うオーバーレイ（EntryPanel）でしたが、
  *    常に見える場所に置き、選ぶとメインのカラムがその詳細に切り替わるようにしました。
  * 足元には、めったに使わない操作（ケース名の変更・JSONの書き出し・ケースの削除）をメニューに畳んでいます（CaseSettingsMenu）。
  *
  * 証言の一覧の下には、裏付ける照合を1件も持たない証言だけを並べた「裏付けの無い証言」を置きます（findUncorroboratedClaims）。
  * どの証言の裏付けがまだ取れていないかを、ボードを見比べ直さずに把握できるようにするためです。
+ * その下には、完了していない未了事項だけを並べた「未完了の未了事項」を置き、見出しに件数を示します（buildTaskList）。
+ * 確認すべきことがいくつ残っているかを、どの表示からでも把握できるようにするためです。
  *
  * 一覧はどれも折りたためます。証言は数が多くサイドバーを占めてしまうため、最初は折りたたんでおきます。
  * 人物・場所は、見出しの横の「＋」から登録のページ（/cases/<ケースのID>/persons/new・.../places/new）へ進みます。
@@ -30,6 +32,7 @@ import {
   FolderOpen,
   Layers,
   Lightbulb,
+  ListTodo,
   MapPin,
   MessageSquare,
   Plus,
@@ -43,6 +46,7 @@ import { buildTimeline, claimLabelOf, type ClaimView } from '@/domain/case-views
 import { findUncorroboratedClaims } from '@/domain/cross-checks';
 import { personKindSuffixOf } from '@/domain/labels';
 import { personIconText } from '@/domain/person-icon';
+import { buildTaskList } from '@/domain/tasks';
 import type { Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -79,6 +83,7 @@ import {
   placeHref,
   TAB_SEARCH_PARAM,
   TABS,
+  taskHref,
   type TabKey,
 } from './routes';
 import { useCaseId } from './useCaseId';
@@ -86,7 +91,7 @@ import { useCaseId } from './useCaseId';
 /** ケースの一覧への導線の表示名です。 */
 const CASE_LIST_LABEL = 'ケースの一覧';
 
-/** 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説）のアイコンです。 */
+/** 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・未了事項）のアイコンです。 */
 const TAB_ICONS: Record<TabKey, ReactNode> = {
   timeline: <Clock />,
   graph: <Share2 />,
@@ -94,6 +99,7 @@ const TAB_ICONS: Record<TabKey, ReactNode> = {
   lanes: <Columns3 />,
   map: <MapPin />,
   hypotheses: <Lightbulb />,
+  tasks: <ListTodo />,
 };
 
 /**
@@ -233,6 +239,13 @@ export function CaseSidebar() {
   const claimItems: ListItem[] = timeline.items.map((item) => toClaimItem(item.view));
   const uncorroboratedItems: ListItem[] = uncorroboratedClaims.map(toClaimItem);
 
+  const openTasks = useMemo(() => buildTaskList(currentCase).open, [currentCase]);
+  const openTaskItems: ListItem[] = openTasks.map(({ task }) => ({
+    id: task.id,
+    label: task.content,
+    href: taskHref(caseId, task.id, tab),
+  }));
+
   /** ケースの切り替えの候補です。いま開いているケースは、切り替え先には並べません。 */
   const otherCases = summaries.filter((summary) => summary.id !== currentCase.id);
 
@@ -329,6 +342,16 @@ export function CaseSidebar() {
           defaultOpen={false}
           isCurrent={(item) => isCurrentHref(item.href)}
           emptyMessage="すべての証言に裏付けの照合があります。"
+        />
+
+        <EntityGroup
+          label="未完了の未了事項"
+          icon={<ListTodo />}
+          items={openTaskItems}
+          listLabel="未完了の未了事項の一覧"
+          defaultOpen={false}
+          isCurrent={(item) => isCurrentHref(item.href)}
+          emptyMessage="確認すべきことは残っていません。"
         />
       </SidebarContent>
 

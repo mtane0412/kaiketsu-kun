@@ -3,7 +3,8 @@
  * 入力フォームとビューの両方で同じ表示名を使うため、ここに集約します。
  */
 import type { MentionKind } from './mention';
-import type { CrossCheckKind, HypothesisAspect, HypothesisStatus, PersonKind } from './types';
+import type { TaskLinkKind } from './tasks';
+import type { CrossCheckKind, HypothesisAspect, HypothesisStatus, PersonKind, TaskStatus } from './types';
 
 /** 日時のメンション（ケースのエンティティではなく、日時そのものを指すメンション）の表示名です。 */
 export const DATE_MENTION_LABEL = '日時';
@@ -56,4 +57,18 @@ export const HYPOTHESIS_ASPECT_LABELS: Record<HypothesisAspect, string> = {
   motive: '動機',
   opportunity: '機会',
   means: '手段',
+};
+
+/** 未了事項の状態の表示名です。未了事項の一覧・詳細と入力フォームで使います。 */
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: '未着手',
+  inProgress: '対応中',
+  done: '完了',
+};
+
+/** 未了事項にひもづける対象の種類の表示名です。未了事項の詳細の節と、証言・人物・場所の詳細の「この〇〇の未了事項」で使います。 */
+export const TASK_LINK_KIND_LABELS: Record<TaskLinkKind, string> = {
+  claim: '証言',
+  person: MENTION_KIND_LABELS.person,
+  place: MENTION_KIND_LABELS.place,
 };

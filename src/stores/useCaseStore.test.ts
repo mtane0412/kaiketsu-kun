@@ -299,6 +299,36 @@ describe('仮説', () => {
   });
 });
 
+describe('未了事項', () => {
+  it('証言を削除すると、未了事項からその証言のひもづけを外し、未了事項は残す', () => {
+    // 前提: 「防犯カメラの映像の確認」の未了事項は、防犯カメラの証言と県道の防犯カメラをひもづけている
+    useCaseStore.getState().remove('claims', 'claim-police-camera');
+
+    const 未了事項 = 開いているケース().tasks.find((task) => task.id === 'task-camera');
+    expect(未了事項).toMatchObject({ claimIds: [], personIds: ['person-road-camera'] });
+  });
+
+  it('人物を削除すると、未了事項からその人物のひもづけを外す', () => {
+    // 前提: 駅員は、「防犯カメラの映像の確認」の未了事項だけが参照する人物とする
+    const 未了事項だけが参照する人物: Person = { id: 'person-station-staff', name: '駅員', kind: 'individual' };
+    useCaseStore.getState().upsert('persons', 未了事項だけが参照する人物);
+    const 防犯カメラの確認 = 開いているケース().tasks.find((task) => task.id === 'task-camera')!;
+    useCaseStore.getState().upsert('tasks', { ...防犯カメラの確認, personIds: ['person-station-staff'] });
+
+    useCaseStore.getState().remove('persons', 'person-station-staff');
+
+    expect(開いているケース().persons.some((person) => person.id === 'person-station-staff')).toBe(false);
+    expect(開いているケース().tasks.find((task) => task.id === 'task-camera')?.personIds).toEqual([]);
+  });
+
+  it('場所を削除できなかった場合は、未了事項のひもづけも外さない', () => {
+    // 前提: 湖畔の別荘は、証言の場所として参照されているため削除できない
+    expect(() => useCaseStore.getState().remove('places', 'place-villa')).toThrow('他のデータから参照されているため削除できません');
+
+    expect(開いているケース().tasks.find((task) => task.id === 'task-weather')?.placeIds).toEqual(['place-villa']);
+  });
+});
+
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
 const 書籍の取材: Interview = {
   id: 'interview-caretaker-book',

@@ -9,6 +9,8 @@
  * 人物の詳細には、これらに加えて、人物どうしの関係を登録・編集する節（RelationshipSection）と、
  * その人物の聴取ごとに証言を並べる「供述の変遷」の節（InterviewSection）を並べます。
  * 関係と聴取は場所には無いため、これらの節は人物の詳細にだけ渡します（extraSection）。
+ * 人物・場所のどちらにも、その対象をひもづけた未了事項の節（TaskLinkSection）を並べます。
+ * 未了事項にひもづいた人物・場所を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、証言・エンティティへのリンクに引き継ぎます。
  * 人物・場所を新しく登録する画面（NewPersonDetail・NewPlaceDetail）も、同じ場所に並べます。
  * サイドバーの一覧の「＋」から開き、保存できたら、登録したエンティティの詳細へ移ります。
@@ -24,6 +26,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState, type ReactNode } from 'react';
 import { buildPersonDetail, buildPlaceDetail, type EntityClaimGroup, type RelatedEntity } from '@/domain/case-views';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { findTasksLinkedTo } from '@/domain/tasks';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { COLLECTION_KEY_BY_MENTION_KIND, useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -33,6 +36,7 @@ import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { InterviewSection } from './InterviewSection';
 import { RelationshipSection } from './RelationshipSection';
+import { TaskLinkSection } from './TaskLinkSection';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, personHref, placeHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
@@ -94,11 +98,19 @@ type EntityDetailShellProps = {
 /** 人物と場所で共通の、詳細の枠組みです。編集フォームと、逆引きした証言・関連するエンティティを並べます。 */
 function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEntities, extraSection }: EntityDetailShellProps) {
   const caseId = useCaseId();
+  const currentCase = useCurrentCase();
   const remove = useCaseStore((state) => state.remove);
   const router = useRouter();
   const [isSaved, setIsSaved] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const kindLabel = MENTION_KIND_LABELS[kind];
+  const taskCount = findTasksLinkedTo(currentCase, kind, id).length;
+  // 削除すると未了事項からひもづけが外れるため、該当する未了事項があることを確認の画面で伝える
+  const deleteDescription = [
+    `この${kindLabel}をケースから削除します。`,
+    ...(taskCount > 0 ? [`この${kindLabel}をひもづけた未了事項${taskCount}件から、ひもづけを外します。`] : []),
+    'この操作は取り消せません。',
+  ].join('');
 
   const handleDelete = () => {
     try {
@@ -127,7 +139,7 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
           <DeleteConfirmButton
             label={`この${kindLabel}を削除`}
             title={`「${name}」を削除しますか？`}
-            description={`この${kindLabel}をケースから削除します。この操作は取り消せません。`}
+            description={deleteDescription}
             onConfirm={handleDelete}
           />
         </div>
@@ -137,6 +149,8 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
       </section>
 
       {extraSection}
+
+      <TaskLinkSection kind={kind} id={id} tab={tab} />
 
       {claimGroups.map((group) => (
         <section key={group.label} aria-label={group.label} className="space-y-2">

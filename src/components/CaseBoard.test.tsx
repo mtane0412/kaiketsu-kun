@@ -133,6 +133,19 @@ describe('CaseBoard', () => {
     );
   });
 
+  it('「未了事項」に切り替えると、未完了の未了事項の一覧を表示する', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    await 表示を切り替える(user, '未了事項');
+
+    const 一覧 = await screen.findByRole('list', { name: '未完了の未了事項の一覧' });
+    expect(within(一覧).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/tasks/task-camera?tab=tasks'
+    );
+  });
+
   it('「仮説」に切り替えると、仮説の一覧を表示し、仮説の詳細ページへのリンクを並べる', async () => {
     const user = userEvent.setup();
     renderBoard();
@@ -219,6 +232,21 @@ describe('CaseBoard', () => {
 
       const 詳細 = await screen.findByRole('region', { name: '仮説の詳細' });
       expect(within(詳細).getByText('管理人の仮説の詳細')).toBeInTheDocument();
+    });
+
+    it('未了事項の詳細ページのURLでは、未了事項の詳細だけを表示する', async () => {
+      resetMockNavigation('/cases/case-lakeside/tasks/task-camera?tab=tasks');
+      renderBoard(<p>防犯カメラの確認の詳細</p>);
+
+      const 詳細 = await screen.findByRole('region', { name: '未了事項の詳細' });
+      expect(within(詳細).getByText('防犯カメラの確認の詳細')).toBeInTheDocument();
+    });
+
+    it('未了事項を新しく登録するURLでも、登録の枠だけを表示する', async () => {
+      resetMockNavigation('/cases/case-lakeside/tasks/new?tab=tasks');
+      renderBoard(<p>未了事項の登録フォーム</p>);
+
+      expect(await screen.findByRole('region', { name: '未了事項の登録' })).toBeInTheDocument();
     });
 
     it('仮説を新しく登録するURLでも、登録の枠だけを表示する', async () => {
