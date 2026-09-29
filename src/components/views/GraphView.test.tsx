@@ -278,6 +278,49 @@ describe('GraphView（人物どうしの関係）', () => {
     expect(within(screen.getByRole('list', { name: '線の見方' })).queryByText('関係')).not.toBeInTheDocument();
   });
 
+  it('時点を指定すると、その時点で成り立たない関係の線を消す', async () => {
+    const user = userEvent.setup();
+    const 期間を持つケース: Case = {
+      ...関係を2件持つケース,
+      relationships: [
+        // 前提: 雇用主は期間を持たず、面識は1998年5月で途絶えている
+        関係を2件持つケース.relationships[0]!,
+        { ...関係を2件持つケース.relationships[1]!, until: '1998-05' },
+      ],
+    };
+    const { container } = render(<GraphView target={期間を持つケース} />);
+
+    await user.type(screen.getByLabelText('時点'), '1998年8月12日');
+
+    const 残った線 = 線を取り出す(container, 'relates');
+    expect(残った線).toHaveLength(1);
+    expect(残った線[0]?.textContent).toBe('雇用主');
+  });
+
+  it('時点を消すと、すべての関係の線を描き直す', async () => {
+    const user = userEvent.setup();
+    const 期間を持つケース: Case = {
+      ...関係を2件持つケース,
+      relationships: [関係を2件持つケース.relationships[0]!, { ...関係を2件持つケース.relationships[1]!, until: '1998-05' }],
+    };
+    const { container } = render(<GraphView target={期間を持つケース} />);
+
+    await user.type(screen.getByLabelText('時点'), '1998-08-12');
+    await user.clear(screen.getByLabelText('時点'));
+
+    expect(線を取り出す(container, 'relates')).toHaveLength(2);
+  });
+
+  it('解釈できない時点を入力すると、その旨を示し、関係の線は絞り込まない', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<GraphView target={関係を2件持つケース} />);
+
+    await user.type(screen.getByLabelText('時点'), '事件の日');
+
+    expect(screen.getByText(/時点を解釈できません/)).toBeInTheDocument();
+    expect(線を取り出す(container, 'relates')).toHaveLength(2);
+  });
+
   it('関係を消しても、ノードの配置は変えない', async () => {
     const user = userEvent.setup();
     const { container } = render(<GraphView target={関係を2件持つケース} />);

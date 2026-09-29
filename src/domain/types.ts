@@ -298,6 +298,10 @@ export type Task = {
  *
  * 関係はユーザーが証言から導いた結論として扱い、根拠となる証言を basisClaimIds で参照します。
  * basisClaimIds が空の関係は「根拠未登録」として表示上区別します。
+ *
+ * 関係は、任意で期間（開始 since・終了 until）を持ちます。「事件の3か月前に離婚した」のように、
+ * 事件の時点で関係が成り立っていたかを読み違えないようにするためです。期間を持たない側は、限りなく続くものとして扱います。
+ * 指定した時点で成り立つ関係の判定は src/domain/relationship-period.ts を参照してください。
  */
 export type Relationship = {
   id: Id;
@@ -307,6 +311,10 @@ export type Relationship = {
   /** true の場合は from から to への片方向、false の場合は双方向の関係です。 */
   directed: boolean;
   basisClaimIds: Id[];
+  /** 関係が始まった日時です。省略した場合は、いつから成り立っていたかを限りません。 */
+  since?: TimeRef;
+  /** 関係が終わった日時です。省略した場合は、いつまで成り立っていたかを限りません。 */
+  until?: TimeRef;
 };
 
 /** 1つの事件、または1つの作品を表す入れ物です。 */

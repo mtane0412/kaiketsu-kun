@@ -2,7 +2,7 @@
  * 人物どうしの関係の入力フォーム
  *
  * 人物の詳細の「関係」（RelationshipSection）から開き、1件の関係（Relationship）を登録・編集します。
- * 入力するのは、相手の人物・関係の名前・向き・根拠の証言の4つです。
+ * 入力するのは、相手の人物・関係の名前・向き・期間（開始・終了。任意）・根拠の証言です。
  *
  * 向きは「双方向」と「片方向」の2択です。片方向の選択肢には、どちらからどちらへ向くかを人物の名前で示します。
  * 向きを反転する操作は持ちません。関係は、登録した人物を from として保存し、編集では from と to を保ったまま
@@ -13,6 +13,10 @@
  * （選択肢の導出は src/domain/person-relationships.ts の buildBasisClaimCandidates を参照）。
  * 根拠を1件も選ばない関係も保存できます。根拠がまだ見つかっていない見立ても書き留められるようにするためです。
  *
+ * 期間の開始・終了は、聴取の日時と同じく、時刻参照の表記のほか「1998年8月12日」のような日本語でも入力できます
+ * （src/domain/date-input.ts の parseDateInput）。空欄の側は、関係が限りなく続くものとして保存しません。
+ * 解釈できない表記は、保存せずに理由を示します。終了が開始より前の場合は、ストアの検証（case-schema.ts）が保存を拒みます。
+ *
  * 注意: フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
  */
@@ -21,6 +25,7 @@
 import { nanoid } from 'nanoid';
 import { useId, useState, type FormEvent } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
+import { parseDateInput } from '@/domain/date-input';
 import { buildBasisClaimCandidates } from '@/domain/person-relationships';
 import type { Id, Relationship } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -61,6 +66,8 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
   const [label, setLabel] = useState(initial?.label ?? '');
   const [directed, setDirected] = useState(initial?.directed ?? false);
   const [basisClaimIds, setBasisClaimIds] = useState<Id[]>(initial?.basisClaimIds ?? []);
+  const [since, setSince] = useState(initial?.since ?? '');
+  const [until, setUntil] = useState(initial?.until ?? '');
   const [error, setError] = useState<string | null>(null);
 
   // 自分自身との関係は登録できないため、選択肢から編集中の人物を外す
@@ -91,6 +98,20 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
       directed,
       basisClaimIds,
     };
+
+    // 期間は空欄なら持たせない。編集で消した開始・終了を残さないよう、initial から引き継がずに組み立て直す
+    for (const [key, text, fieldName] of [
+      ['since', since, '開始'],
+      ['until', until, '終了'],
+    ] as const) {
+      if (!text.trim()) continue;
+      const parsed = parseDateInput(text);
+      if (parsed === null) {
+        setError(`${fieldName}を解釈できません: ${text.trim()}（例: 1998-08-12、1998年8月12日19時）`);
+        return;
+      }
+      relationship[key] = parsed;
+    }
 
     try {
       upsert('relationships', relationship);
@@ -148,6 +169,11 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
           </label>
         </div>
       </fieldset>
+
+      <div className="grid grid-cols-2 gap-2">
+        <TextField label="開始（任意）" value={since} onChange={setSince} placeholder="1995-04、1995年4月 など" />
+        <TextField label="終了（任意）" value={until} onChange={setUntil} placeholder="1998-05、1998年5月 など" />
+      </div>
 
       <fieldset>
         <legend className={LABEL_CLASS}>根拠の証言</legend>
