@@ -5,6 +5,7 @@
  * 時系列ボードには証言だけを並べます。ボード上の位置はケースの並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 人物の動きビューは、時系列の並び順の行 × 人物の列に、各人物が発言・言及された証言を配置します（buildPersonLanes）。
+ * 列の位置はケースの列の並び順（Case.personLaneOrder、src/domain/person-lane-order.ts）で決まります。
  * 地図ビューは、時系列の並び順のうち、座標のある場所を述べる証言だけをたどります（buildMapTrail）。
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 人物・場所の詳細では、その人物・場所から証言を逆引きします（buildPersonDetail・buildPlaceDetail）。
@@ -14,6 +15,7 @@
  */
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
+import { resolvePersonLaneOrder } from './person-lane-order';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
 import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
 
@@ -216,7 +218,7 @@ function laneRolesOf(claim: Claim): Partial<Record<Id, LaneRole>> {
 /**
  * 人物の動きビューを組み立てます。
  * 行は証言で、時系列ボードの並び順（buildTimeline）のとおりに並べます。
- * 列は、いずれかの証言に発言者か言及された人物として登場する人物で、ケースへの登録順に並べます。
+ * 列は、いずれかの証言に発言者か言及された人物として登場する人物で、列の並び順（resolvePersonLaneOrder）のとおりに並べます。
  * 経由した人物（Claim.viaPersonIds）は、証言を伝えただけで動きの主体ではないため、列にも役割にも含めません。
  * どの人物も登場しない証言（人物に言及しないユーザーの推測など）は、置く列が無いため行にしません。
  */
@@ -226,8 +228,12 @@ export function buildPersonLanes(target: Case): PersonLanes {
     .filter((row) => Object.keys(row.roles).length > 0);
 
   const appearingIds = new Set(rows.flatMap((row) => Object.keys(row.roles)));
-  const lanes = target.persons
-    .filter((person) => appearingIds.has(person.id))
+  const personsById = new Map(target.persons.map((person) => [person.id, person]));
+  const lanes = resolvePersonLaneOrder(target)
+    .flatMap((personId) => {
+      const person = personsById.get(personId);
+      return person && appearingIds.has(personId) ? [person] : [];
+    })
     .map((person) => ({
       personId: person.id,
       label: person.name,

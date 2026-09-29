@@ -299,3 +299,19 @@ describe('時系列ボードの並び順', () => {
     ]);
   });
 });
+
+describe('人物の動きの列の並び順', () => {
+  it('列を動かすと、並び順を保存する', () => {
+    // 前提: サンプルの人物の登録順は、別荘の持ち主 → 隣家の住人 → 管理人 → …
+    useCaseStore.getState().movePersonLane('person-caretaker', 'person-owner');
+
+    expect(開いているケース().personLaneOrder.slice(0, 3)).toEqual(['person-caretaker', 'person-owner', 'person-neighbor']);
+  });
+
+  it('存在しない人物は動かせず、ケースを変更しない', () => {
+    const 変更前 = 開いているケース();
+
+    expect(() => useCaseStore.getState().movePersonLane('person-deleted', 'person-owner')).toThrow('人物が見つかりません');
+    expect(開いているケース()).toBe(変更前);
+  });
+});

@@ -57,6 +57,12 @@ describe('parseCase', () => {
     ]);
   });
 
+  it('人物の列の並び順を持たない頃に保存したデータは、並び順を空として受け付ける', () => {
+    const { personLaneOrder: _列の並び順, ...列の並び順の無いケース } = sampleFictionalCase;
+
+    expect(parseCase(toJsonData(列の並び順の無いケース)).personLaneOrder).toEqual([]);
+  });
+
   it('出来事に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換して受け付ける', () => {
     // 前提: 以前の版では、隣家の住人と管理人の証言を、出来事「持ち主が最後に目撃された」に束ねていた
     const 出来事を持つ旧データ = {

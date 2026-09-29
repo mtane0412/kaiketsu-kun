@@ -156,6 +156,14 @@ describe('buildPersonLanes', () => {
     expect(lanes.map((lane) => lane.label)).toEqual(['別荘の持ち主', '隣家の住人', '管理人', '県道の防犯カメラ', '架空日報 朝刊']);
   });
 
+  it('人物の列の並び順（personLaneOrder）を保存していれば、そのとおりに列を並べる', () => {
+    const ケース: Case = { ...sampleFictionalCase, personLaneOrder: ['person-newspaper', 'person-caretaker'] };
+
+    const { lanes } = buildPersonLanes(ケース);
+
+    expect(lanes.map((lane) => lane.label)).toEqual(['架空日報 朝刊', '管理人', '別荘の持ち主', '隣家の住人', '県道の防犯カメラ']);
+  });
+
   it('証言を時系列ボードの並び順で行にし、各列には、その人物が発言したか言及されたかを示す', () => {
     // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測
     const { lanes, rows } = buildPersonLanes(sampleFictionalCase);
