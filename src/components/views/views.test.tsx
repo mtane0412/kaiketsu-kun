@@ -467,6 +467,86 @@ describe('PersonLaneView', () => {
   });
 });
 
+describe('PersonLaneView の時刻軸', () => {
+  /** 表示を「時刻軸」に切り替え、時刻軸の領域を返します。 */
+  async function 時刻軸に切り替える(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: '時刻軸' }));
+    return screen.getByRole('region', { name: '人物の動きの時刻軸' });
+  }
+
+  it('「時刻軸」に切り替えると、証言の順の表の代わりに、人物ごとの列に証言の帯を描く', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 時刻軸 = await 時刻軸に切り替える(user);
+
+    expect(screen.queryByRole('table', { name: '人物の動き' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '時刻軸' })).toHaveAttribute('aria-pressed', 'true');
+    // 検証: 管理人の列に、夜7時の管理人の発言の帯があり、証言の詳細ページへのリンクになっている
+    const 管理人の列 = within(時刻軸).getByRole('region', { name: '管理人' });
+    expect(within(管理人の列).getByRole('link', { name: /^発言 1998年8月12日 19:00 / })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/claims/claim-caretaker?tab=lanes'
+    );
+  });
+
+  it('日時を述べない証言は帯にせず、その件数を示す', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    await 時刻軸に切り替える(user);
+
+    // 前提: サンプルでは、架空日報の記事とユーザーの推測の2件が、人物に言及しつつ日時を述べない
+    expect(screen.getByText('日時を述べない証言（2件）は、時刻軸に表示しません。')).toBeInTheDocument();
+  });
+
+  it('注目する時間帯を入力すると、各人物の列の見出しに、その時間帯の証言があるか空白かを示す', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+    const 時刻軸 = await 時刻軸に切り替える(user);
+
+    await user.type(screen.getByLabelText('注目する時間帯'), '1998年8月12日18時30分〜19時30分');
+
+    // 前提: 管理人（発言）と別荘の持ち主（言及）は夜7時の証言に登場し、隣家の住人は夜9時の証言にだけ登場する
+    expect(within(時刻軸).getByRole('region', { name: '管理人' })).toHaveTextContent('証言あり（1件）');
+    expect(within(時刻軸).getByRole('region', { name: '別荘の持ち主' })).toHaveTextContent('証言あり（1件）');
+    expect(within(時刻軸).getByRole('region', { name: '隣家の住人' })).toHaveTextContent('空白');
+  });
+
+  it('日時として解釈できない注目する時間帯には、理由を示す', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+    await 時刻軸に切り替える(user);
+
+    await user.type(screen.getByLabelText('注目する時間帯'), '夕飯の後');
+
+    expect(screen.getByLabelText('注目する時間帯')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/日時として解釈できません/)).toBeInTheDocument();
+  });
+
+  it('表示する範囲を入力すると、範囲の外の帯を描かない', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+    const 時刻軸 = await 時刻軸に切り替える(user);
+
+    await user.type(screen.getByLabelText('表示する範囲'), '1998年8月12日20時〜22時');
+
+    // 検証: 夜7時の管理人の帯は範囲の外のため描かず、夜9時の隣家の住人の帯は描く
+    expect(within(within(時刻軸).getByRole('region', { name: '管理人' })).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(within(時刻軸).getByRole('region', { name: '隣家の住人' })).getByRole('link')).toBeInTheDocument();
+  });
+
+  it('「証言の順」に戻すと、証言の順の表を表示する', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+    await 時刻軸に切り替える(user);
+
+    await user.click(screen.getByRole('button', { name: '証言の順' }));
+
+    expect(screen.getByRole('table', { name: '人物の動き' })).toBeInTheDocument();
+  });
+});
+
 describe('証言カードの重なり順', () => {
   it('カードの中で手前に出す要素が、カードの外（上に開いた日時のピッカーなど）より手前に出ないよう、カードごとに重なり順を閉じ込める', () => {
     render(<TimelineView target={sampleFictionalCase} />);

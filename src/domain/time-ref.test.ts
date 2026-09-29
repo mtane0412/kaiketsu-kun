@@ -2,7 +2,7 @@
  * 時刻参照（TimeRef）の解釈・表示・並べ替えのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { compareTimeRef, formatTimeRef, isValidTimeRef, toInterval } from './time-ref';
+import { compareTimeRef, formatTimeRef, intervalsOverlap, isValidTimeRef, toInterval } from './time-ref';
 
 describe('isValidTimeRef', () => {
   it.each(['1998', '1998-08', '1998-08-12', '1998-08-12T19:00'])(
@@ -18,6 +18,36 @@ describe('isValidTimeRef', () => {
       expect(isValidTimeRef(value)).toBe(false);
     }
   );
+});
+
+describe('isValidTimeRef（区間表記）', () => {
+  it.each([
+    '2026-09-28T19:10/2026-09-28T19:40',
+    '2026-09-28T19:10/19:40',
+    '1998-08-12/15',
+    '1998-08-12/09-02',
+    '1998-08/10',
+    '1998/2001',
+    '1998/1998-06',
+    '1998-08-12T23:30/13T01:00',
+  ])('区間表記「%s」を受け付ける', (value) => {
+    expect(isValidTimeRef(value)).toBe(true);
+  });
+
+  it.each([
+    ['終わりが始まりより前', '2026-09-28T19:40/19:10'],
+    ['終わりが空', '2026-09-28T19:10/'],
+    ['始まりが空', '/2026-09-28T19:40'],
+    ['区切りが2つ以上', '1998/1999/2000'],
+    ['時刻を持たない始まりに時刻だけの終わり', '1998-08-12/19:40'],
+    ['省略した終わりと始まりの精度が違う', '1998-08-12/13T19:00'],
+    ['月までの始まりに日だけの終わり（精度が違う）', '1998-08/10T19:00'],
+    ['実在しない終わり', '1998-02-12/30'],
+    ['日と時刻の間に「T」の無い終わり', '1998-08-12T19:00/1319:40'],
+    ['日付の部分が無いのに「T」を書いた終わり', '1998-08-12T19:00/T19:40'],
+  ])('%sの表記「%s」を拒否する', (_, value) => {
+    expect(isValidTimeRef(value)).toBe(false);
+  });
 });
 
 describe('toInterval', () => {
@@ -42,6 +72,25 @@ describe('toInterval', () => {
     });
   });
 
+  it('区間表記は、始まりの区間の最初から終わりの区間の最後までになる', () => {
+    expect(toInterval('2026-09-28T19:10/2026-09-28T19:40')).toEqual({
+      start: Date.UTC(2026, 8, 28, 19, 10, 0, 0),
+      end: Date.UTC(2026, 8, 28, 19, 40, 59, 999),
+    });
+  });
+
+  it('終わりを省略した区間表記は、省略した部分を始まりから補う', () => {
+    expect(toInterval('2026-09-28T19:10/19:40')).toEqual(toInterval('2026-09-28T19:10/2026-09-28T19:40'));
+    expect(toInterval('1998-08-12/15')).toEqual({
+      start: Date.UTC(1998, 7, 12),
+      end: Date.UTC(1998, 7, 16) - 1,
+    });
+    expect(toInterval('1998-08/10')).toEqual({
+      start: Date.UTC(1998, 7, 1),
+      end: Date.UTC(1998, 10, 1) - 1,
+    });
+  });
+
   it('解釈できない表記はエラーにする', () => {
     expect(() => toInterval('1998年8月')).toThrow('日時を解釈できません: 1998年8月');
   });
@@ -58,6 +107,37 @@ describe('formatTimeRef', () => {
   });
 });
 
+describe('formatTimeRef（区間表記）', () => {
+  it.each([
+    ['2026-09-28T19:10/19:40', '2026年9月28日 19:10〜19:40'],
+    ['2026-09-28T19:10/2026-09-28T19:40', '2026年9月28日 19:10〜19:40'],
+    ['1998-08-12T23:30/1998-08-13T01:00', '1998年8月12日 23:30〜13日 01:00'],
+    ['1998-08-12/15', '1998年8月12日〜15日'],
+    ['1998-08-12/09-02', '1998年8月12日〜9月2日'],
+    ['1998-08/10', '1998年8月〜10月'],
+    ['1998/2001', '1998年〜2001年'],
+    ['1998/1998-06', '1998年〜1998年6月'],
+    ['1998-12-31/1999-01-02', '1998年12月31日〜1999年1月2日'],
+  ])('区間表記「%s」を、終わりの重複する部分を省いて「%s」と表示する', (value, expected) => {
+    expect(formatTimeRef(value)).toBe(expected);
+  });
+});
+
+describe('intervalsOverlap', () => {
+  const 七時台 = toInterval('2026-09-28T19:00/19:59');
+  it('一部でも重なる区間同士は、重なると判定する', () => {
+    expect(intervalsOverlap(七時台, toInterval('2026-09-28T19:30/20:30'))).toBe(true);
+  });
+
+  it('片方がもう片方を含む区間同士は、重なると判定する', () => {
+    expect(intervalsOverlap(toInterval('2026-09-28'), 七時台)).toBe(true);
+  });
+
+  it('接しているだけで重ならない区間同士は、重ならないと判定する', () => {
+    expect(intervalsOverlap(七時台, toInterval('2026-09-28T20:00'))).toBe(false);
+  });
+});
+
 describe('compareTimeRef', () => {
   it('区間の始まりが早い順に並ぶ', () => {
     const 夜7時 = '1998-08-12T19:00';
@@ -71,6 +151,18 @@ describe('compareTimeRef', () => {
     const その年の元日 = '1998-01-01';
 
     expect([その年, その年の元日].sort(compareTimeRef)).toEqual([その年の元日, その年]);
+  });
+
+  it('区間表記も、始まりが早い順（同じなら終わりが早い順）に並ぶ', () => {
+    const 七時十分から四十分 = '2026-09-28T19:10/19:40';
+    const 七時十分から八時 = '2026-09-28T19:10/20:00';
+    const 七時 = '2026-09-28T19:00';
+
+    expect([七時十分から八時, 七時十分から四十分, 七時].sort(compareTimeRef)).toEqual([
+      七時,
+      七時十分から四十分,
+      七時十分から八時,
+    ]);
   });
 
   it('日時を持たないものは、日時を持つものの後ろに並ぶ', () => {

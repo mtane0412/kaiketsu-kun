@@ -12,6 +12,11 @@
  * - スラッシュ区切り: 1998/8 / 1998/8/12 / 1998/8/12T19:05
  * - 日本語: 1998年 / 1998年8月 / 1998年8月12日 / 1998年8月12日19時 / 1998年8月12日19時05分
  * - 上記の数字が全角の表記
+ * - 区間（「19:10から19:40の間」のような幅）:
+ *   - ISO 8601の区間表記: 2026-09-28T19:10/2026-09-28T19:40 / 2026-09-28T19:10/19:40
+ *   - 上記の表記を「〜」（「～」「~」も可）でつないだもの: 2026年9月28日19時10分〜2026年9月28日19時40分
+ *   - 「〜」の後ろは、時刻だけ（19:40 / 19時40分 / 19時）か、日だけ（15日）に省略できます。
+ *     省略した部分は「〜」の前から補います（1998年8月12日〜15日 → 1998-08-12/15）。
  *
  * 注意:
  * - 年を省略した表記（「8月12日」など）は受け付けません。年が分からないと、他の証言と並べる基準が決まらないためです。
@@ -55,6 +60,20 @@ const INPUT_PATTERNS = [
   /^(\d{4})年(?:(\d{1,2})月(?:(\d{1,2})日(?:(\d{1,2})時(?:(\d{1,2})分)?)?)?)?$/,
 ];
 
+/** 区間の始まりと終わりを区切る文字です。 */
+const RANGE_SEPARATOR_PATTERN = /[〜～~]/;
+
+/** 「〜」の後ろに書ける、省略した終わりの表記です（時刻だけ、日だけ）。 */
+const ABBREVIATED_END_PATTERNS: { pattern: RegExp; toIso: (match: RegExpExecArray) => string }[] = [
+  // 時刻だけ（19:40 / 19時40分 / 19時）
+  {
+    pattern: /^(\d{1,2})(?::(\d{1,2})|時(?:(\d{1,2})分)?)$/,
+    toIso: ([, hour, isoMinute, jaMinute]) => `${pad(hour!)}:${pad(isoMinute ?? jaMinute ?? '0')}`,
+  },
+  // 日だけ（15日）
+  { pattern: /^(\d{1,2})日$/, toIso: ([, day]) => pad(day!) },
+];
+
 /** 全角の数字を半角に直します。 */
 function toHalfWidthDigits(text: string): string {
   return text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
@@ -66,13 +85,38 @@ function pad(value: string): string {
 }
 
 /**
- * 入力された日時の表記を、時刻参照（ISO 8601の部分表記）に整えます。
+ * 入力された日時の表記を、時刻参照（ISO 8601の部分表記、または区間表記）に整えます。
  * 受け付ける表記はこのファイル冒頭のコメントを参照してください。
- * 解釈できない表記と、実在しない日時（1998-02-30 など）の場合は null を返します。
+ * 解釈できない表記と、実在しない日時（1998-02-30 など）、終わりが始まりより前の区間の場合は null を返します。
  */
 export function parseDateInput(input: string): string | null {
   const normalized = toHalfWidthDigits(input.trim());
+  const single = parseSingleDateInput(normalized);
+  if (single !== null) return single;
+  // スラッシュ区切りの日付（1998/8/12）と区別するため、ISO 8601の区間表記は1つの日時として読めなかった場合にだけ試す
+  if (isValidTimeRef(normalized)) return normalized;
 
+  const pieces = normalized.split(RANGE_SEPARATOR_PATTERN);
+  if (pieces.length !== 2) return null;
+  const [startText = '', endText = ''] = pieces;
+  const start = parseSingleDateInput(startText);
+  const end = parseSingleDateInput(endText) ?? parseAbbreviatedEnd(endText);
+  if (start === null || end === null) return null;
+  const range = `${start}/${end}`;
+  return isValidTimeRef(range) ? range : null;
+}
+
+/** 「〜」の後ろに書いた、省略した終わりを、区間表記の省略した終わり（19:40 / 15）に整えます。 */
+function parseAbbreviatedEnd(text: string): string | null {
+  for (const { pattern, toIso } of ABBREVIATED_END_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match) return toIso(match);
+  }
+  return null;
+}
+
+/** 区間ではない1つの日時の表記を、ISO 8601の部分表記に整えます。解釈できない場合は null を返します。 */
+function parseSingleDateInput(normalized: string): string | null {
   for (const pattern of INPUT_PATTERNS) {
     const match = pattern.exec(normalized);
     if (!match) continue;

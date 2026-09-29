@@ -213,4 +213,97 @@ describe('DateTimePicker', () => {
     // 1998年2月31日は存在しないため、選択を解除して決定できない状態に戻す
     expect(screen.getByRole('button', { name: '決定' })).toBeDisabled();
   });
+
+  describe('終わりを指定する', () => {
+    it('日時のピッカーで終わりの時刻を指定すると、同じ日の終わりを省略した区間表記を返す', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(<DateTimePicker kind="datetime" onSelect={onSelect} onCancel={vi.fn()} />);
+
+      await showMonth(user, 2026, 9);
+      await user.click(screen.getByRole('button', { name: '2026年9月28日' }));
+      await user.selectOptions(screen.getByLabelText('時'), '19');
+      await user.selectOptions(screen.getByLabelText('分'), '10');
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      // 検証: 終わりは始まりと同じ日時から編集を始めるため、時刻だけを選び直せばよい
+      await user.selectOptions(screen.getByLabelText('分'), '40');
+      await user.click(screen.getByRole('button', { name: '決定' }));
+
+      expect(onSelect).toHaveBeenCalledWith('2026-09-28T19:10/19:40');
+    });
+
+    it('日付のピッカーで別の日を終わりに選ぶと、区間表記を返す', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(<DateTimePicker kind="date" onSelect={onSelect} onCancel={vi.fn()} />);
+
+      await showMonth(user, 1998, 8);
+      await user.click(screen.getByRole('button', { name: '1998年8月12日' }));
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '1998年8月15日' }));
+      await user.click(screen.getByRole('button', { name: '決定' }));
+
+      expect(onSelect).toHaveBeenCalledWith('1998-08-12/1998-08-15');
+    });
+
+    it('日をまたぐ区間は、終わりを省略せずに返す', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(<DateTimePicker kind="datetime" onSelect={onSelect} onCancel={vi.fn()} />);
+
+      await showMonth(user, 1998, 8);
+      await user.click(screen.getByRole('button', { name: '1998年8月12日' }));
+      await user.selectOptions(screen.getByLabelText('時'), '23');
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '1998年8月13日' }));
+      await user.selectOptions(screen.getByLabelText('時'), '1');
+      await user.click(screen.getByRole('button', { name: '決定' }));
+
+      expect(onSelect).toHaveBeenCalledWith('1998-08-12T23:00/1998-08-13T01:00');
+    });
+
+    it('「始まり」に切り替えると、始まりを選び直せる', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(<DateTimePicker kind="date" onSelect={onSelect} onCancel={vi.fn()} />);
+
+      await showMonth(user, 1998, 8);
+      await user.click(screen.getByRole('button', { name: '1998年8月12日' }));
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '1998年8月20日' }));
+      await user.click(screen.getByRole('button', { name: /^始まり/ }));
+      await user.click(screen.getByRole('button', { name: '1998年8月10日' }));
+      await user.click(screen.getByRole('button', { name: '決定' }));
+
+      expect(onSelect).toHaveBeenCalledWith('1998-08-10/1998-08-20');
+    });
+
+    it('終わりが始まりより前の間は「決定」を押せず、理由を示す', async () => {
+      const user = userEvent.setup();
+      render(<DateTimePicker kind="date" onSelect={vi.fn()} onCancel={vi.fn()} />);
+
+      await showMonth(user, 1998, 8);
+      await user.click(screen.getByRole('button', { name: '1998年8月12日' }));
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '1998年8月10日' }));
+
+      expect(screen.getByRole('button', { name: '決定' })).toBeDisabled();
+      expect(screen.getByText('終わりが始まりより前です')).toBeInTheDocument();
+    });
+
+    it('「終わりを指定する」を外すと、区間ではない時刻参照を返す', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(<DateTimePicker kind="date" onSelect={onSelect} onCancel={vi.fn()} />);
+
+      await showMonth(user, 1998, 8);
+      await user.click(screen.getByRole('button', { name: '1998年8月12日' }));
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '1998年8月15日' }));
+      await user.click(screen.getByLabelText('終わりを指定する'));
+      await user.click(screen.getByRole('button', { name: '決定' }));
+
+      expect(onSelect).toHaveBeenCalledWith('1998-08-12');
+    });
+  });
 });

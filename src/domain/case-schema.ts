@@ -54,7 +54,7 @@ function migrateLegacyTimeRef(value: unknown): unknown {
   return legacy.success ? legacy.data.earliest : value;
 }
 
-const TIME_REF_FORMAT_EXAMPLES = '1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00';
+const TIME_REF_FORMAT_EXAMPLES = '1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00 / 1998-08-12T19:10/19:40（区間）';
 
 const timeRefSchema = z.preprocess(
   migrateLegacyTimeRef,
