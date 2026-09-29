@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import type { Case, Claim, Interview } from '@/domain/types';
+import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { CASE_KEY_PREFIX, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
 import { useCaseStore } from './useCaseStore';
 
@@ -163,7 +163,7 @@ describe('upsert', () => {
 
 describe('upsertMany', () => {
   it('新しい人物と、その人物に言及する証言を、1回の検証でまとめて追加する', () => {
-    const 郵便配達員 = { id: 'person-postman', name: '郵便配達員' };
+    const 郵便配達員: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
     const 配達員への言及: Claim = { ...新しい証言, mentionedPersonIds: ['person-postman'] };
 
     useCaseStore.getState().upsertMany([
@@ -177,7 +177,7 @@ describe('upsertMany', () => {
   });
 
   it('1件でも規則に違反する場合は、どの要素も追加しない', () => {
-    const 郵便配達員 = { id: 'person-postman', name: '郵便配達員' };
+    const 郵便配達員: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
     const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
 
     expect(() =>
@@ -318,7 +318,7 @@ describe('remove（メモのメンション）', () => {
       { key: 'places', entity: { id: 'place-station', name: '湖畔駅' } },
       {
         key: 'persons',
-        entity: { id: 'person-caretaker', name: '管理人', note: '@[湖畔駅](place:place-station)の近くに住んでいる。' },
+        entity: { id: 'person-caretaker', name: '管理人', kind: 'individual', note: '@[湖畔駅](place:place-station)の近くに住んでいる。' },
       },
     ]);
     const 削除前のケース = 開いているケース();

@@ -15,7 +15,7 @@
  * - 平行移動: 図の背景をドラッグします
  * - ノードを手で動かす: ノードをドラッグします。線が重なって読めない箇所を、ユーザーがほどけるようにするためです
  * - つながりの強調: ノードにマウスを重ねる（またはキーボードで選ぶ）と、そのノードにつながる相手と線だけを濃く描きます
- * - 絞り込み: 人物・証言・関係のうち、図に描くものを選べます
+ * - 絞り込み: 人物・証言・関係のうち、図に描くものと、描く人物の種別（人物・組織・記録・媒体・物）を選べます
  * - 表示を戻す: 拡大率・位置・手で動かしたノードを、まとめて最初の状態に戻します
  *
  * 人物・証言のノードは、それぞれの詳細ページへのリンクです。図から人物・証言へたどる導線で、
@@ -24,6 +24,7 @@
  * ノードをドラッグしたときは、そのドラッグの終わりに続くクリックを打ち消します。動かしただけで詳細ページへ移ると、
  * 位置を直す操作のたびに画面が切り替わってしまうためです。
  *
+ * 人物のノードは、人物の種別ごとの色で塗ります（src/components/person-kind-style.ts）。
  * 線の種類（発言・経由・言及・関係）は、色と破線の形で見分けます。図の中に線の名前を書くと、
  * 線が交差する箇所で文字が重なって読めなくなるため、名前は図の外の凡例（GraphControls）にまとめています。
  * 関係の線は、片方向の関係にだけ矢印を付け、根拠の証言が無い関係は破線にします。裏付けのある関係かどうかを、
@@ -40,8 +41,10 @@ import { cn } from 'cn';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { buildCaseGraph } from '@/domain/case-graph';
+import { PERSON_KIND_LABELS } from '@/domain/labels';
+import { PERSON_KINDS } from '@/domain/person-kind';
 import type { Case } from '@/domain/types';
-import { filterGraph, moveNodes, neighborhoodOf, type GraphFilter } from '@/lib/graph-display';
+import { filterGraph, moveNodes, neighborhoodOf, personKindOf, type GraphFilter } from '@/lib/graph-display';
 import { layoutGraph, NODE_RADIUS, shortLabelOf, type PositionedGraphEdge, type PositionedGraphNode } from '@/lib/graph-layout';
 import {
   clientToSvgPoint,
@@ -55,6 +58,7 @@ import {
   type ViewBox,
 } from '@/lib/graph-viewport';
 import { EDGE_CLASSES, EDGE_DASH_ARRAYS, GraphFilterControls, GraphLegend, GraphZoomButtons, NO_BASIS_DASH_ARRAY } from './GraphControls';
+import { PERSON_KIND_STYLES } from '../person-kind-style';
 import { claimHref, personHref } from '../routes';
 import { useCaseId } from '../useCaseId';
 
@@ -74,14 +78,18 @@ const DRAG_THRESHOLD = 4;
 const DIMMED_CLASS = 'opacity-15';
 
 /** 最初に表示する絞り込みです。まずは図の全体を見せます。 */
-const DEFAULT_FILTER: GraphFilter = { persons: true, claims: true, relations: true };
+const DEFAULT_FILTER: GraphFilter = { persons: true, personKinds: new Set(PERSON_KINDS), claims: true, relations: true };
 
-/** ノードの種類ごとの、丸の見た目です。 */
+/** 人物以外のノードの、丸の見た目です。人物の丸は、種別ごとの色（PERSON_KIND_STYLES）で描きます。 */
 const NODE_CLASSES = {
-  person: 'fill-primary stroke-background',
   user: 'fill-muted stroke-border',
   claim: 'fill-card stroke-foreground/40',
 } as const;
+
+/** ノードの丸の見た目です。 */
+function nodeClassOf(node: PositionedGraphNode): string {
+  return node.kind === 'person' ? PERSON_KIND_STYLES[personKindOf(node)].nodeFill : NODE_CLASSES[node.kind];
+}
 
 /**
  * ドラッグ中の状態です。図の背景をつかんだ場合（pan）と、ノードをつかんだ場合（node）があります。
@@ -164,9 +172,12 @@ function relationTitleOf(edge: PositionedGraphEdge): string {
   return edge.relation?.hasBasis === true ? label : `${label}（根拠未登録）`;
 }
 
-/** ノードの読み上げ用の名前です。図の中で人物と証言のどちらを指すかが分かるよう、種類を前に付けます。 */
+/**
+ * ノードの読み上げ用の名前です。図の中で何を指すかが分かるよう、種類を前に付けます。
+ * 人物のノードには、人物の種別（人物・組織・記録・媒体・物）を付けます。
+ */
 function accessibleNameOf(node: PositionedGraphNode): string {
-  return node.kind === 'person' ? `人物: ${node.label}` : `証言: ${node.label}`;
+  return node.kind === 'person' ? `${PERSON_KIND_LABELS[personKindOf(node)]}: ${node.label}` : `証言: ${node.label}`;
 }
 
 /**
@@ -212,9 +223,38 @@ function NodeFace({ node, clipPathId }: { node: PositionedGraphNode; clipPathId:
   }
   if (!node.iconText) return null;
   return (
-    <text x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central" className="fill-primary-foreground text-sm font-semibold">
+    <text
+      x={node.x}
+      y={node.y}
+      textAnchor="middle"
+      dominantBaseline="central"
+      className={cn('text-sm font-semibold', PERSON_KIND_STYLES[personKindOf(node)].nodeText)}
+    >
       {node.iconText}
     </text>
+  );
+}
+
+/**
+ * 画像を登録した人物のノードに、種別の色の縁取りを描きます。
+ * 画像は丸の塗り（種別の色）を覆うため、縁取りが無いと種別を見分けられなくなるためです。
+ * 画像の無いノードと、個人（人物）のノードには描きません。
+ */
+function PersonKindOutline({ node }: { node: PositionedGraphNode }) {
+  if (node.kind !== 'person' || !node.imageDataUrl) return null;
+  const kind = personKindOf(node);
+  const outline = PERSON_KIND_STYLES[kind].nodeOutline;
+  if (!outline) return null;
+  return (
+    <circle
+      cx={node.x}
+      cy={node.y}
+      r={NODE_RADIUS[node.kind]}
+      fill="none"
+      strokeWidth={3}
+      data-person-kind-outline={kind}
+      className={outline}
+    />
   );
 }
 
@@ -223,8 +263,9 @@ function NodeShape({ node, clipPathId }: { node: PositionedGraphNode; clipPathId
   const radius = NODE_RADIUS[node.kind];
   return (
     <>
-      <circle cx={node.x} cy={node.y} r={radius} strokeWidth={2} className={NODE_CLASSES[node.kind]} />
+      <circle cx={node.x} cy={node.y} r={radius} strokeWidth={2} className={nodeClassOf(node)} />
       <NodeFace node={node} clipPathId={clipPathId} />
+      <PersonKindOutline node={node} />
       <text x={node.x} y={node.y + radius + 14} textAnchor="middle" className="fill-foreground text-[11px]">
         {shortLabelOf(node.label)}
       </text>

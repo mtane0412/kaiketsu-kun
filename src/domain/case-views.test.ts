@@ -198,6 +198,23 @@ describe('buildPersonLanes', () => {
     expect(rows[0]?.roles['person-neighbor']).toBe('speaker');
   });
 
+  it('列に人物の種別を載せる（見出しで種別を見分けるため）', () => {
+    const { lanes } = buildPersonLanes(sampleFictionalCase);
+
+    expect(lanes.find((lane) => lane.personId === 'person-road-camera')?.personKind).toBe('record');
+    expect(lanes.find((lane) => lane.personId === 'person-caretaker')?.personKind).toBe('individual');
+  });
+
+  it('表示する種別を指定すると、その種別の人物だけを列にし、残った列の人物が登場しない証言は行にしない', () => {
+    // 前提: 記録・媒体は、県道の防犯カメラと架空日報 朝刊（どちらも発言者）
+    const { lanes, rows } = buildPersonLanes(sampleFictionalCase, new Set(['record']));
+
+    expect(lanes.map((lane) => lane.label)).toEqual(['県道の防犯カメラ', '架空日報 朝刊']);
+    expect(rows.map((row) => row.view.claim.id)).toEqual(['claim-police-camera', 'claim-report']);
+    // 行の役割にも、隠した種別の人物を含めない
+    expect(Object.keys(rows[0]?.roles ?? {})).toEqual(['person-road-camera']);
+  });
+
   it('どの人物も登場しない証言（人物に言及しないユーザーの推測）は行にしない', () => {
     const ケース: Case = {
       ...sampleFictionalCase,

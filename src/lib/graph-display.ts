@@ -5,13 +5,14 @@
  * ここで扱うのは次の3つで、いずれも配置の計算はやり直しません。配置を計算し直すと、操作のたびに図の形が変わり、
  * どこに何があったかを見失うためです。
  *
- * - 絞り込み（filterGraph）: 人物・証言・関係のうち、見たいものだけを残します
+ * - 絞り込み（filterGraph）: 人物（とその種別）・証言・関係のうち、見たいものだけを残します
  * - 手で動かした位置（moveNodes）: ユーザーがドラッグしたノードの座標を、計算された座標の上に重ねます
  * - 強調する範囲（neighborhoodOf）: マウスを重ねた（または選んだ）ノードと、そこにつながる相手だけを取り出します
  *
  * 描画（GraphView）とは分け、座標と識別子だけを扱います。マウス操作を再現しにくいテスト環境でも、
  * 何が描かれるはずかを確かめられるようにするためです。
  */
+import type { PersonKind } from '@/domain/types';
 import type { PositionedGraphEdge, PositionedGraphNode } from './graph-layout';
 
 /** 座標が決まったノードと、その両端が解決済みのエッジの組です。 */
@@ -30,6 +31,8 @@ export type PositionedGraph = {
 export type GraphFilter = {
   /** 人物のノード（およびユーザーのノード）を描くかどうかです。 */
   persons: boolean;
+  /** 人物のノードのうち、描く種別です。persons が false の間は、種別によらず人物を描きません。 */
+  personKinds: ReadonlySet<PersonKind>;
   /** 証言のノードを描くかどうかです。 */
   claims: boolean;
   /** 人物どうしの関係の線を描くかどうかです。 */
@@ -39,9 +42,25 @@ export type GraphFilter = {
 /** 図の座標です。 */
 type Point = { x: number; y: number };
 
+/**
+ * 人物のノードの種別を返します。人物のノードは必ず種別を持つため（src/domain/case-graph.ts）、
+ * 持たない場合は導出の誤りとして例外を投げます。
+ */
+export function personKindOf(node: PositionedGraphNode): PersonKind {
+  if (node.personKind === undefined) throw new Error(`人物のノードに種別がありません: ${node.id}`);
+  return node.personKind;
+}
+
 /** ノードが、絞り込みの設定で表示されるかどうかを返します。 */
 function isVisible(node: PositionedGraphNode, filter: GraphFilter): boolean {
-  return node.kind === 'claim' ? filter.claims : filter.persons;
+  switch (node.kind) {
+    case 'claim':
+      return filter.claims;
+    case 'user':
+      return filter.persons;
+    case 'person':
+      return filter.persons && filter.personKinds.has(personKindOf(node));
+  }
 }
 
 /**

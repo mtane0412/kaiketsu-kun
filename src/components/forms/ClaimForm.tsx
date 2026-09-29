@@ -40,12 +40,13 @@ import {
 import { timelineKeyOf } from '@/domain/timeline-order';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatInterviewLabel } from '@/domain/interviews';
-import type { Claim, Id } from '@/domain/types';
+import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
+import type { Claim, Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
-import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
+import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft, type SpeakerPersonOption } from './SpeakerPicker';
 
 /**
  * ボード上の書いた位置から決まる初期値です。新規登録でのみ使用します。
@@ -125,6 +126,19 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     setPending((current) => [...current, { mention, entry: createEntry(kind, mention.id, name) }]);
     return mention;
   };
+
+  /** 登録済みの人物と、このフォームで新規作成した人物の種別です。発言者の選択肢に種別を添えるために使います。 */
+  const personKindById = new Map<Id, PersonKind>([
+    ...currentCase.persons.map((person): [Id, PersonKind] => [person.id, person.kind]),
+    ...pending.flatMap((item): [Id, PersonKind][] => (item.entry.key === 'persons' ? [[item.entry.entity.id, item.entry.entity.kind]] : [])),
+  ]);
+  const speakerOptions: SpeakerPersonOption[] = candidates
+    .filter((candidate) => candidate.kind === 'person')
+    .map((candidate) => {
+      const personKind = personKindById.get(candidate.id);
+      if (personKind === undefined) throw new Error(`発言者の候補の人物が見つかりません: ${candidate.id}`);
+      return { id: candidate.id, label: candidate.label, personKind };
+    });
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -255,8 +269,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
         <SpeakerPicker
           value={speaker}
           onChange={setSpeaker}
-          persons={candidates.filter((candidate) => candidate.kind === 'person')}
-          onCreatePerson={(name) => handleCreate('person', name)}
+          persons={speakerOptions}
+          onCreatePerson={(name) => {
+            // 名前だけで新規作成する人物の種別は、既定値（人物）になる（createEntry）
+            const { id, label } = handleCreate('person', name);
+            return { id, label, personKind: DEFAULT_PERSON_KIND };
+          }}
         />
         <SubmitButton label={compact && !initial ? '書き足す' : '証言を保存'} />
       </div>

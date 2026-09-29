@@ -14,12 +14,14 @@
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
+ * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
 import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
+import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isValidTimeRef } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
 import type { Case, Id, Person, Speaker } from './types';
@@ -102,6 +104,7 @@ const caseSchema = z.object({
     z.object({
       id: idSchema,
       name: z.string(),
+      kind: z.enum(PERSON_KINDS).default(DEFAULT_PERSON_KIND),
       aliases: z.array(z.string()).optional(),
       imageDataUrl: imageDataUrlSchema.optional(),
       iconText: z.string().min(1, 'アイコンの文字を指定しない場合は、項目ごと省略してください').optional(),
@@ -307,7 +310,7 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
       throw new Error(`ソースを人物に変換できません。同じIDの人物が存在します: ${source.id}`);
     }
     personIdBySourceId.set(source.id, source.id);
-    persons.push({ id: source.id, name: source.title, ...(noteLines.length > 0 && { note: noteLines.join('\n') }) });
+    persons.push({ id: source.id, name: source.title, kind: DEFAULT_PERSON_KIND, ...(noteLines.length > 0 && { note: noteLines.join('\n') }) });
   }
 
   const personIdOf = (sourceId: Id): Id => {

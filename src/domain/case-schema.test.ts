@@ -63,6 +63,32 @@ describe('parseCase', () => {
     expect(parseCase(toJsonData(列の並び順の無いケース)).personLaneOrder).toEqual([]);
   });
 
+  it('人物の種別を保持して受け付ける', () => {
+    const 読み込んだケース = parseCase(toJsonData(sampleFictionalCase));
+
+    expect(読み込んだケース.persons.find((person) => person.id === 'person-road-camera')?.kind).toBe('record');
+  });
+
+  it('人物の種別を持たない頃に保存したデータは、すべての人物を個人（人物）として受け付ける', () => {
+    const 種別の無いケース = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map(({ kind: _種別, ...person }) => person),
+    };
+
+    const 読み込んだケース = parseCase(toJsonData(種別の無いケース));
+
+    expect(new Set(読み込んだケース.persons.map((person) => person.kind))).toEqual(new Set(['individual']));
+  });
+
+  it('未知の人物の種別を拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      persons: [{ id: 'person-owner', name: '別荘の持ち主', kind: '動物' }, ...sampleFictionalCase.persons.slice(1)],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
+  });
+
   it('出来事に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換して受け付ける', () => {
     // 前提: 以前の版では、隣家の住人と管理人の証言を、出来事「持ち主が最後に目撃された」に束ねていた
     const 出来事を持つ旧データ = {
@@ -359,11 +385,13 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
   it('ソースを人物に変換し、URL・公開時点・メモを人物のメモにまとめる', () => {
     const 読み込んだケース = parseCase(toJsonData(ソースを持つ旧データ));
 
+    // 旧データは種別を持たないため、ソースから変換した人物も含めて、すべて個人（人物）になる
     expect(読み込んだケース.persons).toEqual([
-      { id: 'person-neighbor', name: '隣家の住人' },
+      { id: 'person-neighbor', name: '隣家の住人', kind: 'individual' },
       {
         id: 'source-newspaper',
         name: '架空日報 朝刊',
+        kind: 'individual',
         note: '社会面の記事\nhttps://example.co.jp/news/19980814\n公開・刊行: 1998年8月14日',
       },
     ]);
@@ -428,7 +456,7 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
 
     const 読み込んだケース = parseCase(toJsonData(旧データ));
 
-    expect(読み込んだケース.persons).toEqual([{ id: 'person-police', name: '県警', note: '組織です。\n記者発表' }]);
+    expect(読み込んだケース.persons).toEqual([{ id: 'person-police', name: '県警', kind: 'individual', note: '組織です。\n記者発表' }]);
     expect(読み込んだケース.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
   });
 

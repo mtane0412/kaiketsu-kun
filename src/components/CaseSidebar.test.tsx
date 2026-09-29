@@ -61,6 +61,14 @@ describe('CaseSidebar', () => {
   });
 
   describe('登録済みの一覧', () => {
+    it('人物の一覧では、人物ではない種別を名前に添えて伝える', async () => {
+      サイドバーを描画する();
+
+      const 人物の一覧 = await screen.findByRole('list', { name: '人物の一覧' });
+      expect(within(人物の一覧).getByRole('link', { name: '県道の防犯カメラ（記録・媒体）' })).toBeInTheDocument();
+      expect(within(人物の一覧).getByRole('link', { name: '県警（組織）' })).toBeInTheDocument();
+    });
+
     it('人物の一覧を並べ、それぞれの詳細ページへのリンクにする', async () => {
       サイドバーを描画する();
 

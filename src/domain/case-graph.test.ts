@@ -27,6 +27,13 @@ describe('buildCaseGraph', () => {
     ]);
   });
 
+  it('人物のノードに、人物の種別を載せる（種別で色分け・絞り込みをするため）', () => {
+    const graph = buildCaseGraph(sampleFictionalCase);
+
+    expect(graph.nodes.find((node) => node.id === 'person:person-police')?.personKind).toBe('organization');
+    expect(graph.nodes.find((node) => node.id === 'person:person-owner')?.personKind).toBe('individual');
+  });
+
   it('証言をすべてノードにし、時系列ボードの並び順に並べる', () => {
     const graph = buildCaseGraph(sampleFictionalCase);
 
@@ -121,7 +128,7 @@ describe('buildCaseGraph', () => {
     // 前提: 登録しただけで、まだどの証言にも出てこない人物を、グラフから消さずに見せる
     const ケース: Case = {
       ...sampleFictionalCase,
-      persons: [...sampleFictionalCase.persons, { id: 'person-stranger', name: '目撃者X' }],
+      persons: [...sampleFictionalCase.persons, { id: 'person-stranger', name: '目撃者X', kind: 'individual' }],
     };
 
     const graph = buildCaseGraph(ケース);
@@ -133,7 +140,7 @@ describe('buildCaseGraph', () => {
   it('人物のノードには、アイコンに使う画像と1文字を載せる', () => {
     const ケース: Case = {
       ...sampleFictionalCase,
-      persons: [{ id: 'person-owner', name: '別荘の持ち主', iconText: '主' }],
+      persons: [{ id: 'person-owner', name: '別荘の持ち主', kind: 'individual', iconText: '主' }],
       claims: [],
       relationships: [],
       timelineOrder: [],

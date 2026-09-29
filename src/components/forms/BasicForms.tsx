@@ -1,6 +1,7 @@
 /**
  * 人物・場所の入力フォーム
  *
+ * 人物には、種別（人物・組織・記録・媒体・物。新規登録の既定値は人物）を選べます。
  * 人物には、画像が無い場合にアイコンへ表示する1文字を指定できます（省略した場合は名前の先頭の文字。src/domain/person-icon.ts を参照）。
  * メモには「@」で他の人物・場所を書けます（メンション。形式は src/domain/mention.ts を参照）。
  * メモのメンションは、エンティティ同士の関連の元になります。未登録の名前は候補の一覧から新規作成でき、
@@ -13,7 +14,7 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import {
   contentToDraft,
   draftToContent,
@@ -22,10 +23,12 @@ import {
   type DraftMention,
   type MentionKind,
 } from '@/domain/mention';
+import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { firstCharacter } from '@/domain/person-icon';
-import type { Coordinates, Id, Person, Place } from '@/domain/types';
+import { DEFAULT_PERSON_KIND, PERSON_KINDS } from '@/domain/person-kind';
+import type { Coordinates, Id, Person, PersonKind, Place } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SubmitButton, TextField } from './fields';
+import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { CoordinateField } from './CoordinateField';
 import { ImageField } from './ImageField';
 import { caseToCandidates, createEntry } from './mention-entries';
@@ -92,9 +95,18 @@ function useNoteField(
   return { field, note, newEntries };
 }
 
+/** 種別の選択欄の値を、人物の種別に変換します。選択肢は PERSON_KINDS だけのため、それ以外の値は実装の誤りとして例外を投げます。 */
+function toPersonKind(value: string): PersonKind {
+  const kind = PERSON_KINDS.find((candidate) => candidate === value);
+  if (kind === undefined) throw new Error(`未知の人物の種別です: ${value}`);
+  return kind;
+}
+
 export function PersonForm({ initial, onDone }: FormProps<Person>) {
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
+  const [kind, setKind] = useState<PersonKind>(initial?.kind ?? DEFAULT_PERSON_KIND);
+  const kindFieldId = useId();
   const [aliases, setAliases] = useState(initial?.aliases?.join('、') ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
   const [iconText, setIconText] = useState(initial?.iconText ?? '');
@@ -108,7 +120,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
       .map((alias) => alias.trim())
       .filter(Boolean);
 
-    const person: Person = { id: initial?.id ?? nanoid(), name: name.trim() };
+    const person: Person = { id: initial?.id ?? nanoid(), name: name.trim(), kind };
     if (aliasList.length > 0) person.aliases = aliasList;
     if (imageDataUrl) person.imageDataUrl = imageDataUrl;
     // アイコンに入るのは1文字のため、先頭の1文字だけを保存する
@@ -128,6 +140,23 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <TextField label="名前" value={name} onChange={setName} required />
+      <div>
+        <label htmlFor={kindFieldId} className={LABEL_CLASS}>
+          種別
+        </label>
+        <select
+          id={kindFieldId}
+          value={kind}
+          onChange={(event) => setKind(toPersonKind(event.target.value))}
+          className={INPUT_CLASS}
+        >
+          {PERSON_KINDS.map((option) => (
+            <option key={option} value={option}>
+              {PERSON_KIND_LABELS[option]}
+            </option>
+          ))}
+        </select>
+      </div>
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
       <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
       <TextField
