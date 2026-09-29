@@ -28,6 +28,7 @@ function ケース(parts: Partial<Case>): Case {
     interviews: [],
     crossChecks: [],
     hypotheses: [],
+    tasks: [],
     timelineOrder: [],
     personLaneOrder: [],
     ...parts,

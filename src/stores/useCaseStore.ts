@@ -7,6 +7,7 @@
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
  * 証言を削除すると、その証言を含む照合（CrossCheck）もあわせて削除します。照合は2件の証言がそろって初めて意味を持つためです。
  * あわせて、仮説（Hypothesis）からも、その証言のひもづけを外します。仮説は証言が減っても見立てとして残るためです。
+ * 証言・人物・場所を削除すると、未了事項（Task）から、そのひもづけを外します。未了事項は対象が無くなっても、確認すべきこととして残るためです。
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
@@ -22,6 +23,7 @@ import { findCaseViolations, parseCase } from '@/domain/case-schema';
 import { detachClaimFromHypotheses } from '@/domain/hypotheses';
 import type { MentionKind } from '@/domain/mention';
 import { movePersonLane } from '@/domain/person-lane-order';
+import { detachFromTasks, type TaskLinkKind } from '@/domain/tasks';
 import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import {
@@ -35,7 +37,7 @@ import {
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks' | 'hypotheses';
+export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks' | 'hypotheses' | 'tasks';
 
 /**
  * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。
@@ -85,6 +87,7 @@ type CaseStore = {
    * 要素を削除します。他のデータから参照されている場合は例外を投げます。
    * 証言を削除する場合は、その証言を含む照合もあわせて削除し、仮説からはその証言のひもづけを外します
    * （照合・仮説は削除を妨げる参照として扱いません）。
+   * 証言・人物・場所を削除する場合は、未了事項からそのひもづけを外します（未了事項も削除を妨げる参照として扱いません）。
    */
   remove: (key: CollectionKey, id: Id) => void;
   /**
@@ -101,6 +104,13 @@ type CaseStore = {
 
 /** ケースを開いていない状態で、ケースを変更しようとしたときのメッセージです。 */
 const NO_OPEN_CASE_MESSAGE = 'ケースが開かれていません';
+
+/** 未了事項にひもづけられる対象の一覧の名前と、その対象の種類の組です。削除するときに、未了事項からひもづけを外すために使います。 */
+const TASK_LINK_KIND_BY_COLLECTION_KEY: Partial<Record<CollectionKey, TaskLinkKind>> = {
+  claims: 'claim',
+  persons: 'person',
+  places: 'place',
+};
 
 export const useCaseStore = create<CaseStore>()((set, get) => {
   /**
@@ -197,6 +207,10 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
             crossChecks: nextCase.crossChecks.filter((crossCheck) => !crossCheck.claimIds.includes(id)),
             hypotheses: detachClaimFromHypotheses(nextCase.hypotheses, id),
           };
+        }
+        const taskLinkKind = TASK_LINK_KIND_BY_COLLECTION_KEY[key];
+        if (taskLinkKind !== undefined) {
+          nextCase = { ...nextCase, tasks: detachFromTasks(nextCase.tasks, taskLinkKind, id) };
         }
 
         const violations = findCaseViolations(nextCase);

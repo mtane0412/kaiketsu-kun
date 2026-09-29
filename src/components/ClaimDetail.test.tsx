@@ -158,6 +158,32 @@ describe('ClaimDetail', () => {
     expect(項目[1]).toHaveTextContent('否定された');
   });
 
+  it('この証言の未了事項を、状態とともに並べ、この証言をひもづけた未了事項を追加するページへのリンクを置く', () => {
+    // 前提: 防犯カメラの証言は、対応中の「防犯カメラの映像の確認」にひもづいている
+    render(<ClaimDetail claimId="claim-police-camera" />);
+
+    const 未了事項 = screen.getByRole('region', { name: 'この証言の未了事項' });
+    const [項目] = within(未了事項).getAllByRole('listitem');
+    expect(within(項目!).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/tasks/task-camera'
+    );
+    expect(項目).toHaveTextContent('対応中');
+    expect(within(未了事項).getByRole('link', { name: 'この証言の未了事項を追加' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/tasks/new?link=claim%3Aclaim-police-camera'
+    );
+  });
+
+  it('未了事項にひもづいた証言の削除の確認では、未了事項からひもづけを外すことを伝える', async () => {
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-police-camera" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた未了事項1件から、ひもづけを外します。');
+  });
+
   it('どの仮説にも使われていない証言では、仮説の欄を表示しない', () => {
     render(<ClaimDetail claimId="claim-report" />);
 

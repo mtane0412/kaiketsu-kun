@@ -31,6 +31,7 @@ function 散歩のケース(claims: Claim[]): Case {
     interviews: [],
     crossChecks: [],
     hypotheses: [],
+    tasks: [],
     timelineOrder: [],
     personLaneOrder: [],
   };

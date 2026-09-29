@@ -969,3 +969,68 @@ describe('ClaimForm（聴取）', () => {
     expect(screen.queryByLabelText('聴取（任意）')).not.toBeInTheDocument();
   });
 });
+
+describe('ClaimForm（証言とあわせて保存する要素）', () => {
+  it('保存した証言のIDを使った要素を、証言と同じ1回の保存で書き込む', async () => {
+    const user = userEvent.setup();
+    const 完了 = vi.fn();
+    // 前提: 「当夜の湖畔の天気を調べる」の未了事項に、書き足した証言をひもづける
+    const 天気の確認 = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
+    render(
+      <ClaimForm
+        compact
+        onDone={完了}
+        withEntries={(claimId) => [{ key: 'tasks', entity: { ...天気の確認, claimIds: [claimId] } }]}
+      />
+    );
+
+    await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    const 書き足した証言 = openedCase().claims.at(-1)!;
+    expect(openedCase().tasks.find((task) => task.id === 'task-weather')?.claimIds).toEqual([書き足した証言.id]);
+    expect(完了).toHaveBeenCalledWith(書き足した証言.id);
+  });
+
+  it('あわせて保存する要素が求められない場合は、証言も保存せず、理由を示す', async () => {
+    const user = userEvent.setup();
+    const 完了 = vi.fn();
+    const 証言の件数 = openedCase().claims.length;
+    render(
+      <ClaimForm
+        compact
+        onDone={完了}
+        withEntries={() => {
+          throw new Error('未了事項が見つかりません: task-gone');
+        }}
+      />
+    );
+
+    await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    expect(openedCase().claims).toHaveLength(証言の件数);
+    expect(screen.getByText('未了事項が見つかりません: task-gone')).toBeInTheDocument();
+    expect(完了).not.toHaveBeenCalled();
+  });
+
+  it('あわせて保存する要素が規則に違反する場合は、証言も保存しない', async () => {
+    const user = userEvent.setup();
+    const 証言の件数 = openedCase().claims.length;
+    const 天気の確認 = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
+    render(
+      <ClaimForm
+        compact
+        onDone={vi.fn()}
+        // 存在しない人物をひもづけた未了事項は、参照の整合性の検証で拒否される
+        withEntries={() => [{ key: 'tasks', entity: { ...天気の確認, personIds: ['person-gone'] } }]}
+      />
+    );
+
+    await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    expect(openedCase().claims).toHaveLength(証言の件数);
+    expect(screen.getByText(/存在しない人物を参照しています: person-gone/)).toBeInTheDocument();
+  });
+});

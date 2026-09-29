@@ -189,6 +189,52 @@ describe('PlaceDetail', () => {
   });
 });
 
+describe('人物・場所の未了事項', () => {
+  it('人物の詳細に、その人物をひもづけた未了事項と、追加するページへのリンクを並べる', () => {
+    // 前提: 管理人は、未着手の「管理人への再聴取」にひもづいている
+    render(<PersonDetail personId="person-caretaker" />);
+
+    const 未了事項 = screen.getByRole('region', { name: 'この人物の未了事項' });
+    expect(within(未了事項).getByRole('link', { name: /再度聞く/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/tasks/task-caretaker'
+    );
+    expect(未了事項).toHaveTextContent('未着手');
+    expect(within(未了事項).getByRole('link', { name: 'この人物の未了事項を追加' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/tasks/new?link=person%3Aperson-caretaker'
+    );
+  });
+
+  it('場所の詳細に、その場所をひもづけた未了事項を並べる', () => {
+    // 前提: 湖畔の別荘は、管理人への再聴取と、完了した天気の確認にひもづいている
+    render(<PlaceDetail placeId="place-villa" />);
+
+    const 未了事項 = screen.getByRole('region', { name: 'この場所の未了事項' });
+    expect(within(未了事項).getAllByRole('listitem')).toHaveLength(2);
+    expect(未了事項).toHaveTextContent('完了');
+  });
+
+  it('未了事項にひもづいた人物の削除の確認では、未了事項からひもづけを外すことを伝え、削除すると外れる', async () => {
+    // 前提: 駅員は、「防犯カメラの映像の確認」の未了事項だけが参照する人物とする
+    openTestCase({
+      ...sampleFictionalCase,
+      persons: [...sampleFictionalCase.persons, { id: 'person-station-staff', name: '駅員', kind: 'individual' }],
+      tasks: sampleFictionalCase.tasks.map((task) =>
+        task.id === 'task-camera' ? { ...task, personIds: ['person-station-staff'] } : task
+      ),
+    });
+    const user = userEvent.setup();
+    render(<PersonDetail personId="person-station-staff" />);
+
+    await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この人物をひもづけた未了事項1件から、ひもづけを外します。');
+    await user.click(screen.getByRole('button', { name: '削除する' }));
+
+    expect(openedCase().tasks.find((task) => task.id === 'task-camera')?.personIds).toEqual([]);
+  });
+});
+
 describe('NewPersonDetail・NewPlaceDetail', () => {
   it('人物を新しく登録し、保存するとその人物の詳細へ移る', async () => {
     const user = userEvent.setup();

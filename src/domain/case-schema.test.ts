@@ -738,3 +738,61 @@ describe('parseCase（仮説）', () => {
     expect(() => parseCase(toJsonData(ケース))).toThrow(/hypotheses\.0\.status/);
   });
 });
+
+describe('parseCase（未了事項）', () => {
+  /** サンプルの「管理人への再聴取」の未了事項を、一部の項目だけ差し替えたケースを作ります。 */
+  function 管理人への再聴取を差し替えたケース(変更: Record<string, unknown>) {
+    return {
+      ...sampleFictionalCase,
+      tasks: sampleFictionalCase.tasks.map((task) => (task.id === 'task-caretaker' ? { ...task, ...変更 } : task)),
+    };
+  }
+
+  it('未了事項を保持して受け付ける', () => {
+    // 前提: サンプルのケースには、対応中・未着手・完了の未了事項が1件ずつある
+    expect(parseCase(toJsonData(sampleFictionalCase)).tasks).toEqual(sampleFictionalCase.tasks);
+  });
+
+  it('未了事項を持たない頃に保存したデータは、未了事項を空として受け付ける', () => {
+    const { tasks: _未了事項, ...未了事項の無いケース } = sampleFictionalCase;
+
+    expect(parseCase(toJsonData(未了事項の無いケース)).tasks).toEqual([]);
+  });
+
+  it('未了事項が存在しない証言・人物・場所を参照している場合は拒否する', () => {
+    const ケース = 管理人への再聴取を差し替えたケース({
+      claimIds: ['claim-gone'],
+      personIds: ['person-gone'],
+      placeIds: ['place-gone'],
+    });
+
+    const 読み込み = () => parseCase(toJsonData(ケース));
+    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-gone/);
+    expect(読み込み).toThrow(/存在しない人物を参照しています: person-gone/);
+    expect(読み込み).toThrow(/存在しない場所を参照しています: place-gone/);
+  });
+
+  it('内容が空白だけの未了事項は拒否する', () => {
+    const ケース = 管理人への再聴取を差し替えたケース({ content: '  ' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/未了事項の内容がありません: task-caretaker/);
+  });
+
+  it('同じ証言を2回以上ひもづけた未了事項は拒否する', () => {
+    const ケース = 管理人への再聴取を差し替えたケース({ claimIds: ['claim-caretaker', 'claim-caretaker'] });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/未了事項に同じ証言・人物・場所を2回以上ひもづけることはできません: task-caretaker/);
+  });
+
+  it('期限が年月日（YYYY-MM-DD）の形でない未了事項は拒否する', () => {
+    const ケース = 管理人への再聴取を差し替えたケース({ due: '8月18日' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/tasks\.1\.due/);
+  });
+
+  it('存在しない状態の未了事項は拒否する', () => {
+    const ケース = 管理人への再聴取を差し替えたケース({ status: 'pending' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/tasks\.1\.status/);
+  });
+});

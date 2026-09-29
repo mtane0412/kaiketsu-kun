@@ -11,10 +11,13 @@ import {
   newHypothesisHref,
   newPersonHref,
   newPlaceHref,
+  newTaskHref,
+  parseTaskLink,
   parseDetailKind,
   parseTab,
   personHref,
   placeHref,
+  taskHref,
 } from './routes';
 
 /** テストで使うケースのIDです。 */
@@ -26,6 +29,7 @@ describe('parseTab', () => {
     expect(parseTab('speaker')).toBe('speaker');
     expect(parseTab('lanes')).toBe('lanes');
     expect(parseTab('hypotheses')).toBe('hypotheses');
+    expect(parseTab('tasks')).toBe('tasks');
   });
 
   it('tab が無い場合と、知らない値の場合は、時系列のタブとして扱う', () => {
@@ -147,5 +151,39 @@ describe('hypothesisHref・newHypothesisHref', () => {
   it('仮説の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
     expect(parseDetailKind('/cases/case-villa/hypotheses/hypothesis-caretaker')).toBe('hypothesis');
     expect(parseDetailKind('/cases/case-villa/hypotheses/new')).toBe('newHypothesis');
+  });
+});
+
+describe('taskHref・newTaskHref', () => {
+  it('未了事項の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(taskHref(ケースのId, 'task-camera', 'tasks')).toBe('/cases/case-villa/tasks/task-camera?tab=tasks');
+    expect(newTaskHref(ケースのId, 'tasks')).toBe('/cases/case-villa/tasks/new?tab=tasks');
+  });
+
+  it('登録ページのURLに、最初からひもづける証言・人物・場所を持たせる', () => {
+    expect(newTaskHref(ケースのId, 'timeline', { kind: 'claim', id: 'claim-caretaker' })).toBe(
+      '/cases/case-villa/tasks/new?link=claim%3Aclaim-caretaker'
+    );
+    expect(newTaskHref(ケースのId, 'map', { kind: 'place', id: 'place-villa' })).toBe(
+      '/cases/case-villa/tasks/new?tab=map&link=place%3Aplace-villa'
+    );
+  });
+
+  it('未了事項の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/tasks/task-camera')).toBe('task');
+    expect(parseDetailKind('/cases/case-villa/tasks/new')).toBe('newTask');
+  });
+});
+
+describe('parseTaskLink', () => {
+  it('URLの link の値を、ひもづけ先の種類とIDとして読み取る', () => {
+    expect(parseTaskLink('person:person-caretaker')).toEqual({ kind: 'person', id: 'person-caretaker' });
+  });
+
+  it('link が無い場合と、知らない種類の場合は undefined を返す', () => {
+    // 前提: URLはユーザーが自由に書き換えられるため、知らない値でも画面を表示する
+    expect(parseTaskLink(null)).toBeUndefined();
+    expect(parseTaskLink('event:event-1')).toBeUndefined();
+    expect(parseTaskLink('claim:')).toBeUndefined();
   });
 });
