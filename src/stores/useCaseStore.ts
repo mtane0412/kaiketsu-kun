@@ -18,6 +18,7 @@ import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
 import type { MentionKind } from '@/domain/mention';
+import { movePersonLane } from '@/domain/person-lane-order';
 import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import {
@@ -84,6 +85,11 @@ type CaseStore = {
    * 日時と矛盾する位置を指定した場合は例外を投げ、ケースを変更しません。
    */
   moveTimelineItem: (key: TimelineKey, toIndex: number) => void;
+  /**
+   * 人物の動きビューで、人物 personId の列を、人物 overPersonId の列の位置へ動かします。
+   * どちらかの人物が存在しない場合は例外を投げ、ケースを変更しません。
+   */
+  movePersonLane: (personId: Id, overPersonId: Id) => void;
 };
 
 /** ケースを開いていない状態で、ケースを変更しようとしたときのメッセージです。 */
@@ -188,6 +194,9 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 
     moveTimelineItem: (key, toIndex) =>
       updateCurrentCase((current) => ({ ...current, timelineOrder: moveTimelineItem(current, key, toIndex) })),
+
+    movePersonLane: (personId, overPersonId) =>
+      updateCurrentCase((current) => ({ ...current, personLaneOrder: movePersonLane(current, personId, overPersonId) })),
   };
 });
 

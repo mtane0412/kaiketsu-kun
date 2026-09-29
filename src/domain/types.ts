@@ -151,4 +151,9 @@ export type Case = {
    * 載っていない証言は末尾に並べ、存在しない証言のキーは無視します（src/domain/timeline-order.ts）。
    */
   timelineOrder: string[];
+  /**
+   * 人物の動きビューの列（人物）の並び順です。要素は人物のIDです。
+   * 載っていない人物は末尾に登録順で並べ、存在しない人物のIDは無視します（src/domain/person-lane-order.ts）。
+   */
+  personLaneOrder: Id[];
 };

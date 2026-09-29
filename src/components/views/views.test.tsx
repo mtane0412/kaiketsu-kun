@@ -378,6 +378,21 @@ describe('PersonLaneView', () => {
     );
   });
 
+  it('列の見出しに、列を左右へ動かすつまみを置く', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 表 = screen.getByRole('table', { name: '人物の動き' });
+    const 管理人の見出し = within(表).getAllByRole('columnheader')[3]!;
+    expect(within(管理人の見出し).getByRole('button', { name: '「管理人」の列を動かす' })).toBeInTheDocument();
+  });
+
+  it('人物の列の並び順を保存していれば、そのとおりに列を並べる', () => {
+    render(<PersonLaneView target={{ ...sampleFictionalCase, personLaneOrder: ['person-caretaker'] }} />);
+
+    const 表 = screen.getByRole('table', { name: '人物の動き' });
+    expect(within(表).getAllByRole('columnheader')[1]).toHaveTextContent('管理人');
+  });
+
   it('人物の登場する証言が1件も無い場合は、案内を表示する', () => {
     render(<PersonLaneView target={{ ...sampleFictionalCase, claims: [], relationships: [] }} />);
 

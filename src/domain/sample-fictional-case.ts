@@ -102,4 +102,5 @@ export const sampleFictionalCase: Case = {
     'claim:claim-report',
     'claim:claim-user-guess',
   ],
+  personLaneOrder: [],
 };

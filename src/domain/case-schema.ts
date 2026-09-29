@@ -148,6 +148,8 @@ const caseSchema = z.object({
   ),
   // 並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で当時の表示順を補う）
   timelineOrder: z.array(z.string()).optional(),
+  // 列の並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の並び順を補う）
+  personLaneOrder: z.array(idSchema).optional(),
 });
 
 /**
@@ -310,9 +312,14 @@ export function parseCase(data: unknown): Case {
     throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, events, timelineOrder, ...current } = result.data;
+  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
-  let parsed: Case = { ...current, persons, ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }) };
+  let parsed: Case = {
+    ...current,
+    persons,
+    personLaneOrder,
+    ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
+  };
   // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある
   if (events && events.length > 0) {
     parsed = { ...parsed, timelineOrder: settleTimelineItems(parsed, parsed.timelineOrder) };
