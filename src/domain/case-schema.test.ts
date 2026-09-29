@@ -796,3 +796,31 @@ describe('parseCase（未了事項）', () => {
     expect(() => parseCase(toJsonData(ケース))).toThrow(/tasks\.1\.status/);
   });
 });
+
+describe('parseCase（人物の識別子）', () => {
+  /** 別荘の持ち主に、識別子を持たせたケースを作ります。 */
+  function 持ち主に識別子を持たせたケース(identifiers: unknown) {
+    return {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) => (person.id === 'person-owner' ? { ...person, identifiers } : person)),
+    };
+  }
+
+  it('人物の識別子（種類と値の組）を保持して受け付ける', () => {
+    const ケース = 持ち主に識別子を持たせたケース([
+      { type: '電話番号', value: '090-1234-5678' },
+      { type: '車両ナンバー', value: '品川 300 あ 12-34' },
+    ]);
+
+    expect(parseCase(toJsonData(ケース))).toEqual(ケース);
+  });
+
+  it('種類または値が空白だけの識別子は拒否する', () => {
+    expect(() => parseCase(toJsonData(持ち主に識別子を持たせたケース([{ type: '電話番号', value: ' ' }])))).toThrow(
+      /識別子の種類と値を入力してください: 別荘の持ち主/
+    );
+    expect(() => parseCase(toJsonData(持ち主に識別子を持たせたケース([{ type: '', value: '090' }])))).toThrow(
+      /識別子の種類と値を入力してください: 別荘の持ち主/
+    );
+  });
+});

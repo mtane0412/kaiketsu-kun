@@ -17,6 +17,7 @@ import {
   parseTab,
   personHref,
   placeHref,
+  searchHref,
   taskHref,
 } from './routes';
 
@@ -185,5 +186,16 @@ describe('parseTaskLink', () => {
     expect(parseTaskLink(null)).toBeUndefined();
     expect(parseTaskLink('event:event-1')).toBeUndefined();
     expect(parseTaskLink('claim:')).toBeUndefined();
+  });
+});
+
+describe('searchHref', () => {
+  it('検索結果のページのURLに、検索語と戻り先のタブを持たせる', () => {
+    expect(searchHref(ケースのId, '090-1234 5678', 'timeline')).toBe(`/cases/${ケースのId}/search?q=090-1234+5678`);
+    expect(searchHref(ケースのId, '管理人', 'map')).toBe(`/cases/${ケースのId}/search?tab=map&q=%E7%AE%A1%E7%90%86%E4%BA%BA`);
+  });
+
+  it('検索結果のページのURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind(`/cases/${ケースのId}/search`)).toBe('search');
   });
 });

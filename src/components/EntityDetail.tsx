@@ -6,7 +6,8 @@
  * 人物・場所1件の編集と削除に加えて、「証言 → 人物 → その人物の別の証言」と連想してたどれるよう、
  * その人物・場所から逆引きした証言（導出は buildPersonDetail・buildPlaceDetail を参照）と、
  * メモのメンションでつながった関連するエンティティ（findRelatedEntities）へのリンクを並べます。
- * 人物の詳細には、これらに加えて、人物どうしの関係を登録・編集する節（RelationshipSection）と、
+ * 人物の詳細には、これらに加えて、識別子（電話番号・車両ナンバーなど）の値が一致する人物を並べる節
+ * （SharedIdentifierSection。識別子を持つ人物だけ）と、人物どうしの関係を登録・編集する節（RelationshipSection）と、
  * その人物の聴取ごとに証言を並べる「供述の変遷」の節（InterviewSection）を並べます。
  * 関係と聴取は場所には無いため、これらの節は人物の詳細にだけ渡します（extraSection）。
  * 人物・場所のどちらにも、その対象をひもづけた未了事項の節（TaskLinkSection）を並べます。
@@ -25,7 +26,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState, type ReactNode } from 'react';
 import { buildPersonDetail, buildPlaceDetail, type EntityClaimGroup, type RelatedEntity } from '@/domain/case-views';
-import { MENTION_KIND_LABELS } from '@/domain/labels';
+import { MENTION_KIND_LABELS, personKindSuffixOf } from '@/domain/labels';
+import { personIconText } from '@/domain/person-icon';
+import { findPersonsSharingIdentifiers } from '@/domain/search';
 import { findTasksLinkedTo } from '@/domain/tasks';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
@@ -197,6 +200,61 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
   );
 }
 
+/** 同じ識別子を持つ人物の節の見出しです。 */
+const SHARED_IDENTIFIERS_LABEL = '同じ識別子を持つ人物';
+
+/**
+ * 識別子の値が一致する人物を、一致した識別子（相手の人物が登録した種類と表記）とともに並べる節です。
+ * 名寄せ（別々の証言に出てくる人物が同じかどうか）の判断材料にするためのもので、同一人物だとは判定しません。
+ * 識別子を持たない人物では、突き合わせる値が無いため、節ごと表示しません。
+ */
+function SharedIdentifierSection({ personId, tab }: { personId: Id; tab: TabKey }) {
+  const caseId = useCaseId();
+  const currentCase = useCurrentCase();
+  const person = currentCase.persons.find((candidate) => candidate.id === personId);
+  const matches = useMemo(() => findPersonsSharingIdentifiers(currentCase, personId), [currentCase, personId]);
+
+  if ((person?.identifiers ?? []).length === 0) return null;
+
+  return (
+    <section aria-label={SHARED_IDENTIFIERS_LABEL} className="space-y-2">
+      <h3 className="text-sm font-semibold">{SHARED_IDENTIFIERS_LABEL}</h3>
+      {matches.length === 0 ? (
+        <p className="text-xs text-muted-foreground">同じ識別子を持つ人物はいません。</p>
+      ) : (
+        <ul className="space-y-1">
+          {matches.map((match) => (
+            <li key={match.person.id}>
+              <Link
+                href={personHref(caseId, match.person.id, tab)}
+                className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1.5 text-sm transition-colors hover:border-foreground/30"
+              >
+                <EntityAvatar
+                  imageDataUrl={match.person.imageDataUrl}
+                  iconText={personIconText(match.person)}
+                  personKind={match.person.kind}
+                  size="sm"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate">
+                    {match.person.name}
+                    {personKindSuffixOf(match.person.kind)}
+                  </span>
+                  {match.identifiers.map((identifier, index) => (
+                    <span key={index} className="block truncate text-xs text-muted-foreground">
+                      {identifier.type}: {identifier.value}
+                    </span>
+                  ))}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function PersonDetail({ personId }: { personId: Id }) {
   const currentCase = useCurrentCase();
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
@@ -215,6 +273,7 @@ export function PersonDetail({ personId }: { personId: Id }) {
       relatedEntities={detail.relatedEntities}
       extraSection={
         <>
+          <SharedIdentifierSection personId={personId} tab={tab} />
           <RelationshipSection personId={personId} personName={detail.person.name} tab={tab} />
           <InterviewSection personId={personId} tab={tab} />
         </>

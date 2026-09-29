@@ -12,6 +12,7 @@
  * Next.js が静的なセグメント（new）を動的なセグメント（[personId] など）より優先するためです。
  * アプリが振るID（nanoid）では起こらず、読み込んだJSONに「new」と書かれていた場合だけ起こりえます。
  * parseDetailKind も、URLの判定を Next.js の優先順位に合わせています。
+ * ボード全体の検索結果は、検索語をクエリ（?q=）に持たせたページ（.../search）に置きます。
  * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」「未了事項」）はURLのクエリ（?tab=）に持たせます。
  * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
@@ -144,13 +145,28 @@ export function parseTaskLink(value: string | null): TaskLinkTarget | undefined 
   return { kind, id };
 }
 
-/** ボードの横に並べる詳細の種類です。「new」で始まる種類は、まだ保存していないエンティティの登録フォームです。 */
+/** 検索語を持たせるクエリの名前です。 */
+export const SEARCH_QUERY_PARAM = 'q';
+
+/** ボード全体の検索結果のページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function searchHref(caseId: Id, query: string, tab: TabKey): string {
+  const params = new URLSearchParams();
+  if (tab !== DEFAULT_TAB) params.set(TAB_SEARCH_PARAM, tab);
+  params.set(SEARCH_QUERY_PARAM, query);
+  return `${caseBasePath(caseId)}/search?${params.toString()}`;
+}
+
+/**
+ * ボードの横に並べる詳細の種類です。「new」で始まる種類は、まだ保存していないエンティティの登録フォームです。
+ * search は、ボード全体の検索結果です。
+ */
 export type DetailKind =
   | 'claim'
   | 'person'
   | 'place'
   | 'hypothesis'
   | 'task'
+  | 'search'
   | 'newPerson'
   | 'newPlace'
   | 'newHypothesis'
@@ -170,6 +186,7 @@ const DETAIL_PATH_PATTERNS: { kind: DetailKind; pattern: RegExp }[] = [
   { kind: 'place', pattern: /^\/cases\/[^/]+\/places\/[^/]+$/ },
   { kind: 'hypothesis', pattern: /^\/cases\/[^/]+\/hypotheses\/[^/]+$/ },
   { kind: 'task', pattern: /^\/cases\/[^/]+\/tasks\/[^/]+$/ },
+  { kind: 'search', pattern: /^\/cases\/[^/]+\/search$/ },
 ];
 
 /**

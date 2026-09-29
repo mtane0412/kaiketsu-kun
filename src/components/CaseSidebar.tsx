@@ -3,6 +3,8 @@
  *
  * ボードの左に常に置き、次の3つを1か所にまとめます。
  * 1. ケースの切り替え（サイドバーの頭）。いま開いているケースの名前を示し、保存済みの他のケースとケースの一覧へ移れます。
+ *    その下に、証言・人物・場所を横断して検索する検索窓を置きます。Enterキーで検索結果のページ（.../search?q=）へ移ります。
+ *    IMEの変換を確定するEnterキーでは移りません（変換中の文字列で検索してしまわないためです）。
  * 2. 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・未了事項）。以前はボードの上のタブでしたが、ナビゲーションとしてここへ移しました。
  * 3. 登録済みの一覧（人物・場所・証言）。以前はボードを覆うオーバーレイ（EntryPanel）でしたが、
  *    常に見える場所に置き、選ぶとメインのカラムがその詳細に切り替わるようにしました。
@@ -36,12 +38,13 @@ import {
   MapPin,
   MessageSquare,
   Plus,
+  Search,
   Share2,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useMemo, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { findUncorroboratedClaims } from '@/domain/cross-checks';
 import { personKindSuffixOf } from '@/domain/labels';
@@ -66,6 +69,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarInput,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -81,6 +85,8 @@ import {
   parseTab,
   personHref,
   placeHref,
+  SEARCH_QUERY_PARAM,
+  searchHref,
   TAB_SEARCH_PARAM,
   TABS,
   taskHref,
@@ -199,6 +205,41 @@ function EntityGroup({
   );
 }
 
+/**
+ * ボード全体の検索窓です。Enterキーで、入力した検索語の検索結果のページへ移ります。
+ * 検索結果のページを開いている間は、その検索語を初期値にします。
+ * 注意: IMEの変換を確定するEnterキー（isComposing）と、空白だけの検索語では移りません。
+ */
+function BoardSearchInput({ tab }: { tab: TabKey }) {
+  const caseId = useCaseId();
+  const router = useRouter();
+  const initialQuery = useSearchParams().get(SEARCH_QUERY_PARAM) ?? '';
+  const [query, setQuery] = useState(initialQuery);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (trimmed === '') return;
+    router.push(searchHref(caseId, trimmed, tab));
+  };
+
+  return (
+    <div className="relative">
+      <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 opacity-50" />
+      <SidebarInput
+        type="search"
+        aria-label="ボード全体を検索"
+        placeholder="証言・人物・場所を検索"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={handleKeyDown}
+        className="pl-8"
+      />
+    </div>
+  );
+}
+
 export function CaseSidebar() {
   const currentCase = useCurrentCase();
   const caseId = useCaseId();
@@ -276,6 +317,7 @@ export function CaseSidebar() {
             </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
+        <BoardSearchInput tab={tab} />
       </SidebarHeader>
 
       <SidebarContent>
