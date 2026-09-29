@@ -6,7 +6,9 @@ import {
   boardHref,
   casesHref,
   claimHref,
+  hypothesisHref,
   mentionHref,
+  newHypothesisHref,
   newPersonHref,
   newPlaceHref,
   parseDetailKind,
@@ -23,6 +25,7 @@ describe('parseTab', () => {
     expect(parseTab('map')).toBe('map');
     expect(parseTab('speaker')).toBe('speaker');
     expect(parseTab('lanes')).toBe('lanes');
+    expect(parseTab('hypotheses')).toBe('hypotheses');
   });
 
   it('tab が無い場合と、知らない値の場合は、時系列のタブとして扱う', () => {
@@ -130,5 +133,19 @@ describe('parseDetailKind', () => {
     expect(parseDetailKind('/cases/case-villa')).toBeUndefined();
     expect(parseDetailKind('/')).toBeUndefined();
     expect(parseDetailKind('/cases/case-villa/claims')).toBeUndefined();
+  });
+});
+
+describe('hypothesisHref・newHypothesisHref', () => {
+  it('仮説の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(hypothesisHref(ケースのId, 'hypothesis-caretaker', 'hypotheses')).toBe(
+      '/cases/case-villa/hypotheses/hypothesis-caretaker?tab=hypotheses'
+    );
+    expect(newHypothesisHref(ケースのId, 'hypotheses')).toBe('/cases/case-villa/hypotheses/new?tab=hypotheses');
+  });
+
+  it('仮説の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/hypotheses/hypothesis-caretaker')).toBe('hypothesis');
+    expect(parseDetailKind('/cases/case-villa/hypotheses/new')).toBe('newHypothesis');
   });
 });

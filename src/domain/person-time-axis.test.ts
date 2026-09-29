@@ -30,6 +30,7 @@ function 散歩のケース(claims: Claim[]): Case {
     relationships: [],
     interviews: [],
     crossChecks: [],
+    hypotheses: [],
     timelineOrder: [],
     personLaneOrder: [],
   };

@@ -6,6 +6,7 @@
  * ケースの一覧（summaries）は、ケースを開かずに一覧ページへ表示するために保持します。
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
  * 証言を削除すると、その証言を含む照合（CrossCheck）もあわせて削除します。照合は2件の証言がそろって初めて意味を持つためです。
+ * あわせて、仮説（Hypothesis）からも、その証言のひもづけを外します。仮説は証言が減っても見立てとして残るためです。
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
@@ -18,6 +19,7 @@
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
+import { detachClaimFromHypotheses } from '@/domain/hypotheses';
 import type { MentionKind } from '@/domain/mention';
 import { movePersonLane } from '@/domain/person-lane-order';
 import { moveTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
@@ -33,7 +35,7 @@ import {
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks';
+export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks' | 'hypotheses';
 
 /**
  * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。
@@ -81,7 +83,8 @@ type CaseStore = {
   upsertMany: (entries: UpsertEntry[]) => void;
   /**
    * 要素を削除します。他のデータから参照されている場合は例外を投げます。
-   * 証言を削除する場合は、その証言を含む照合もあわせて削除します（照合は削除を妨げる参照として扱いません）。
+   * 証言を削除する場合は、その証言を含む照合もあわせて削除し、仮説からはその証言のひもづけを外します
+   * （照合・仮説は削除を妨げる参照として扱いません）。
    */
   remove: (key: CollectionKey, id: Id) => void;
   /**
@@ -189,7 +192,11 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
         const items = current[key] as { id: Id }[];
         let nextCase = { ...current, [key]: items.filter((item) => item.id !== id) } as Case;
         if (key === 'claims') {
-          nextCase = { ...nextCase, crossChecks: nextCase.crossChecks.filter((crossCheck) => !crossCheck.claimIds.includes(id)) };
+          nextCase = {
+            ...nextCase,
+            crossChecks: nextCase.crossChecks.filter((crossCheck) => !crossCheck.claimIds.includes(id)),
+            hypotheses: detachClaimFromHypotheses(nextCase.hypotheses, id),
+          };
         }
 
         const violations = findCaseViolations(nextCase);

@@ -142,6 +142,40 @@ describe('ClaimDetail', () => {
     );
   });
 
+  it('この証言を使っている仮説へ、ひもづけている立場とともに、証言の詳細からたどれる', () => {
+    // 前提: 管理人の証言は、管理人の仮説の「管理人の機会」と、否定された仮説の「支える証言」にひもづいている
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    const 仮説 = screen.getByRole('region', { name: 'この証言を使っている仮説' });
+    const 項目 = within(仮説).getAllByRole('listitem');
+    expect(within(項目[0]!).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/hypotheses/hypothesis-caretaker'
+    );
+    expect(項目[0]).toHaveTextContent('管理人の機会');
+    expect(項目[1]).toHaveTextContent('持ち主は19時より前に別荘を離れた');
+    expect(項目[1]).toHaveTextContent('支える証言');
+    expect(項目[1]).toHaveTextContent('否定された');
+  });
+
+  it('どの仮説にも使われていない証言では、仮説の欄を表示しない', () => {
+    render(<ClaimDetail claimId="claim-report" />);
+
+    expect(screen.queryByRole('region', { name: 'この証言を使っている仮説' })).not.toBeInTheDocument();
+  });
+
+  it('仮説にひもづいた証言の削除の確認では、仮説からひもづけを外すことを伝え、削除すると仮説から外れる', async () => {
+    // 前提: 防犯カメラの証言は、否定された仮説の「反する証言」にだけひもづいている
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-police-camera" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた仮説1件から、ひもづけを外します。');
+    await user.click(screen.getByRole('button', { name: '削除する' }));
+
+    expect(openedCase().hypotheses[1]?.opposingClaimIds).toEqual(['claim-neighbor']);
+  });
+
   it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
     // 前提: 管理人の証言（claim-caretaker）は、関係「雇用主」の根拠になっている
     const user = userEvent.setup();

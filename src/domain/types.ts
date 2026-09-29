@@ -11,6 +11,7 @@
  * - 証言（Claim）: 「誰が・誰を経由して・何を述べたか」の1単位。人物の発言と、ユーザーの推測の総称
  * - 聴取（Interview）: 証言を得た機会（いつ・誰が・どの場で聴き取ったか）。複数の証言をまとめます
  * - 照合（CrossCheck）: 読み手が2件の証言を突き合わせた結果（裏付ける・食い違う・同じ事柄を述べている）
+ * - 仮説（Hypothesis）: 読み手の見立て。支える証言・反する証言と、対象の人物ごとの動機・機会・手段の証言をひもづけます
  * - 時刻参照（TimeRef）: 曖昧さを許す日時の表現
  *
  * 注意: このファイルは実データで書き起こして破綻しないかを確かめるためのドラフトです。
@@ -191,6 +192,55 @@ export type CrossCheck = {
 };
 
 /**
+ * 仮説の状態です。
+ * - open: 検討中
+ * - likely: 有力
+ * - rejected: 否定された（否定の理由を必ず持ちます）
+ */
+export type HypothesisStatus = 'open' | 'likely' | 'rejected';
+
+/**
+ * 被疑者を検討する観点です。
+ * - motive: 動機
+ * - opportunity: 機会
+ * - means: 手段
+ */
+export type HypothesisAspect = 'motive' | 'opportunity' | 'means';
+
+/** 仮説が対象とする人物1人と、観点（動機・機会・手段）ごとに整理した証言です。 */
+export type HypothesisTarget = {
+  personId: Id;
+  /** 観点ごとの、関連する証言です。 */
+  claimIds: Record<HypothesisAspect, Id[]>;
+};
+
+/**
+ * 読み手の見立て（仮説）です。
+ *
+ * 複数の見立てを同時に持ち、証言で1つずつ消していく作業を記録します。
+ * 判断（有力・否定）は仮説の側に置き、証言そのものには真偽の評価を付けません（証言は一次データのまま保ちます）。
+ * 否定された仮説も削除せずに残し、否定の理由（rejectionReason）を記録します。
+ * 否定の理由は、否定された仮説にだけ持たせます（否定されていない仮説の理由・空白だけの理由は src/domain/case-schema.ts で拒否します）。
+ * 同じ証言を、支える証言と反する証言の両方にひもづけることはできません。
+ */
+export type Hypothesis = {
+  id: Id;
+  /** 見出しです。 */
+  title: string;
+  /** 説明です。 */
+  description?: string;
+  status: HypothesisStatus;
+  /** 否定の理由です。否定された仮説にだけ持たせます。 */
+  rejectionReason?: string;
+  /** 仮説を支える証言です。 */
+  supportingClaimIds: Id[];
+  /** 仮説に反する証言です。 */
+  opposingClaimIds: Id[];
+  /** 仮説が対象とする人物です。同じ人物を2回以上含めることはできません。 */
+  targets: HypothesisTarget[];
+};
+
+/**
  * 人物間の関係です。
  *
  * 関係はユーザーが証言から導いた結論として扱い、根拠となる証言を basisClaimIds で参照します。
@@ -218,6 +268,8 @@ export type Case = {
   interviews: Interview[];
   /** 読み手が証言同士を突き合わせた照合です。 */
   crossChecks: CrossCheck[];
+  /** 読み手の見立て（仮説）です。 */
+  hypotheses: Hypothesis[];
   /**
    * 時系列ボードの証言の並び順です。要素は 'claim:証言のID' の形のキーです。
    * 載っていない証言は末尾に並べ、存在しない証言のキーは無視します（src/domain/timeline-order.ts）。

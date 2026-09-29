@@ -262,6 +262,43 @@ describe('照合', () => {
   });
 });
 
+describe('仮説', () => {
+  it('証言を削除すると、仮説の支える証言・反する証言・対象の人物の観点から、その証言のひもづけを外す', () => {
+    // 前提: 防犯カメラの証言は「持ち主は19時より前に別荘を離れた」仮説に反する証言としてひもづいている
+    useCaseStore.getState().remove('claims', 'claim-police-camera');
+
+    const 仮説 = 開いているケース().hypotheses.find((hypothesis) => hypothesis.id === 'hypothesis-left-early');
+    expect(仮説?.opposingClaimIds).toEqual(['claim-neighbor']);
+  });
+
+  it('対象の人物の観点にひもづけた証言を削除すると、観点からひもづけを外し、対象の人物は残す', () => {
+    // 前提: 報道の証言を、管理人の仮説の「手段」にひもづけておく（報道の証言は他のデータから参照されていない）
+    const [管理人の仮説] = 開いているケース().hypotheses;
+    useCaseStore.getState().upsert('hypotheses', {
+      ...管理人の仮説!,
+      targets: [{ personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: ['claim-report'] } }],
+    });
+
+    useCaseStore.getState().remove('claims', 'claim-report');
+
+    expect(開いているケース().hypotheses[0]?.targets).toEqual([
+      { personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: [] } },
+    ]);
+  });
+
+  it('仮説の対象になっている人物は削除できない', () => {
+    const 仮説だけが参照する人物: Person = { id: 'person-suspect', name: '謎の来訪者', kind: 'individual' };
+    useCaseStore.getState().upsert('persons', 仮説だけが参照する人物);
+    const [管理人の仮説] = 開いているケース().hypotheses;
+    useCaseStore.getState().upsert('hypotheses', {
+      ...管理人の仮説!,
+      targets: [{ personId: 'person-suspect', claimIds: { motive: [], opportunity: [], means: [] } }],
+    });
+
+    expect(() => useCaseStore.getState().remove('persons', 'person-suspect')).toThrow('他のデータから参照されているため削除できません');
+  });
+});
+
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
 const 書籍の取材: Interview = {
   id: 'interview-caretaker-book',
