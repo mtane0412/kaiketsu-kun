@@ -95,6 +95,7 @@ export const sampleFictionalCase: Case = {
       basisClaimIds: ['claim-user-guess'],
     },
   ],
+  interviews: [],
   timelineOrder: [
     'claim:claim-caretaker',
     'claim:claim-police-camera',

@@ -12,6 +12,7 @@
  * ソース（Source）を人物とは別の種類で持っていた頃のデータは、ソースを人物に統合します（migrateLegacySources）。
  * 日時を区間で持っていた頃のデータは、最も早い時点だけを日時として引き継ぎます（migrateLegacyTimeRef）。
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
+ * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
@@ -134,6 +135,7 @@ const caseSchema = z.object({
       mentionedPersonIds: z.array(idSchema),
       when: timeRefSchema.optional(),
       placeId: idSchema.optional(),
+      interviewId: idSchema.optional(),
     })
   ),
   relationships: z.array(
@@ -146,6 +148,20 @@ const caseSchema = z.object({
       basisClaimIds: z.array(idSchema),
     })
   ),
+  // 聴取を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
+  interviews: z
+    .array(
+      z.object({
+        id: idSchema,
+        subjectPersonId: idSchema,
+        interviewerPersonId: idSchema.optional(),
+        at: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+        placeId: idSchema.optional(),
+        subjectRole: z.string().optional(),
+        documentRef: z.string().optional(),
+      })
+    )
+    .optional(),
   // 並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で当時の表示順を補う）
   timelineOrder: z.array(z.string()).optional(),
   // 列の並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の並び順を補う）
@@ -153,7 +169,7 @@ const caseSchema = z.object({
 });
 
 /**
- * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由）を列挙します。
+ * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
 export function findCaseViolations(target: Case): string[] {
@@ -162,6 +178,7 @@ export function findCaseViolations(target: Case): string[] {
   const personIds = idsOf(target.persons);
   const placeIds = idsOf(target.places);
   const claimIds = idsOf(target.claims);
+  const interviewsById = new Map(target.interviews.map((interview) => [interview.id, interview]));
 
   const mentionTargets: Record<MentionKind, { ids: Set<string>; name: string }> = {
     person: { ids: personIds, name: '人物' },
@@ -202,6 +219,23 @@ export function findCaseViolations(target: Case): string[] {
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
     // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
     checkMentions(claim.content);
+    if (claim.interviewId !== undefined) {
+      const interview = interviewsById.get(claim.interviewId);
+      if (interview === undefined) {
+        violations.push(`存在しない聴取を参照しています: ${claim.interviewId}`);
+      } else {
+        // 聴取は「相手がこの証言を述べた（伝えた）機会」を表すため、相手が証言に関わらないひもづけは誤りとする
+        const involvedPersonIds = [...(claim.speaker.kind === 'person' ? claim.speaker.personIds : []), ...claim.viaPersonIds];
+        if (!involvedPersonIds.includes(interview.subjectPersonId)) {
+          violations.push(`聴取の相手が、証言の発言者にも経由にも含まれていません: ${claim.id}`);
+        }
+      }
+    }
+  }
+  for (const interview of target.interviews) {
+    check(personIds, interview.subjectPersonId, '人物');
+    check(personIds, interview.interviewerPersonId, '人物');
+    check(placeIds, interview.placeId, '場所');
   }
   for (const relationship of target.relationships) {
     check(personIds, relationship.fromPersonId, '人物');
@@ -312,12 +346,13 @@ export function parseCase(data: unknown): Case {
     throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], ...current } = result.data;
+  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
   let parsed: Case = {
     ...current,
     persons,
     personLaneOrder,
+    interviews,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
   };
   // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある

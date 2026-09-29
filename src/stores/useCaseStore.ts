@@ -32,7 +32,7 @@ import {
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships';
+export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews';
 
 /**
  * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。

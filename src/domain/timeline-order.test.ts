@@ -25,6 +25,7 @@ function ケース(parts: Partial<Case>): Case {
     places: [],
     claims: [],
     relationships: [],
+    interviews: [],
     timelineOrder: [],
     personLaneOrder: [],
     ...parts,

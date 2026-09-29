@@ -10,10 +10,14 @@
  * 日時も本文に書きます。「@」に続けて日時を書くと候補を示し、選ぶと日時のメンションになります
  * （受け付ける表記は src/domain/date-input.ts を参照してください）。
  * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
+ * 証言を得た聴取（Claim.interviewId）は、「聴取（任意）」の欄で選びます。聴取の相手は、発言者か経由のいずれかに
+ * 含まれている必要があります（src/domain/case-schema.ts）。発言者も経由も選んでいない状態で聴取を選んだ場合は、
+ * 聴取の相手を発言者にします。聴取の相手が自分の供述を述べる場合が最も多く、選び直す手間を省くためです。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。本文から読み取った参照の一覧と、書き方の案内を表示しません。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
+ * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
  *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
@@ -22,7 +26,7 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { DATE_MENTION_LABEL, MENTION_KIND_LABELS } from '@/domain/labels';
 import {
   claimToDraft,
@@ -35,9 +39,10 @@ import {
 } from '@/domain/mention';
 import { timelineKeyOf } from '@/domain/timeline-order';
 import { formatTimeRef } from '@/domain/time-ref';
-import type { Claim } from '@/domain/types';
+import { formatInterviewLabel } from '@/domain/interviews';
+import type { Claim, Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
-import { FormError, SubmitButton, TextField } from './fields';
+import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './SpeakerPicker';
@@ -48,7 +53,15 @@ import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft } from './S
 export type ClaimDefaults = {
   /** 項目と項目の間で書いた場合の、時系列の並び順の中での位置（0始まり）です。保存した証言を、この位置に並べます。 */
   insertIndex?: number;
+  /**
+   * 証言を得た聴取のIDです。指定すると、聴取と、聴取の相手を発言者に選んだ状態で始めます。
+   * 同じ聴取の証言を続けて書き足すときに、聴取を引き継ぐために使います。
+   */
+  interviewId?: Id;
 };
+
+/** 聴取を選ばない場合の、選択肢の値です。 */
+const NO_INTERVIEW = '';
 
 type ClaimFormProps = {
   initial?: Claim;
@@ -71,7 +84,15 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
   );
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => speakerToDraft(initial));
+  const [interviewId, setInterviewId] = useState<Id>(() => initial?.interviewId ?? defaults?.interviewId ?? NO_INTERVIEW);
+  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => {
+    const presetInterview = currentCase.interviews.find((interview) => interview.id === defaults?.interviewId);
+    if (initial === undefined && presetInterview !== undefined) {
+      return { personIds: [presetInterview.subjectPersonId], viaPersonIds: [] };
+    }
+    return speakerToDraft(initial);
+  });
+  const interviewFieldId = useId();
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +110,16 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
   ].filter((item) => item.description);
 
+  const interviewOf = (id: Id) => currentCase.interviews.find((interview) => interview.id === id);
+
+  const handleInterviewChange = (nextInterviewId: Id) => {
+    setInterviewId(nextInterviewId);
+    const interview = interviewOf(nextInterviewId);
+    if (interview && speaker.personIds.length === 0 && speaker.viaPersonIds.length === 0) {
+      setSpeaker({ personIds: [interview.subjectPersonId], viaPersonIds: [] });
+    }
+  };
+
   const handleCreate = (kind: MentionKind, name: string): DraftMention => {
     const mention = { kind, id: nanoid(), label: name };
     setPending((current) => [...current, { mention, entry: createEntry(kind, mention.id, name) }]);
@@ -102,6 +133,12 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
+    const interview = interviewOf(interviewId);
+    if (interview && ![...speaker.personIds, ...speaker.viaPersonIds].includes(interview.subjectPersonId)) {
+      const subjectName = labelOf('person', interview.subjectPersonId);
+      setError(`聴取の相手（${subjectName}）を、発言者か経由に選んでください`);
+      return;
+    }
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
     const claim: Claim = {
       id: initial?.id ?? nanoid(),
@@ -112,6 +149,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     };
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
+    if (interview) claim.interviewId = interview.id;
 
     // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
     const usedIds = new Set([
@@ -171,6 +209,26 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
             : '例: @1998-08-12T21:00 ごろ、@湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
         }
       />
+      {(!compact || interviewId !== NO_INTERVIEW) && (
+        <div>
+          <label htmlFor={interviewFieldId} className={LABEL_CLASS}>
+            聴取（任意）
+          </label>
+          <select
+            id={interviewFieldId}
+            value={interviewId}
+            onChange={(event) => handleInterviewChange(event.target.value)}
+            className={INPUT_CLASS}
+          >
+            <option value={NO_INTERVIEW}>聴取なし</option>
+            {currentCase.interviews.map((interview) => (
+              <option key={interview.id} value={interview.id}>
+                {formatInterviewLabel(currentCase, interview)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {!compact && (
         <>
         <p className="text-xs text-muted-foreground">

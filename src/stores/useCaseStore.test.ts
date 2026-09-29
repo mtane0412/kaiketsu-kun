@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import type { Case, Claim } from '@/domain/types';
+import type { Case, Claim, Interview } from '@/domain/types';
 import { CASE_KEY_PREFIX, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
 import { useCaseStore } from './useCaseStore';
 
@@ -211,6 +211,55 @@ describe('remove', () => {
       '他のデータから参照されているため削除できません'
     );
     expect(開いているケース()).toEqual(sampleFictionalCase);
+  });
+});
+
+/** 管理人が、書籍の著者の取材に応じた機会です。 */
+const 書籍の取材: Interview = {
+  id: 'interview-caretaker-book',
+  subjectPersonId: 'person-caretaker',
+  interviewerPersonId: 'person-book',
+  at: '2018-05',
+};
+
+describe('聴取', () => {
+  it('聴取を登録し、証言をその聴取にひもづけられる', () => {
+    useCaseStore.getState().upsert('interviews', 書籍の取材);
+    const 管理人の証言 = 開いているケース().claims.find((claim) => claim.id === 'claim-caretaker');
+    if (!管理人の証言) throw new Error('前提の証言がありません');
+
+    useCaseStore.getState().upsert('claims', { ...管理人の証言, interviewId: 書籍の取材.id });
+
+    expect(開いているケース().interviews).toEqual([書籍の取材]);
+    expect(開いているケース().claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(書籍の取材.id);
+  });
+
+  it('聴取の相手が発言者にも経由にも含まれない証言は、ひもづけられず、ケースを変更しない', () => {
+    useCaseStore.getState().upsert('interviews', 書籍の取材);
+    const ひもづける前 = 開いているケース();
+    const 隣家の住人の証言 = ひもづける前.claims.find((claim) => claim.id === 'claim-neighbor');
+    if (!隣家の住人の証言) throw new Error('前提の証言がありません');
+
+    expect(() => useCaseStore.getState().upsert('claims', { ...隣家の住人の証言, interviewId: 書籍の取材.id })).toThrow(
+      '聴取の相手が、証言の発言者にも経由にも含まれていません'
+    );
+    expect(開いているケース()).toEqual(ひもづける前);
+  });
+
+  it('証言がひもづいている聴取は削除できず、証言がひもづいていない聴取は削除できる', () => {
+    useCaseStore.getState().upsertMany([
+      { key: 'interviews', entity: 書籍の取材 },
+      { key: 'interviews', entity: { id: 'interview-empty', subjectPersonId: 'person-neighbor' } },
+    ]);
+    const 管理人の証言 = 開いているケース().claims.find((claim) => claim.id === 'claim-caretaker');
+    if (!管理人の証言) throw new Error('前提の証言がありません');
+    useCaseStore.getState().upsert('claims', { ...管理人の証言, interviewId: 書籍の取材.id });
+
+    expect(() => useCaseStore.getState().remove('interviews', 書籍の取材.id)).toThrow(
+      '他のデータから参照されているため削除できません'
+    );
+    useCaseStore.getState().remove('interviews', 'interview-empty');
+    expect(開いているケース().interviews.map((interview) => interview.id)).toEqual([書籍の取材.id]);
   });
 });
 

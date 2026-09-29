@@ -6,8 +6,9 @@
  * 人物・場所1件の編集と削除に加えて、「証言 → 人物 → その人物の別の証言」と連想してたどれるよう、
  * その人物・場所から逆引きした証言（導出は buildPersonDetail・buildPlaceDetail を参照）と、
  * メモのメンションでつながった関連するエンティティ（findRelatedEntities）へのリンクを並べます。
- * 人物の詳細には、これらに加えて、人物どうしの関係を登録・編集する節（RelationshipSection）を並べます。
- * 関係は場所には無いため、この節は人物の詳細にだけ渡します（extraSection）。
+ * 人物の詳細には、これらに加えて、人物どうしの関係を登録・編集する節（RelationshipSection）と、
+ * その人物の聴取ごとに証言を並べる「供述の変遷」の節（InterviewSection）を並べます。
+ * 関係と聴取は場所には無いため、これらの節は人物の詳細にだけ渡します（extraSection）。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、証言・エンティティへのリンクに引き継ぎます。
  * 人物・場所を新しく登録する画面（NewPersonDetail・NewPlaceDetail）も、同じ場所に並べます。
  * サイドバーの一覧の「＋」から開き、保存できたら、登録したエンティティの詳細へ移ります。
@@ -30,6 +31,7 @@ import { ClaimLink } from './ClaimLink';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
+import { InterviewSection } from './InterviewSection';
 import { RelationshipSection } from './RelationshipSection';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, personHref, placeHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
@@ -83,8 +85,8 @@ type EntityDetailShellProps = {
   claimGroups: EntityClaimGroup[];
   relatedEntities: RelatedEntity[];
   /**
-   * 編集フォームの次に並べる節です。人物では、人物どうしの関係（RelationshipSection）を渡します。
-   * 場所には関係が無いため、場所では渡しません。
+   * 編集フォームの次に並べる節です。人物では、人物どうしの関係（RelationshipSection）と供述の変遷（InterviewSection）を渡します。
+   * 場所には関係も聴取も無いため、場所では渡しません。
    */
   extraSection?: ReactNode;
 };
@@ -197,7 +199,12 @@ export function PersonDetail({ personId }: { personId: Id }) {
       form={(onDone) => <PersonForm initial={detail.person} onDone={onDone} />}
       claimGroups={detail.claimGroups}
       relatedEntities={detail.relatedEntities}
-      extraSection={<RelationshipSection personId={personId} personName={detail.person.name} tab={tab} />}
+      extraSection={
+        <>
+          <RelationshipSection personId={personId} personName={detail.person.name} tab={tab} />
+          <InterviewSection personId={personId} tab={tab} />
+        </>
+      }
     />
   );
 }
