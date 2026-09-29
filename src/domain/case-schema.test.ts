@@ -201,6 +201,20 @@ describe('parseCase', () => {
     expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
   });
 
+  it('区間表記の日時と、区間表記の日時のメンションを受け付ける', () => {
+    const 区間 = '1998-08-12T19:10/19:40';
+    const データ = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim, index) =>
+        index === 0
+          ? { ...claim, content: `@[1998年8月12日 19:10〜19:40](date:${区間})に別荘の周りを歩いていた。`, when: 区間 }
+          : claim
+      ),
+    };
+
+    expect(parseCase(toJsonData(データ)).claims[0]?.when).toBe(区間);
+  });
+
   it('本文に解釈できない日時のメンションを含む証言を拒否する', () => {
     const データ = {
       ...sampleFictionalCase,

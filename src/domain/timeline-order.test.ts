@@ -69,6 +69,20 @@ describe('resolveTimelineOrder', () => {
 });
 
 describe('allowedIndexRange', () => {
+  it('区間表記の日時も、区間の重なりで動かせる範囲を決める', () => {
+    // 前提: 19:10〜19:40 の証言は、19:30 の証言とは重なり、19:50 の証言より完全に前
+    const target = ケース({
+      claims: [
+        証言('claim-seen-at-lake', '2026-09-28T19:30'),
+        証言('claim-heard-scream', '2026-09-28T19:50'),
+        証言('claim-walking', '2026-09-28T19:10/19:40'),
+      ],
+      timelineOrder: ['claim:claim-seen-at-lake', 'claim:claim-heard-scream', 'claim:claim-walking'],
+    });
+
+    expect(allowedIndexRange(target, 'claim:claim-walking')).toEqual({ min: 0, max: 1 });
+  });
+
   it('日時を持たない項目は、どこへでも動かせる', () => {
     const target = ケース({
       claims: [証言('claim-arrival', 八月十日), 証言('claim-memo'), 証言('claim-search', 八月十五日)],
