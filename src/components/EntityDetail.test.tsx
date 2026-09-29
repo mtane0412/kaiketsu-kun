@@ -290,3 +290,91 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
     expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/places/${登録した場所!.id}?tab=map`);
   });
 });
+
+describe('人物の識別子', () => {
+  /** 別荘の持ち主と管理人が、表記の違う同じ電話番号を持つケースです。 */
+  const 電話番号が同じケース: Case = {
+    ...sampleFictionalCase,
+    persons: sampleFictionalCase.persons.map((person) => {
+      if (person.id === 'person-owner') return { ...person, identifiers: [{ type: '電話番号', value: '090-1234-5678' }] };
+      if (person.id === 'person-caretaker') return { ...person, identifiers: [{ type: '携帯電話', value: '09012345678' }] };
+      return person;
+    }),
+  };
+
+  it('人物の編集で、識別子を複数登録できる', async () => {
+    const user = userEvent.setup();
+    render(<PersonDetail personId="person-owner" />);
+
+    await user.click(screen.getByRole('button', { name: '識別子を追加' }));
+    await user.type(screen.getByRole('combobox', { name: '識別子1の種類' }), '電話番号');
+    await user.type(screen.getByRole('textbox', { name: '識別子1の値' }), '090-1234-5678');
+    await user.click(screen.getByRole('button', { name: '識別子を追加' }));
+    await user.type(screen.getByRole('combobox', { name: '識別子2の種類' }), '車両ナンバー');
+    await user.type(screen.getByRole('textbox', { name: '識別子2の値' }), '品川 300 あ 12-34');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(openedCase().persons.find((person) => person.id === 'person-owner')?.identifiers).toEqual([
+      { type: '電話番号', value: '090-1234-5678' },
+      { type: '車両ナンバー', value: '品川 300 あ 12-34' },
+    ]);
+  });
+
+  it('登録済みの識別子を表示し、削除できる', async () => {
+    const user = userEvent.setup();
+    openTestCase(電話番号が同じケース);
+    render(<PersonDetail personId="person-owner" />);
+
+    expect(screen.getByRole('combobox', { name: '識別子1の種類' })).toHaveValue('電話番号');
+    expect(screen.getByRole('textbox', { name: '識別子1の値' })).toHaveValue('090-1234-5678');
+
+    await user.click(screen.getByRole('button', { name: '識別子1を削除' }));
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(openedCase().persons.find((person) => person.id === 'person-owner')?.identifiers).toBeUndefined();
+  });
+
+  it('種類と値の両方が空の行は保存せず、片方だけが空の行は保存せずに理由を示す', async () => {
+    const user = userEvent.setup();
+    render(<PersonDetail personId="person-owner" />);
+
+    await user.click(screen.getByRole('button', { name: '識別子を追加' }));
+    await user.click(screen.getByRole('button', { name: '識別子を追加' }));
+    await user.type(screen.getByRole('textbox', { name: '識別子2の値' }), '090-1234-5678');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(screen.getByText(/識別子の種類と値を入力してください/)).toBeInTheDocument();
+    expect(openedCase().persons.find((person) => person.id === 'person-owner')?.identifiers).toBeUndefined();
+  });
+
+  it('同じ識別子を持つ人物を、一致した識別子とともに、互いの詳細に表示する', () => {
+    openTestCase(電話番号が同じケース);
+    const { unmount } = render(<PersonDetail personId="person-owner" />);
+
+    const 持ち主から = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
+    const 管理人へのリンク = within(持ち主から).getByRole('link', { name: /管理人/ });
+    expect(管理人へのリンク).toHaveAttribute('href', '/cases/case-lakeside/persons/person-caretaker');
+    expect(管理人へのリンク).toHaveTextContent('携帯電話: 09012345678');
+    unmount();
+
+    render(<PersonDetail personId="person-caretaker" />);
+    const 管理人から = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
+    expect(within(管理人から).getByRole('link', { name: /別荘の持ち主/ })).toHaveTextContent('電話番号: 090-1234-5678');
+  });
+
+  it('識別子を持つが一致する人物がいない場合は、いないことを示し、識別子を持たない人物では節を表示しない', () => {
+    // 前提: 管理人の識別子を外すと、別荘の持ち主の電話番号と一致する人物はいない
+    openTestCase({
+      ...電話番号が同じケース,
+      persons: 電話番号が同じケース.persons.map((person) =>
+        person.id === 'person-caretaker' ? { ...person, identifiers: undefined } : person
+      ),
+    });
+    const { unmount } = render(<PersonDetail personId="person-owner" />);
+    expect(within(screen.getByRole('region', { name: '同じ識別子を持つ人物' })).getByText('同じ識別子を持つ人物はいません。')).toBeInTheDocument();
+    unmount();
+
+    render(<PersonDetail personId="person-police" />);
+    expect(screen.queryByRole('region', { name: '同じ識別子を持つ人物' })).not.toBeInTheDocument();
+  });
+});

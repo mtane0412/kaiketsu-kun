@@ -111,6 +111,7 @@ const caseSchema = z.object({
       name: z.string(),
       kind: z.enum(PERSON_KINDS).default(DEFAULT_PERSON_KIND),
       aliases: z.array(z.string()).optional(),
+      identifiers: z.array(z.object({ type: z.string(), value: z.string() })).optional(),
       imageDataUrl: imageDataUrlSchema.optional(),
       iconText: z.string().min(1, 'アイコンの文字を指定しない場合は、項目ごと省略してください').optional(),
       note: z.string().optional(),
@@ -231,7 +232,8 @@ const caseSchema = z.object({
 /**
  * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ、
  * 同じ証言どうしの照合、理由の無い照合、見出しの無い仮説、否定の理由と状態の食い違い、
- * 支える証言と反する証言の両方にひもづけた証言、仮説の対象の重複、内容の無い未了事項、未了事項のひもづけの重複）を列挙します。
+ * 支える証言と反する証言の両方にひもづけた証言、仮説の対象の重複、内容の無い未了事項、未了事項のひもづけの重複、
+ * 種類か値の欠けた人物の識別子）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
 export function findCaseViolations(target: Case): string[] {
@@ -270,6 +272,13 @@ export function findCaseViolations(target: Case): string[] {
 
   for (const entity of [...target.persons, ...target.places]) {
     if (entity.note !== undefined) checkMentions(entity.note);
+  }
+  for (const person of target.persons) {
+    // 識別子は値で突き合わせるため、種類か値の欠けた識別子は受け付けない
+    const hasBlankIdentifier = (person.identifiers ?? []).some(
+      (identifier) => identifier.type.trim() === '' || identifier.value.trim() === ''
+    );
+    if (hasBlankIdentifier) violations.push(`識別子の種類と値を入力してください: ${person.name}`);
   }
   for (const claim of target.claims) {
     if (claim.speaker.kind === 'person') claim.speaker.personIds.forEach((id) => check(personIds, id, '人物'));

@@ -4,12 +4,12 @@
  * サイドバーは SidebarProvider の中でしか動かないため、実際の画面と同じく
  * ケースを開く枠（CaseGate）と SidebarProvider の中に描画します。
  */
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { openTestCase } from '@/test/open-case';
-import { resetMockNavigation } from '@/test/mock-navigation';
+import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { CaseGate } from './CaseGate';
 import { CaseSidebar } from './CaseSidebar';
@@ -176,6 +176,49 @@ describe('CaseSidebar', () => {
         '/cases/case-old-well'
       );
       expect(screen.getByRole('menuitem', { name: 'ケースの一覧' })).toHaveAttribute('href', '/');
+    });
+  });
+  describe('検索', () => {
+    it('検索窓でEnterキーを押すと、検索語を持たせた検索結果のページへ移る', async () => {
+      const user = userEvent.setup();
+      resetMockNavigation(`/cases/${sampleFictionalCase.id}?tab=map`);
+      サイドバーを描画する();
+
+      await user.type(screen.getByRole('searchbox', { name: 'ボード全体を検索' }), '管理人{Enter}');
+
+      expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}/search?tab=map&q=${encodeURIComponent('管理人')}`);
+    });
+
+    it('URLの検索語が変わると、検索窓の文字列もそれに合わせる', () => {
+      resetMockNavigation(`/cases/${sampleFictionalCase.id}/search?q=${encodeURIComponent('管理人')}`);
+      サイドバーを描画する();
+      const 検索窓 = () => screen.getByRole('searchbox', { name: 'ボード全体を検索' });
+      expect(検索窓()).toHaveValue('管理人');
+
+      act(() => mockRouter.push(`/cases/${sampleFictionalCase.id}/search?q=${encodeURIComponent('隣家')}`));
+      expect(検索窓()).toHaveValue('隣家');
+
+      act(() => mockRouter.push(`/cases/${sampleFictionalCase.id}`));
+      expect(検索窓()).toHaveValue('');
+    });
+
+    it('IMEの変換中のEnterキーでは、検索結果のページへ移らない', () => {
+      サイドバーを描画する();
+      const 検索窓 = screen.getByRole('searchbox', { name: 'ボード全体を検索' });
+
+      fireEvent.change(検索窓, { target: { value: 'かんりにん' } });
+      fireEvent.keyDown(検索窓, { key: 'Enter', isComposing: true });
+
+      expect(mockRouter.push).not.toHaveBeenCalled();
+    });
+
+    it('空白だけの検索語では、検索結果のページへ移らない', async () => {
+      const user = userEvent.setup();
+      サイドバーを描画する();
+
+      await user.type(screen.getByRole('searchbox', { name: 'ボード全体を検索' }), '  {Enter}');
+
+      expect(mockRouter.push).not.toHaveBeenCalled();
     });
   });
 });

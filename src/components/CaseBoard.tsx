@@ -12,7 +12,7 @@
  * （/claims/<証言のID>・/persons/<人物のID>・/places/<場所のID>）と、人物・場所を新しく登録するルート
  * （/persons/new・/places/new）と、仮説の詳細・登録のルート（/hypotheses/<仮説のID>・/hypotheses/new）と、
  * 未了事項の詳細・登録のルート（/tasks/<未了事項のID>・/tasks/new）では、
- * 詳細（children）をボードと入れ替えて表示します。
+ * 詳細（children）をボードと入れ替えて表示します。ボード全体の検索結果のルート（/search）も、同じく詳細として入れ替えます。
  * 以前はボードの横へ並べる2ペインでしたが、サイドバーを導入したあとは、サイドバーを押したときに
  * ボードと詳細のどちらが入れ替わったのかが分かりづらかったため、メインのカラムを1つに戻しました。
  *
@@ -49,6 +49,7 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
   place: '場所の詳細',
   hypothesis: '仮説の詳細',
   task: '未了事項の詳細',
+  search: '検索結果',
   newPerson: '人物の登録',
   newPlace: '場所の登録',
   newHypothesis: '仮説の登録',

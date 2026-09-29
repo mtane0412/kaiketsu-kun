@@ -2,6 +2,7 @@
  * 人物・場所の入力フォーム
  *
  * 人物には、種別（人物・組織・記録・媒体・物。新規登録の既定値は人物）を選べます。
+ * 人物には、電話番号・車両ナンバーなどの識別子を複数登録できます（IdentifierField）。
  * 人物には、画像が無い場合にアイコンへ表示する1文字を指定できます（省略した場合は名前の先頭の文字。src/domain/person-icon.ts を参照）。
  * メモには「@」で他の人物・場所を書けます（メンション。形式は src/domain/mention.ts を参照）。
  * メモのメンションは、エンティティ同士の関連の元になります。未登録の名前は候補の一覧から新規作成でき、
@@ -30,6 +31,7 @@ import type { Coordinates, Id, Person, PersonKind, Place } from '@/domain/types'
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { CoordinateField } from './CoordinateField';
+import { IdentifierField, identifiersToRows, rowsToIdentifiers } from './IdentifierField';
 import { ImageField } from './ImageField';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
@@ -108,6 +110,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
   const [kind, setKind] = useState<PersonKind>(initial?.kind ?? DEFAULT_PERSON_KIND);
   const kindFieldId = useId();
   const [aliases, setAliases] = useState(initial?.aliases?.join('、') ?? '');
+  const [identifierRows, setIdentifierRows] = useState(() => identifiersToRows(initial?.identifiers));
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
   const [iconText, setIconText] = useState(initial?.iconText ?? '');
   const { field: noteField, note, newEntries } = useNoteField('person', initial);
@@ -122,6 +125,8 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
 
     const person: Person = { id: initial?.id ?? nanoid(), name: name.trim(), kind };
     if (aliasList.length > 0) person.aliases = aliasList;
+    const identifiers = rowsToIdentifiers(identifierRows);
+    if (identifiers.length > 0) person.identifiers = identifiers;
     if (imageDataUrl) person.imageDataUrl = imageDataUrl;
     // アイコンに入るのは1文字のため、先頭の1文字だけを保存する
     const iconCharacter = firstCharacter(iconText);
@@ -158,6 +163,7 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
         </select>
       </div>
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
+      <IdentifierField rows={identifierRows} onChange={setIdentifierRows} />
       <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
       <TextField
         label="アイコンの文字（1文字。画像が無い場合に表示）"

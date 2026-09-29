@@ -47,6 +47,21 @@ export type TimeRef = string;
 export type PersonKind = 'individual' | 'organization' | 'record' | 'object';
 
 /**
+ * 人物を識別する値（電話番号・車両ナンバー・口座番号など）です。
+ *
+ * 別々の証言に出てくる人物や物を、識別子の値で突き合わせる（名寄せする）ために持ちます。
+ * 値が一致する人物同士は、人物の詳細に「同じ識別子を持つ人物」として示します（src/domain/search.ts）。
+ * 値の比較は、全角と半角・ハイフン・空白・英字の大文字と小文字の違いを吸収します。種類は比較に使いません。
+ * 種類と値はどちらも必須です（空白だけの種類・値は src/domain/case-schema.ts で拒否します）。
+ */
+export type PersonIdentifier = {
+  /** 識別子の種類です（「電話番号」「車両ナンバー」など、任意の文字列です）。 */
+  type: string;
+  /** 識別子の値です。入力された表記のまま持ちます。 */
+  value: string;
+};
+
+/**
  * ケースに登場する人物です。
  *
  * 個人だけでなく、組織（警察など）・記録装置（防犯カメラなど）・媒体（新聞、書籍、調書など）を含む、
@@ -62,6 +77,8 @@ export type Person = {
   kind: PersonKind;
   /** 別名・旧姓・偽名などです。 */
   aliases?: string[];
+  /** 電話番号・車両ナンバーなどの識別子です。 */
+  identifiers?: PersonIdentifier[];
   /** 縮小済みの画像（data URL）です。顔写真のほか、組織のロゴや紙面の画像も入ります。 */
   imageDataUrl?: string;
   /**
