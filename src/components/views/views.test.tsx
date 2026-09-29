@@ -50,6 +50,19 @@ describe('TimelineView', () => {
     expect(within(時系列).getAllByText('1998年8月12日 19:00').length).toBeGreaterThan(0);
   });
 
+  it('照合を持つ証言のカードに、照合の件数を種類別に小さく示す', () => {
+    // 前提: 隣家の住人の証言は、裏付ける照合1件と食い違う照合1件を持ち、ユーザーの推測は照合を持たない
+    render(<TimelineView target={sampleFictionalCase} />);
+
+    const 隣家の住人のカード = screen.getByText(/明かりがついていて/).closest('li');
+    expect(隣家の住人のカード).not.toBeNull();
+    expect(within(隣家の住人のカード!).getByText('照合')).toBeInTheDocument();
+    expect(within(隣家の住人のカード!).getByText('裏付け1・食い違い1')).toBeInTheDocument();
+
+    const 推測のカード = screen.getByText(/金銭の問題があった可能性/).closest('li');
+    expect(within(推測のカード!).queryByText('照合')).not.toBeInTheDocument();
+  });
+
   it('出来事の束を表示しない（語られる出来事は、すべて誰かの証言として並べる）', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 

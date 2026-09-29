@@ -12,7 +12,10 @@
  * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
  *
- * カードの下段（述べる場所・言及している人物・資料内の位置）は、項目名を文字で書かずアイコンで示します。
+ * 照合の件数（crossCheckCounts）を渡された場合は、カードの下段に種類別の件数を小さく示します（時系列ビューで使います）。
+ * 照合の中身（相手と理由）は、証言の詳細で確認します。
+ *
+ * カードの下段（述べる場所・言及している人物・資料内の位置・照合）は、項目名を文字で書かずアイコンで示します。
  * 1件のカードに「開く」「述べる場所」「言及」のような短い文字が散らばると、証言そのものより項目名が目に付くためです。
  * 項目名は読み上げのために sr-only の文字として残し、マウスにはツールチップ（title）で示します。
  *
@@ -25,10 +28,12 @@
  */
 'use client';
 
-import { AtSign, BookMarked, ChevronRight, MapPin } from 'lucide-react';
+import { AtSign, BookMarked, ChevronRight, GitCompareArrows, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
+import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks';
+import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
 import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import { EntityAvatar } from '../EntityAvatar';
@@ -41,6 +46,16 @@ const MENTION_STYLES: Record<SegmentKind, string> = {
   place: 'bg-mention-place text-mention-place-foreground',
   date: 'bg-mention-date text-mention-date-foreground',
 };
+
+/**
+ * 照合の件数を「裏付け1・食い違い1」の形にします。件数が0の種類は書きません。
+ * 表示する種類の順は、CROSS_CHECK_KINDS の順です。
+ */
+function formatCrossCheckCounts(counts: CrossCheckCounts): string {
+  return CROSS_CHECK_KINDS.filter((kind) => counts[kind] > 0)
+    .map((kind) => `${CROSS_CHECK_KIND_SHORT_LABELS[kind]}${counts[kind]}`)
+    .join('・');
+}
 
 /** カード全体に広げたリンクの当たり判定より手前に置く要素のクラスです。 */
 const ABOVE_CARD_LINK = 'relative z-10';
@@ -66,9 +81,11 @@ type ClaimCardProps = {
   tab: TabKey;
   /** 述べる場所を、下段ではなくカードの上部に場所の色で示すかどうかです。人物の動きビューで使います。 */
   emphasizePlace?: boolean;
+  /** この証言を含む照合の、種類別の件数です。照合が無い証言や、件数を示さないビューでは省略します。 */
+  crossCheckCounts?: CrossCheckCounts;
 };
 
-export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false }: ClaimCardProps) {
+export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, crossCheckCounts }: ClaimCardProps) {
   const { claim } = view;
   const caseId = useCaseId();
 
@@ -173,6 +190,11 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false }: Cl
         {claim.locator && (
           <DetailRow label="資料内の位置" icon={<BookMarked className="size-3.5" />}>
             {claim.locator}
+          </DetailRow>
+        )}
+        {crossCheckCounts && (
+          <DetailRow label="照合" icon={<GitCompareArrows className="size-3.5" />}>
+            {formatCrossCheckCounts(crossCheckCounts)}
           </DetailRow>
         )}
       </dl>

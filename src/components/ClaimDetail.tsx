@@ -3,6 +3,8 @@
  *
  * ボード（CaseBoard）の横に並べて表示します。幅が狭い画面では、ボードの代わりに、これだけを表示します。
  * 証言1件の編集（見出し・本文・発言者・日時）と削除を、この1か所で行います。
+ * 証言を削除すると、その証言を含む照合もあわせて削除されるため、確認の画面で照合の件数を伝えます。
+ * 読み手が他の証言と突き合わせた結果（照合）の一覧と登録・編集・削除は、CrossCheckSection が担います。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
@@ -22,6 +24,7 @@ import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimLink } from './ClaimLink';
+import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
@@ -80,6 +83,13 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
 
   const { view, previous, next, relatedClaimGroups } = detail;
   const mentionedEntities = mentionedEntitiesOf(view);
+  const crossCheckCount = currentCase.crossChecks.filter((crossCheck) => crossCheck.claimIds.includes(claimId)).length;
+  // 証言の削除は照合も巻き込むため、消える照合があることを確認の画面で伝える
+  const deleteDescription = [
+    'この証言をケースから削除します。',
+    ...(crossCheckCount > 0 ? [`この証言を含む照合${crossCheckCount}件も削除します。`] : []),
+    'この操作は取り消せません。',
+  ].join('');
 
   const handleDelete = () => {
     try {
@@ -106,7 +116,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
               <DeleteConfirmButton
                 label="この証言を削除"
                 title="この証言を削除しますか？"
-                description="この証言をケースから削除します。この操作は取り消せません。"
+                description={deleteDescription}
                 onConfirm={handleDelete}
               />
             </div>
@@ -142,6 +152,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           </ul>
         </nav>
       )}
+
+      <CrossCheckSection claimId={claimId} tab={tab} />
 
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">
