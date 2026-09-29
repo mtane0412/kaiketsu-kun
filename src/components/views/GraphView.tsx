@@ -235,6 +235,29 @@ function NodeFace({ node, clipPathId }: { node: PositionedGraphNode; clipPathId:
   );
 }
 
+/**
+ * 画像を登録した人物のノードに、種別の色の縁取りを描きます。
+ * 画像は丸の塗り（種別の色）を覆うため、縁取りが無いと種別を見分けられなくなるためです。
+ * 画像の無いノードと、個人（人物）のノードには描きません。
+ */
+function PersonKindOutline({ node }: { node: PositionedGraphNode }) {
+  if (node.kind !== 'person' || !node.imageDataUrl) return null;
+  const kind = personKindOf(node);
+  const outline = PERSON_KIND_STYLES[kind].nodeOutline;
+  if (!outline) return null;
+  return (
+    <circle
+      cx={node.x}
+      cy={node.y}
+      r={NODE_RADIUS[node.kind]}
+      fill="none"
+      strokeWidth={3}
+      data-person-kind-outline={kind}
+      className={outline}
+    />
+  );
+}
+
 /** ノード1つ（丸と、その下の名前）を描きます。 */
 function NodeShape({ node, clipPathId }: { node: PositionedGraphNode; clipPathId: string }) {
   const radius = NODE_RADIUS[node.kind];
@@ -242,6 +265,7 @@ function NodeShape({ node, clipPathId }: { node: PositionedGraphNode; clipPathId
     <>
       <circle cx={node.x} cy={node.y} r={radius} strokeWidth={2} className={nodeClassOf(node)} />
       <NodeFace node={node} clipPathId={clipPathId} />
+      <PersonKindOutline node={node} />
       <text x={node.x} y={node.y + radius + 14} textAnchor="middle" className="fill-foreground text-[11px]">
         {shortLabelOf(node.label)}
       </text>

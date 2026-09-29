@@ -19,6 +19,8 @@ type PersonKindStyle = {
   nodeFill: string;
   /** グラフのノードの丸の中の文字の色です。 */
   nodeText: string;
+  /** 画像を登録したグラフのノードの、画像の上に描く縁取りの色です。個人は縁取りをしません。 */
+  nodeOutline: string;
 };
 
 export const PERSON_KIND_STYLES: Record<PersonKind, PersonKindStyle> = {
@@ -27,24 +29,28 @@ export const PERSON_KIND_STYLES: Record<PersonKind, PersonKindStyle> = {
     ring: '',
     nodeFill: 'fill-primary stroke-background',
     nodeText: 'fill-primary-foreground',
+    nodeOutline: '',
   },
   organization: {
     face: 'bg-sky-700 text-white',
     ring: 'ring-2 ring-sky-700',
     nodeFill: 'fill-sky-700 stroke-background',
     nodeText: 'fill-white',
+    nodeOutline: 'stroke-sky-700',
   },
   record: {
     face: 'bg-amber-600 text-white',
     ring: 'ring-2 ring-amber-600',
     nodeFill: 'fill-amber-600 stroke-background',
     nodeText: 'fill-white',
+    nodeOutline: 'stroke-amber-600',
   },
   object: {
     face: 'bg-emerald-700 text-white',
     ring: 'ring-2 ring-emerald-700',
     nodeFill: 'fill-emerald-700 stroke-background',
     nodeText: 'fill-white',
+    nodeOutline: 'stroke-emerald-700',
   },
 };
 

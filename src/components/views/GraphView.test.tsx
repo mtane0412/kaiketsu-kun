@@ -72,6 +72,23 @@ describe('GraphView', () => {
     expect(screen.getByRole('link', { name: '組織: 県警' })).toBeInTheDocument();
   });
 
+  it('画像を登録した人物ではない種別のノードは、画像の上に種別の色の縁取りを描く', () => {
+    // 前提: 防犯カメラに画像を登録すると、丸の塗り（種別の色）は画像に覆われて見えなくなる
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) =>
+        person.id === 'person-road-camera' ? { ...person, imageDataUrl: 'data:image/jpeg;base64,AAAA' } : person
+      ),
+    };
+    render(<GraphView target={ケース} />);
+
+    const 防犯カメラ = screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' });
+    expect(防犯カメラ.querySelector('[data-person-kind-outline="record"]')).not.toBeNull();
+    // 画像の無い人物のノードは、丸の塗りで種別が分かるため、縁取りを描かない
+    const 県警 = screen.getByRole('link', { name: '組織: 県警' });
+    expect(県警.querySelector('[data-person-kind-outline]')).toBeNull();
+  });
+
   it('人物の種別のチェックを外すと、その種別のノードを描かない', async () => {
     const user = userEvent.setup();
     render(<GraphView target={sampleFictionalCase} />);
