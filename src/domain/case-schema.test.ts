@@ -349,6 +349,35 @@ describe('parseCase', () => {
 
     expect(() => parseCase(toJsonData(データ))).toThrow('存在しない証言を参照しています: claim-unknown');
   });
+
+  it('関係の開始と終了を保持して受け付ける', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      relationships: [{ ...sampleFictionalCase.relationships[0], since: '1995-04', until: '1998-05' }],
+    };
+
+    expect(parseCase(toJsonData(データ)).relationships[0]).toMatchObject({ since: '1995-04', until: '1998-05' });
+  });
+
+  it('関係の開始・終了が時刻参照の形式でない場合は拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      relationships: [{ ...sampleFictionalCase.relationships[0], since: '去年の春' }],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow('日時は');
+  });
+
+  it('関係の終了が開始より前の場合は拒否する', () => {
+    const データ = {
+      ...sampleFictionalCase,
+      relationships: [{ ...sampleFictionalCase.relationships[0], since: '1998-08', until: '1998-05' }],
+    };
+
+    expect(() => parseCase(toJsonData(データ))).toThrow(
+      `関係の終了が開始より前です: ${sampleFictionalCase.relationships[0]?.id}`
+    );
+  });
 });
 
 /** ソース（Source）を人物とは別の種類のエンティティとして持っていた頃のケースデータです。 */

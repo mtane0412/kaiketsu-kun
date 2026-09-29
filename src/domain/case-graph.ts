@@ -23,6 +23,7 @@
  */
 import { buildTimeline, claimLabelOf, USER_SPEAKER_LABEL } from './case-views';
 import { personIconText } from './person-icon';
+import type { RelationshipPeriod } from './relationship-period';
 import type { Case, Id, PersonKind } from './types';
 
 /** グラフのノードの種類です。人物・証言に加えて、発言者を選ばない証言（ユーザーの推測）をまとめるノードを持ちます。 */
@@ -31,8 +32,11 @@ export type GraphNodeKind = 'person' | 'claim' | 'user';
 /** グラフのエッジの種類です。 */
 export type GraphEdgeKind = 'speaks' | 'via' | 'mentions' | 'relates';
 
-/** 関係のエッジ（relates）だけが持つ、線の描き分けに使う情報です。 */
-export type GraphEdgeRelation = {
+/**
+ * 関係のエッジ（relates）だけが持つ、線の描き分けと時点による絞り込みに使う情報です。
+ * 期間（since・until）は、時点を指定したときに、その時点で成り立たない関係の線を消すために載せます（src/lib/graph-display.ts）。
+ */
+export type GraphEdgeRelation = RelationshipPeriod & {
   /** true の場合は from から to への片方向、false の場合は双方向の関係です。 */
   directed: boolean;
   /** 根拠の証言が1件以上登録されているかどうかです。 */
@@ -67,7 +71,7 @@ export type GraphEdge = {
   targetId: string;
   /** 関係のエッジ（relates）だけが持つ、関係の名前（Relationship.label）です。 */
   label?: string;
-  /** 関係のエッジ（relates）だけが持つ、向きの有無と根拠の有無です。 */
+  /** 関係のエッジ（relates）だけが持つ、向きの有無・根拠の有無・期間です。 */
   relation?: GraphEdgeRelation;
 };
 
@@ -113,7 +117,12 @@ function relationshipEdgesOf(target: Case): GraphEdge[] {
     sourceId: personNodeId(relationship.fromPersonId),
     targetId: personNodeId(relationship.toPersonId),
     label: relationship.label,
-    relation: { directed: relationship.directed, hasBasis: relationship.basisClaimIds.length > 0 },
+    relation: {
+      directed: relationship.directed,
+      hasBasis: relationship.basisClaimIds.length > 0,
+      ...(relationship.since === undefined ? {} : { since: relationship.since }),
+      ...(relationship.until === undefined ? {} : { until: relationship.until }),
+    },
   }));
 }
 

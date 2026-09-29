@@ -161,6 +161,136 @@ describe('RelationshipSection', () => {
     });
   });
 
+  it('開始と終了を持つ関係には、その期間を表示する', () => {
+    openTestCase({
+      ...sampleFictionalCase,
+      relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04', until: '1998-05' }],
+    });
+
+    const 関係 = 持ち主の関係を描画();
+
+    expect(within(関係).getByText('期間: 1995年4月〜1998年5月')).toBeInTheDocument();
+  });
+
+  it('期間を持たない関係には、期間を表示しない', () => {
+    const 関係 = 持ち主の関係を描画();
+
+    expect(within(関係).queryByText(/期間:/)).not.toBeInTheDocument();
+  });
+
+  it('開始と終了を入力して保存すると、時刻参照の形式で関係に保存する', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '金の貸し借り');
+    await user.type(within(登録).getByLabelText('開始（任意）'), '1998年8月11日');
+    await user.type(within(登録).getByLabelText('終了（任意）'), '1998-08-20');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    expect(openedCase().relationships.at(-1)).toMatchObject({ label: '金の貸し借り', since: '1998-08-11', until: '1998-08-20' });
+  });
+
+  it('開始と終了を空のまま保存すると、期間を持たない関係として保存する', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    const 追加された関係 = openedCase().relationships.at(-1);
+    expect(追加された関係).not.toHaveProperty('since');
+    expect(追加された関係).not.toHaveProperty('until');
+  });
+
+  it('解釈できない開始を入力すると、理由を示して保存しない', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('開始（任意）'), '去年の春');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    expect(within(登録).getByText(/開始を解釈できません: 去年の春/)).toBeInTheDocument();
+    expect(openedCase().relationships).toHaveLength(2);
+  });
+
+  it('解釈できない開始を入力すると、開始の欄だけを誤りとして示し、理由を欄の説明として結び付ける', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('開始（任意）'), '去年の春');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    const 開始 = within(登録).getByLabelText('開始（任意）');
+    expect(開始).toHaveAttribute('aria-invalid', 'true');
+    expect(開始).toHaveAccessibleDescription(/開始を解釈できません: 去年の春/);
+    expect(within(登録).getByLabelText('終了（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('解釈できない終了を入力すると、終了の欄を誤りとして示す', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('終了（任意）'), 'そのうち');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    const 終了 = within(登録).getByLabelText('終了（任意）');
+    expect(終了).toHaveAttribute('aria-invalid', 'true');
+    expect(終了).toHaveAccessibleDescription(/終了を解釈できません: そのうち/);
+    expect(within(登録).getByLabelText('開始（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('終了が開始より前の場合は、理由を示して保存しない', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('開始（任意）'), '1998-08');
+    await user.type(within(登録).getByLabelText('終了（任意）'), '1998-05');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    expect(within(登録).getByText(/関係の終了が開始より前です/)).toBeInTheDocument();
+    expect(openedCase().relationships).toHaveLength(2);
+  });
+
+  it('編集で開始を消して保存すると、関係から開始を取り除く', async () => {
+    const user = userEvent.setup();
+    openTestCase({
+      ...sampleFictionalCase,
+      relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04' }],
+    });
+    const 関係 = 持ち主の関係を描画();
+
+    await user.click(within(関係).getByRole('button', { name: '雇用主（管理人）の関係を編集' }));
+    const 編集 = screen.getByRole('region', { name: '関係の編集' });
+    expect(within(編集).getByLabelText('開始（任意）')).toHaveValue('1995-04');
+
+    await user.clear(within(編集).getByLabelText('開始（任意）'));
+    await user.click(within(編集).getByRole('button', { name: '関係を保存' }));
+
+    expect(openedCase().relationships[0]).not.toHaveProperty('since');
+  });
+
   it('関係を削除すると、ケースから関係を取り除く', async () => {
     const user = userEvent.setup();
     const 関係 = 持ち主の関係を描画();

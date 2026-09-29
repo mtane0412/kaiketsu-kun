@@ -16,6 +16,7 @@
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
+ * 関係の期間（since・until）を持たない頃のデータは、期間を持たない（すべての時点で成り立つ）関係として受け付けます。
  * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
@@ -24,7 +25,7 @@ import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
-import { isValidTimeRef } from './time-ref';
+import { isValidTimeRef, toInterval } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
 import type { Case, Id, Person, Speaker } from './types';
 
@@ -156,6 +157,8 @@ const caseSchema = z.object({
       label: z.string(),
       directed: z.boolean(),
       basisClaimIds: z.array(idSchema),
+      since: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+      until: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
     })
   ),
   // 聴取を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
@@ -312,6 +315,14 @@ export function findCaseViolations(target: Case): string[] {
     check(personIds, relationship.fromPersonId, '人物');
     check(personIds, relationship.toPersonId, '人物');
     relationship.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));
+    // 終了が開始より前の関係は、どの時点でも成り立たず、グラフから黙って消えてしまうため受け付けない
+    if (
+      relationship.since !== undefined &&
+      relationship.until !== undefined &&
+      toInterval(relationship.until).end < toInterval(relationship.since).start
+    ) {
+      violations.push(`関係の終了が開始より前です: ${relationship.id}`);
+    }
   }
   for (const crossCheck of target.crossChecks) {
     crossCheck.claimIds.forEach((id) => check(claimIds, id, '証言'));

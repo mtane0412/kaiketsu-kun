@@ -5,14 +5,15 @@
  * ここで扱うのは次の3つで、いずれも配置の計算はやり直しません。配置を計算し直すと、操作のたびに図の形が変わり、
  * どこに何があったかを見失うためです。
  *
- * - 絞り込み（filterGraph）: 人物（とその種別）・証言・関係のうち、見たいものだけを残します
+ * - 絞り込み（filterGraph）: 人物（とその種別）・証言・関係のうち、見たいものだけを残します。関係は、指定した時点で成り立つものに絞れます
  * - 手で動かした位置（moveNodes）: ユーザーがドラッグしたノードの座標を、計算された座標の上に重ねます
  * - 強調する範囲（neighborhoodOf）: マウスを重ねた（または選んだ）ノードと、そこにつながる相手だけを取り出します
  *
  * 描画（GraphView）とは分け、座標と識別子だけを扱います。マウス操作を再現しにくいテスト環境でも、
  * 何が描かれるはずかを確かめられるようにするためです。
  */
-import type { PersonKind } from '@/domain/types';
+import { relationshipHoldsAt } from '@/domain/relationship-period';
+import type { PersonKind, TimeRef } from '@/domain/types';
 import type { PositionedGraphEdge, PositionedGraphNode } from './graph-layout';
 
 /** 座標が決まったノードと、その両端が解決済みのエッジの組です。 */
@@ -37,6 +38,11 @@ export type GraphFilter = {
   claims: boolean;
   /** 人物どうしの関係の線を描くかどうかです。 */
   relations: boolean;
+  /**
+   * 関係の線を絞り込む時点です。指定した場合は、その時点で成り立たない関係の線を描きません
+   * （判定は src/domain/relationship-period.ts）。省略した場合は、期間によらずすべての関係を描きます。
+   */
+  relationsAt?: TimeRef;
 };
 
 /** 図の座標です。 */
@@ -71,7 +77,11 @@ export function filterGraph(graph: PositionedGraph, filter: GraphFilter): Positi
   const nodes = graph.nodes.filter((node) => isVisible(node, filter));
   const visibleIds = new Set(nodes.map((node) => node.id));
   const edges = graph.edges.filter((edge) => {
-    if (edge.kind === 'relates' && !filter.relations) return false;
+    if (edge.kind === 'relates') {
+      if (!filter.relations) return false;
+      // 期間の情報を持たない関係の線は、期間を持たない関係と同じく、すべての時点で成り立つものとして扱う
+      if (filter.relationsAt !== undefined && !relationshipHoldsAt(edge.relation ?? {}, filter.relationsAt)) return false;
+    }
     return visibleIds.has(edge.sourceId) && visibleIds.has(edge.targetId);
   });
   return { nodes, edges };

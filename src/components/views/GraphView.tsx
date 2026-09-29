@@ -16,6 +16,8 @@
  * - ノードを手で動かす: ノードをドラッグします。線が重なって読めない箇所を、ユーザーがほどけるようにするためです
  * - つながりの強調: ノードにマウスを重ねる（またはキーボードで選ぶ）と、そのノードにつながる相手と線だけを濃く描きます
  * - 絞り込み: 人物・証言・関係のうち、図に描くものと、描く人物の種別（人物・組織・記録・媒体・物）を選べます
+ * - 時点の指定: 日時を入力すると、その時点で成り立たない関係の線を描きません（判定は src/domain/relationship-period.ts）。
+ *   解釈できない入力の間は、理由を示し、関係の線は絞り込みません
  * - 表示を戻す: 拡大率・位置・手で動かしたノードを、まとめて最初の状態に戻します
  *
  * 人物・証言のノードは、それぞれの詳細ページへのリンクです。図から人物・証言へたどる導線で、
@@ -41,6 +43,7 @@ import { cn } from 'cn';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { buildCaseGraph } from '@/domain/case-graph';
+import { parseDateInput } from '@/domain/date-input';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
 import type { Case } from '@/domain/types';
@@ -57,7 +60,15 @@ import {
   type Point,
   type ViewBox,
 } from '@/lib/graph-viewport';
-import { EDGE_CLASSES, EDGE_DASH_ARRAYS, GraphFilterControls, GraphLegend, GraphZoomButtons, NO_BASIS_DASH_ARRAY } from './GraphControls';
+import {
+  EDGE_CLASSES,
+  EDGE_DASH_ARRAYS,
+  GraphFilterControls,
+  GraphLegend,
+  GraphTimePointControl,
+  GraphZoomButtons,
+  NO_BASIS_DASH_ARRAY,
+} from './GraphControls';
 import { PERSON_KIND_STYLES } from '../person-kind-style';
 import { claimHref, personHref } from '../routes';
 import { useCaseId } from '../useCaseId';
@@ -284,6 +295,8 @@ export function GraphView({ target }: GraphViewProps) {
   const layout = useMemo(() => layoutGraph(buildCaseGraph(target)), [target]);
 
   const [filter, setFilter] = useState<GraphFilter>(DEFAULT_FILTER);
+  /** 関係の線を絞り込む時点の、入力中の文字列です。空欄の間は絞り込みません。 */
+  const [timePointText, setTimePointText] = useState('');
   /** 拡大縮小・平行移動で動かした表示範囲です。null は、図の全体が収まる表示範囲（操作していない状態）を指します。 */
   const [viewBox, setViewBox] = useState<ViewBox | null>(null);
   /** ユーザーが手で動かしたノードの座標です。 */
@@ -395,8 +408,10 @@ export function GraphView({ target }: GraphViewProps) {
   }
 
   const arrowMarkerId = `${idPrefix}-arrow`;
+  const relationsAt = timePointText.trim() ? parseDateInput(timePointText) : undefined;
+  const timePointError = relationsAt === null ? `時点を解釈できません: ${timePointText.trim()}（例: 1998-08-12、1998年8月12日19時）` : null;
   // 手で動かした位置を重ねてから、絞り込みで描くものを選ぶ。配置そのものは計算し直さない
-  const graph = filterGraph(moveNodes(layout, positions), filter);
+  const graph = filterGraph(moveNodes(layout, positions), { ...filter, relationsAt: relationsAt ?? undefined });
   const curveOffsets = curveOffsetsOf(graph.edges);
   const focused = graph.nodes.some((node) => node.id === focusedNodeId) ? focusedNodeId : null;
   const highlight = focused === null ? null : neighborhoodOf(graph.edges, focused);
@@ -506,6 +521,7 @@ export function GraphView({ target }: GraphViewProps) {
       </div>
 
       <GraphFilterControls filter={filter} onFilterChange={setFilter} />
+      <GraphTimePointControl value={timePointText} onChange={setTimePointText} error={timePointError} />
       <GraphLegend showsRelations={filter.relations} />
     </div>
   );

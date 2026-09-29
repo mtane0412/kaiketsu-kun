@@ -100,6 +100,24 @@ describe('filterGraph', () => {
     expect(結果.nodes).toHaveLength(5);
     expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言']);
   });
+
+  it('時点を指定すると、その時点で成り立たない関係の線だけを消す', () => {
+    const 離婚した関係: PositionedGraphEdge = {
+      ...エッジ('edge:婚姻', 'relates', 別荘の持ち主, 管理人),
+      relation: { directed: false, hasBasis: false, until: '1998-05' },
+    };
+    const 続いている関係: PositionedGraphEdge = {
+      ...エッジ('edge:雇用', 'relates', 別荘の持ち主, 管理人),
+      relation: { directed: true, hasBasis: true, since: '1995-04' },
+    };
+    const グラフ: PositionedGraph = { ...見本のグラフ, edges: [...見本のグラフ.edges, 離婚した関係, 続いている関係] };
+
+    const 結果 = filterGraph(グラフ, { ...すべて表示, relationsAt: '1998-08-12' });
+
+    // 期間を持たない関係（edge:関係）は、すべての時点で成り立つものとして残る
+    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言', 'edge:関係', 'edge:雇用']);
+    expect(結果.nodes).toHaveLength(5);
+  });
 });
 
 describe('moveNodes', () => {

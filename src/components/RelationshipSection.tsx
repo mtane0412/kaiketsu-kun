@@ -5,6 +5,7 @@
  * 関係は証言から導出せず、ユーザーが証言を読んで導いた結論として登録する一次データです。
  * そのため、根拠になった証言（Relationship.basisClaimIds）へのリンクを各行に並べ、
  * 根拠が1件も無い関係は「根拠未登録」と示します。どの関係が裏付けを持つかを、一覧のまま見分けられるようにするためです。
+ * 期間（開始・終了）を持つ関係には、その期間を添えます（期間を持たない関係には何も添えません）。
  *
  * 一覧は、開いている人物から見た向き（双方向・この人物から・この人物へ）を言葉で示します
  * （導出は src/domain/person-relationships.ts）。人物の名前は相手の詳細へのリンクにし、
@@ -22,6 +23,7 @@ import {
   describePersonRelationship,
   type PersonRelationshipView,
 } from '@/domain/person-relationships';
+import { formatRelationshipPeriod } from '@/domain/relationship-period';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -91,62 +93,66 @@ export function RelationshipSection({ personId, personName, tab }: RelationshipS
         </p>
       ) : (
         <ul className="space-y-2">
-          {relationships.map((view) => (
-            <li key={view.relationship.id} className="space-y-2 rounded-lg border bg-card p-3">
-              <p className="text-sm">{describePersonRelationship(view, personName)}</p>
-              <Link
-                href={personHref(caseId, view.other.id, tab)}
-                className="flex items-center gap-1.5 text-sm hover:underline"
-              >
-                <EntityAvatar imageDataUrl={view.other.imageDataUrl} iconText={view.other.iconText} size="sm" />
-                <span className="min-w-0 truncate">{view.other.name}</span>
-              </Link>
-
-              {view.basisClaims.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{NO_BASIS_LABEL}</p>
-              ) : (
-                <ul className="space-y-1">
-                  {view.basisClaims.map((claimView) => (
-                    <li key={claimView.claim.id}>
-                      <ClaimLink view={claimView} tab={tab} prefix="根拠" />
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={actionLabelOf(view, '編集')}
-                  onClick={() => setForm({ kind: 'edit', relationshipId: view.relationship.id })}
+          {relationships.map((view) => {
+            const period = formatRelationshipPeriod(view.relationship);
+            return (
+              <li key={view.relationship.id} className="space-y-2 rounded-lg border bg-card p-3">
+                <p className="text-sm">{describePersonRelationship(view, personName)}</p>
+                {period !== undefined && <p className="text-xs text-muted-foreground">期間: {period}</p>}
+                <Link
+                  href={personHref(caseId, view.other.id, tab)}
+                  className="flex items-center gap-1.5 text-sm hover:underline"
                 >
-                  編集
-                </Button>
-                <DeleteConfirmButton
-                  iconOnly
-                  label={actionLabelOf(view, '削除')}
-                  title={`「${view.relationship.label}」を削除しますか？`}
-                  description="この関係をケースから削除します。この操作は取り消せません。根拠にした証言は削除しません。"
-                  onConfirm={() => handleDelete(view.relationship.id)}
-                />
-              </div>
+                  <EntityAvatar imageDataUrl={view.other.imageDataUrl} iconText={view.other.iconText} size="sm" />
+                  <span className="min-w-0 truncate">{view.other.name}</span>
+                </Link>
 
-              {form.kind === 'edit' && form.relationshipId === view.relationship.id && (
-                <section aria-label="関係の編集" className="border-t pt-3">
-                  <RelationshipForm
-                    key={view.relationship.id}
-                    personId={personId}
-                    personName={personName}
-                    initial={view.relationship}
-                    onDone={() => setForm({ kind: 'closed' })}
-                    onCancel={() => setForm({ kind: 'closed' })}
+                {view.basisClaims.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{NO_BASIS_LABEL}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {view.basisClaims.map((claimView) => (
+                      <li key={claimView.claim.id}>
+                        <ClaimLink view={claimView} tab={tab} prefix="根拠" />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={actionLabelOf(view, '編集')}
+                    onClick={() => setForm({ kind: 'edit', relationshipId: view.relationship.id })}
+                  >
+                    編集
+                  </Button>
+                  <DeleteConfirmButton
+                    iconOnly
+                    label={actionLabelOf(view, '削除')}
+                    title={`「${view.relationship.label}」を削除しますか？`}
+                    description="この関係をケースから削除します。この操作は取り消せません。根拠にした証言は削除しません。"
+                    onConfirm={() => handleDelete(view.relationship.id)}
                   />
-                </section>
-              )}
-            </li>
-          ))}
+                </div>
+
+                {form.kind === 'edit' && form.relationshipId === view.relationship.id && (
+                  <section aria-label="関係の編集" className="border-t pt-3">
+                    <RelationshipForm
+                      key={view.relationship.id}
+                      personId={personId}
+                      personName={personName}
+                      initial={view.relationship}
+                      onDone={() => setForm({ kind: 'closed' })}
+                      onCancel={() => setForm({ kind: 'closed' })}
+                    />
+                  </section>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

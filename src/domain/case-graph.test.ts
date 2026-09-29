@@ -203,6 +203,28 @@ describe('buildCaseGraph（人物どうしの関係）', () => {
     ]);
   });
 
+  it('関係のエッジに、関係の開始と終了を載せる', () => {
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      relationships: [
+        {
+          id: 'relationship-marriage',
+          fromPersonId: 'person-owner',
+          toPersonId: 'person-caretaker',
+          label: '婚姻',
+          directed: false,
+          basisClaimIds: [],
+          since: '1990',
+          until: '1998-05',
+        },
+      ],
+    };
+
+    const [関係のエッジ] = buildCaseGraph(ケース).edges.filter((edge) => edge.kind === 'relates');
+
+    expect(関係のエッジ?.relation).toEqual({ directed: false, hasBasis: false, since: '1990', until: '1998-05' });
+  });
+
   it('関係のエッジに、関係の名前を載せる', () => {
     const 関係のエッジ = buildCaseGraph(sampleFictionalCase).edges.filter((edge) => edge.kind === 'relates');
 

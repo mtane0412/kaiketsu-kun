@@ -6,6 +6,7 @@
  * - 拡大・縮小・表示を戻す: 図に重ねたボタンです。図を見ながら押せるよう、SVGの右上に重ねて置きます
  * - 絞り込み: 人物・証言・関係のうち、図に描くものを選ぶチェックボックスと、描く人物の種別を選ぶチェックボックスです
  *   （種別のチェックボックスに添えた色の見本が、人物のノードの色の凡例を兼ねます）
+ * - 時点: 日時を入力すると、その時点で成り立つ関係の線だけを描きます（期間を持つ関係を読み違えないようにするためです）
  * - 凡例: 線の種類（発言・経由・言及・関係）の読み方です
  *
  * 状態は持たず、いまの値と、変更を伝える関数を受け取ります。図の状態はすべて GraphView が持ち、
@@ -13,11 +14,13 @@
  */
 'use client';
 
+import { cn } from 'cn';
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useId } from 'react';
 import type { GraphEdgeKind } from '@/domain/case-graph';
 import type { GraphFilter } from '@/lib/graph-display';
 import { Button } from '@/components/ui/button';
+import { INPUT_CLASS } from '../forms/fields';
 import { PersonKindFilter } from './PersonKindFilter';
 
 /** エッジの種類ごとの、線の色です。凡例と図の両方で同じ値を使います。 */
@@ -137,6 +140,49 @@ export function GraphFilterControls({ filter, onFilterChange }: GraphFilterContr
         onChange={(personKinds) => onFilterChange({ ...filter, personKinds })}
         disabled={!filter.persons}
       />
+    </div>
+  );
+}
+
+type GraphTimePointControlProps = {
+  /** 入力中の時点の文字列です。 */
+  value: string;
+  onChange: (value: string) => void;
+  /** 入力を解釈できない場合に示す理由です。解釈できる場合と空欄の場合は null です。 */
+  error: string | null;
+};
+
+/**
+ * 関係の線を絞り込む時点の入力欄です。
+ * 聴取の日時と同じく、時刻参照の表記のほか「1998年8月12日」のような日本語でも入力できます。
+ * 空欄の間は、期間によらずすべての関係を描きます。
+ */
+export function GraphTimePointControl({ value, onChange, error }: GraphTimePointControlProps) {
+  const inputId = useId();
+  const errorId = useId();
+  return (
+    <div className="space-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={inputId} className="text-muted-foreground">
+          時点
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="1998-08-12、1998年8月12日 など"
+          aria-invalid={error !== null}
+          aria-describedby={error === null ? undefined : errorId}
+          className={cn(INPUT_CLASS, 'w-56')}
+        />
+        <span className="text-muted-foreground">空欄のときは、期間によらずすべての関係を表示します</span>
+      </div>
+      {error !== null && (
+        <p id={errorId} role="alert" className="text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
