@@ -15,9 +15,10 @@
  */
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
+import { PERSON_KINDS } from './person-kind';
 import { resolvePersonLaneOrder } from './person-lane-order';
 import { resolveTimelineOrder, timelineKeyOf, type TimelineKey } from './timeline-order';
-import type { Case, Claim, Coordinates, Id, Person, Place } from './types';
+import type { Case, Claim, Coordinates, Id, Person, PersonKind, Place } from './types';
 
 /** 表示用に参照先を解決した証言です。 */
 export type ClaimView = {
@@ -187,6 +188,7 @@ export type LaneRole = 'speaker' | 'mentioned';
 export type PersonLane = {
   personId: Id;
   label: string;
+  personKind: PersonKind;
   imageDataUrl?: string;
   iconText: string;
 };
@@ -205,12 +207,19 @@ export type PersonLanes = {
   rows: PersonLaneRow[];
 };
 
-/** 証言に登場する人物ごとの役割を返します。発言者が自分自身に言及していても、発言を優先します。 */
-function laneRolesOf(claim: Claim): Partial<Record<Id, LaneRole>> {
+/**
+ * 証言に登場する人物ごとの役割を返します。発言者が自分自身に言及していても、発言を優先します。
+ * isShown が false を返す人物（表示しない種別の人物）は、役割に含めません。
+ */
+function laneRolesOf(claim: Claim, isShown: (personId: Id) => boolean): Partial<Record<Id, LaneRole>> {
   const roles: Partial<Record<Id, LaneRole>> = {};
-  for (const personId of claim.mentionedPersonIds) roles[personId] = 'mentioned';
+  for (const personId of claim.mentionedPersonIds) {
+    if (isShown(personId)) roles[personId] = 'mentioned';
+  }
   if (claim.speaker.kind === 'person') {
-    for (const personId of claim.speaker.personIds) roles[personId] = 'speaker';
+    for (const personId of claim.speaker.personIds) {
+      if (isShown(personId)) roles[personId] = 'speaker';
+    }
   }
   return roles;
 }
@@ -221,14 +230,21 @@ function laneRolesOf(claim: Claim): Partial<Record<Id, LaneRole>> {
  * 列は、いずれかの証言に発言者か言及された人物として登場する人物で、列の並び順（resolvePersonLaneOrder）のとおりに並べます。
  * 経由した人物（Claim.viaPersonIds）は、証言を伝えただけで動きの主体ではないため、列にも役割にも含めません。
  * どの人物も登場しない証言（人物に言及しないユーザーの推測など）は、置く列が無いため行にしません。
+ *
+ * @param shownKinds 列にする人物の種別です。省略した場合は、すべての種別を列にします。
+ *   指定外の種別の人物は列にも役割にも含めないため、残った列の人物が登場しない証言は行になりません。
  */
-export function buildPersonLanes(target: Case): PersonLanes {
+export function buildPersonLanes(target: Case, shownKinds: ReadonlySet<PersonKind> = new Set(PERSON_KINDS)): PersonLanes {
+  const personsById = new Map(target.persons.map((person) => [person.id, person]));
+  const isShown = (personId: Id) => {
+    const person = personsById.get(personId);
+    return person !== undefined && shownKinds.has(person.kind);
+  };
   const rows = buildTimeline(target)
-    .items.map(({ key, view }): PersonLaneRow => ({ key, view, roles: laneRolesOf(view.claim) }))
+    .items.map(({ key, view }): PersonLaneRow => ({ key, view, roles: laneRolesOf(view.claim, isShown) }))
     .filter((row) => Object.keys(row.roles).length > 0);
 
   const appearingIds = new Set(rows.flatMap((row) => Object.keys(row.roles)));
-  const personsById = new Map(target.persons.map((person) => [person.id, person]));
   const lanes = resolvePersonLaneOrder(target)
     .flatMap((personId) => {
       const person = personsById.get(personId);
@@ -237,6 +253,7 @@ export function buildPersonLanes(target: Case): PersonLanes {
     .map((person) => ({
       personId: person.id,
       label: person.name,
+      personKind: person.kind,
       imageDataUrl: person.imageDataUrl,
       iconText: personIconText(person),
     }));

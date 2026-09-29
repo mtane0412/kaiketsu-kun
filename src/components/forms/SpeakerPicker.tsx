@@ -7,6 +7,7 @@
  * - 経由: 発言者の話をユーザーに伝えた人物や媒体です。選んだ順が、伝えた順になります。
  *   例「防犯カメラに映っていたと県警が発表したと新聞が報じた」→ 発言者: 防犯カメラ、経由: 県警 → 新聞
  * どちらの欄でも、未登録の人物を「人物を追加」から名前だけで新規作成できます。
+ * 選択肢の名前には、人物ではない種別（組織・記録・媒体・物）を「（記録・媒体）」のように添えます（personKindSuffixOf）。
  *
  * パネルは、ボタンをもう一度押す・Escapeキーを押す・パネルの外を押す、のいずれかで閉じます。
  * ボード上の入力欄は画面の下端にも上端にも開くため、パネルは、開く時点でボタンの上下のうち空きが広い側に開きます。
@@ -21,7 +22,8 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { formatViaLabel, USER_SPEAKER_LABEL } from '@/domain/case-views';
-import type { Claim, Id, Speaker } from '@/domain/types';
+import { personKindSuffixOf } from '@/domain/labels';
+import type { Claim, Id, PersonKind, Speaker } from '@/domain/types';
 
 /** パネルとボタンの間隔（px）です。パネルの mt-1 / mb-1 と揃えます。 */
 const PANEL_GAP = 4;
@@ -32,8 +34,8 @@ const VIEWPORT_MARGIN = 8;
 /** 入力中の発言者と経由です。どちらも選んだ順に並びます。 */
 export type SpeakerDraft = { personIds: Id[]; viaPersonIds: Id[] };
 
-/** 発言者・経由として選べる人物です。 */
-export type SpeakerPersonOption = { id: Id; label: string };
+/** 発言者・経由として選べる人物です。personKind は人物の種別で、選択肢の名前に添える表記に使います。 */
+export type SpeakerPersonOption = { id: Id; label: string; personKind: PersonKind };
 
 /** 保存済みの証言の発言者と経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。 */
 export function speakerToDraft(claim: Pick<Claim, 'speaker' | 'viaPersonIds'> | undefined): SpeakerDraft {
@@ -95,7 +97,10 @@ function PersonChecklist({ legend, description, selectedIds, onChange, persons, 
               checked={selectedIds.includes(person.id)}
               onChange={(event) => toggle(person.id, event.target.checked)}
             />
-            {person.label}
+            <span>
+              {person.label}
+              <span className="text-muted-foreground">{personKindSuffixOf(person.personKind)}</span>
+            </span>
           </label>
         ))}
       </div>

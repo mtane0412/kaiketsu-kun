@@ -37,7 +37,10 @@ async function openSpeakerPanel(user: UserEvent) {
   await user.click(screen.getByRole('button', { name: /^発言者/ }));
 }
 
-/** 「発言者」のパネルの「発言者」欄で、登録済みの人物を選びます。 */
+/**
+ * 「発言者」のパネルの「発言者」欄で、登録済みの人物を選びます。
+ * 人物ではない種別の人物は、種別を添えた名前（「県警（組織）」など）で指定します。
+ */
 async function chooseSpeakers(user: UserEvent, personNames: string[]) {
   await openSpeakerPanel(user);
   const 発言者欄 = screen.getByRole('group', { name: '発言者' });
@@ -66,7 +69,7 @@ describe('ClaimForm', () => {
     await typeAndChoose(user, 'の郵便受けに@持ち主', '人物 別荘の持ち主');
     await user.type(screen.getByLabelText('内容'), 'あての新聞が残っていた。');
     await chooseSpeakers(user, ['隣家の住人']);
-    await chooseVia(user, ['架空日報 朝刊']);
+    await chooseVia(user, ['架空日報 朝刊（記録・媒体）']);
     await typeAndChoose(user, ' @1998-08-13', '日時 1998年8月13日');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
@@ -414,7 +417,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.type(screen.getByLabelText('内容'), '持ち主は几帳面な人だった。');
     await chooseSpeakers(user, ['隣家の住人', '管理人']);
-    await chooseVia(user, ['架空日報 朝刊']);
+    await chooseVia(user, ['架空日報 朝刊（記録・媒体）']);
 
     expect(screen.getByRole('button', { name: '発言者: 隣家の住人、管理人（架空日報 朝刊 による）' })).toBeInTheDocument();
 
@@ -433,8 +436,8 @@ describe('ClaimForm の発言者と経由の選択', () => {
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '夜8時10分ごろ、車が別荘の方向へ走っていた。');
-    await chooseSpeakers(user, ['県道の防犯カメラ']);
-    await chooseVia(user, ['架空日報 朝刊', '県警']);
+    await chooseSpeakers(user, ['県道の防犯カメラ（記録・媒体）']);
+    await chooseVia(user, ['架空日報 朝刊（記録・媒体）', '県警（組織）']);
 
     expect(screen.getByRole('button', { name: '発言者: 県道の防犯カメラ（架空日報 朝刊 → 県警 による）' })).toBeInTheDocument();
 
@@ -448,7 +451,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '捜索は13日の朝に始まった。');
-    await chooseSpeakers(user, ['架空日報 朝刊']);
+    await chooseSpeakers(user, ['架空日報 朝刊（記録・媒体）']);
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(lastSavedClaim()).toMatchObject({
@@ -540,7 +543,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '誰の話かを選び忘れた。');
-    await chooseVia(user, ['架空日報 朝刊']);
+    await chooseVia(user, ['架空日報 朝刊（記録・媒体）']);
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('発言者を選んでください');
@@ -674,7 +677,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.type(screen.getByLabelText('内容'), '夜7時には真っ暗だった。');
     await chooseSpeakers(user, ['管理人']);
-    await chooseVia(user, ['湖畔の夏 20年目の証言（架空の書籍）']);
+    await chooseVia(user, ['湖畔の夏 20年目の証言（架空の書籍）（記録・媒体）']);
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     expect(lastSavedClaim()).toMatchObject({

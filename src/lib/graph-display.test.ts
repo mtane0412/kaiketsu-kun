@@ -2,12 +2,13 @@
  * グラフビューで「何を描くか」を決めるロジック（絞り込み・手で動かした位置・強調する範囲）のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { filterGraph, moveNodes, neighborhoodOf, type PositionedGraph } from './graph-display';
+import { filterGraph, moveNodes, neighborhoodOf, type GraphFilter, type PositionedGraph } from './graph-display';
+import type { PersonKind } from '@/domain/types';
 import type { PositionedGraphEdge, PositionedGraphNode } from './graph-layout';
 
 /** 人物のノードを作ります。 */
-function 人物ノード(id: string, name: string, x: number, y: number): PositionedGraphNode {
-  return { id, kind: 'person', label: name, entityId: id, x, y };
+function 人物ノード(id: string, name: string, x: number, y: number, personKind: PersonKind = 'individual'): PositionedGraphNode {
+  return { id, kind: 'person', label: name, entityId: id, personKind, x, y };
 }
 
 /** 証言のノードを作ります。 */
@@ -27,6 +28,7 @@ function エッジ(
 
 const 管理人 = 人物ノード('person:管理人', '管理人', 0, 0);
 const 別荘の持ち主 = 人物ノード('person:持ち主', '別荘の持ち主', 100, 0);
+const 防犯カメラ = 人物ノード('person:防犯カメラ', '県道の防犯カメラ', 200, 0, 'record');
 const ユーザー: PositionedGraphNode = { id: 'user', kind: 'user', label: 'ユーザーの推測', x: 0, y: 100 };
 const 管理人の証言 = 証言ノード('claim:見回り', '見回りをしたとき…', 50, 50);
 const ユーザーの推測 = 証言ノード('claim:推測', '犯人は内部の人物では…', 0, 150);
@@ -43,7 +45,12 @@ const 見本のグラフ: PositionedGraph = {
 };
 
 /** すべてを表示する絞り込みの設定です。各テストでは、ここから1つだけ変えます。 */
-const すべて表示 = { persons: true, claims: true, relations: true };
+const すべて表示: GraphFilter = {
+  persons: true,
+  personKinds: new Set<PersonKind>(['individual', 'organization', 'record', 'object']),
+  claims: true,
+  relations: true,
+};
 
 describe('filterGraph', () => {
   it('何も絞り込まない場合は、すべてのノードと線をそのまま返す', () => {
@@ -51,6 +58,19 @@ describe('filterGraph', () => {
 
     expect(結果.nodes).toHaveLength(5);
     expect(結果.edges).toHaveLength(4);
+  });
+
+  it('人物の種別を外すと、その種別の人物のノードと、そこにつながる線を描かない', () => {
+    const 防犯カメラの証言 = 証言ノード('claim:映像', '車が映っていた', 200, 50);
+    const グラフ: PositionedGraph = {
+      nodes: [管理人, 防犯カメラ, 防犯カメラの証言],
+      edges: [エッジ('edge:カメラの発言', 'speaks', 防犯カメラ, 防犯カメラの証言), エッジ('edge:カメラの言及', 'mentions', 防犯カメラの証言, 管理人)],
+    };
+
+    const 結果 = filterGraph(グラフ, { ...すべて表示, personKinds: new Set<PersonKind>(['individual']) });
+
+    expect(結果.nodes.map((node) => node.id)).toEqual(['person:管理人', 'claim:映像']);
+    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:カメラの言及']);
   });
 
   it('人物を隠すと、人物のノードと、人物につながる線を描かない', () => {

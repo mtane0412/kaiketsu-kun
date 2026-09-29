@@ -9,6 +9,8 @@
  * 動きを追いやすいよう、カードの上部に述べる場所を示します（ClaimCard の emphasizePlace）。
  * 列は、見出しのつまみをドラッグして（キーボードではつまみの上でスペースキー → 左右の矢印キー → スペースキー）左右に動かせます。
  * 並び順はケースに保存します（Case.personLaneOrder、src/domain/person-lane-order.ts）。
+ * 表の上の「種別」のチェックボックスで、列にする人物の種別（人物・組織・記録・媒体・物）を絞り込めます。
+ * 絞り込みは表示の都合のため、ケースには保存しません。列の見出しには、人物ではない種別を名前の下に示します。
  *
  * 注意: 列は人物の数だけ増えるため、表は枠の中で縦横にスクロールします。見出しの行（人物）と列（日時）は、
  * スクロールしても見えるよう枠に貼り付けます。枠の高さを画面に収めているのは、縦にスクロールしたときにも人物の見出しを残すためです。
@@ -30,13 +32,16 @@ import {
 import { horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
-import { useId, useMemo } from 'react';
-import { buildPersonLanes, type LaneRole, type PersonLane } from '@/domain/case-views';
+import { useId, useMemo, useState } from 'react';
+import { buildPersonLanes, type LaneRole, type PersonLane, type PersonLaneRow } from '@/domain/case-views';
+import { PERSON_KIND_LABELS } from '@/domain/labels';
+import { PERSON_KINDS } from '@/domain/person-kind';
 import { formatTimeRef } from '@/domain/time-ref';
-import type { Case } from '@/domain/types';
+import type { Case, PersonKind } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { EntityAvatar } from '../EntityAvatar';
 import { ClaimCard } from './ClaimCard';
+import { PersonKindFilter } from './PersonKindFilter';
 
 const DRAG_INSTRUCTIONS =
   '列を動かすには、スペースキーで持ち上げ、左右の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -89,15 +94,50 @@ function SortableLaneHeader({ lane }: { lane: PersonLane }) {
         >
           <GripVertical className="size-4" aria-hidden="true" />
         </button>
-        <EntityAvatar imageDataUrl={lane.imageDataUrl} iconText={lane.iconText} size="md" />
-        {lane.label}
+        <EntityAvatar imageDataUrl={lane.imageDataUrl} iconText={lane.iconText} personKind={lane.personKind} size="md" />
+        <span>
+          {lane.label}
+          {lane.personKind !== 'individual' && (
+            <span className="block text-xs font-normal text-muted-foreground">{PERSON_KIND_LABELS[lane.personKind]}</span>
+          )}
+        </span>
       </span>
     </th>
   );
 }
 
 export function PersonLaneView({ target }: PersonLaneViewProps) {
-  const { lanes, rows } = useMemo(() => buildPersonLanes(target), [target]);
+  const [shownKinds, setShownKinds] = useState<ReadonlySet<PersonKind>>(() => new Set(PERSON_KINDS));
+  const { lanes, rows } = useMemo(() => buildPersonLanes(target, shownKinds), [target, shownKinds]);
+  /** 絞り込む前の行が1つでもあるかどうかです。絞り込みで表が空になったのか、そもそも証言が無いのかを見分けます。 */
+  const hasAnyRow = useMemo(() => buildPersonLanes(target).rows.length > 0, [target]);
+
+  if (!hasAnyRow) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。
+      </p>
+    );
+  }
+
+  return (
+    // 種別のチェックボックスは、表の有無によらず同じ位置に置く。絞り込みで表が消えても、チェックボックスが作り直されて
+    // キーボードの操作位置（フォーカス）を失わないようにするためです
+    <div className="space-y-3">
+      <PersonKindFilter value={shownKinds} onChange={setShownKinds} />
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">表示する種別の人物が登場する証言がありません。</p>
+      ) : (
+        <PersonLaneTable lanes={lanes} rows={rows} />
+      )}
+    </div>
+  );
+}
+
+type PersonLaneTableProps = { lanes: PersonLane[]; rows: PersonLaneRow[] };
+
+/** 人物の動きの表です。列の見出しをドラッグして、列を並べ替えられます。 */
+function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
   const movePersonLane = useCaseStore((state) => state.movePersonLane);
   // サーバー描画とブラウザで dnd-kit が振るIDが食い違わないよう、IDを明示する
   const dndId = useId();
@@ -126,14 +166,6 @@ export function PersonLaneView({ target }: PersonLaneViewProps) {
     onDragCancel: ({ active }) => `「${labelOfId(active.id)}」の列を動かすのをやめました。`,
   };
 
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。
-      </p>
-    );
-  }
-
   return (
     // 読み上げ用の要素（div）を表の外に描画させるため、DndContext は表の外側に置く（thead の中に div は置けない）
     <DndContext
@@ -143,8 +175,8 @@ export function PersonLaneView({ target }: PersonLaneViewProps) {
       accessibility={{ announcements, screenReaderInstructions: { draggable: DRAG_INSTRUCTIONS } }}
       onDragEnd={handleDragEnd}
     >
-      {/* ヘッダー（h-14）と余白のぶんを除いた高さに収め、見出しを枠の上端・左端に貼り付ける */}
-      <div className="max-h-[calc(100svh-6rem)] overflow-auto rounded-lg border">
+      {/* ヘッダー（h-14）・種別の絞り込み・余白のぶんを除いた高さに収め、見出しを枠の上端・左端に貼り付ける */}
+      <div className="max-h-[calc(100svh-8rem)] overflow-auto rounded-lg border">
         <table aria-label="人物の動き" className="border-separate border-spacing-0 text-left">
           <thead>
             <SortableContext items={lanes.map((lane) => lane.personId)} strategy={horizontalListSortingStrategy}>

@@ -40,8 +40,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { findUncorroboratedClaims } from '@/domain/cross-checks';
+import { personKindSuffixOf } from '@/domain/labels';
 import { personIconText } from '@/domain/person-icon';
-import type { Id } from '@/domain/types';
+import type { Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -93,8 +94,12 @@ const TAB_ICONS: Record<TabKey, ReactNode> = {
   map: <MapPin />,
 };
 
-/** 一覧に表示する1件です。リンク先と、行に表示する名前・アイコンを持ちます。 */
-type ListItem = { id: Id; label: string; href: string; imageDataUrl?: string; iconText?: string };
+/**
+ * 一覧に表示する1件です。リンク先と、行に表示する名前・アイコンを持ちます。
+ * 人物の行は種別（personKind）も持ち、アイコンの色と形で種別を示します。
+ * 色と形は読み上げで伝わらないため、人物ではない種別は、名前に添える読み上げ用の表記（「（記録・媒体）」など）でも伝えます。
+ */
+type ListItem = { id: Id; label: string; href: string; imageDataUrl?: string; iconText?: string; personKind?: PersonKind };
 
 type EntityGroupProps = {
   label: string;
@@ -111,6 +116,11 @@ type EntityGroupProps = {
   /** 1件も登録が無い場合に示す文です。 */
   emptyMessage: string;
 };
+
+/** 行の名前に添える種別の表記です。人物ではない種別の人物の行にだけ返し、それ以外の行には空文字列を返します。 */
+function kindSuffixOf(item: ListItem): string {
+  return item.personKind === undefined ? '' : personKindSuffixOf(item.personKind);
+}
 
 /** 人物・場所・証言の一覧を、折りたためる1つのまとまりとして表示します。 */
 function EntityGroup({
@@ -157,11 +167,18 @@ function EntityGroup({
                       size="sm"
                       isActive={isCurrent(item)}
                       render={
-                        <Link href={item.href} aria-current={isCurrent(item) ? 'page' : undefined} title={item.label} />
+                        <Link
+                          href={item.href}
+                          aria-current={isCurrent(item) ? 'page' : undefined}
+                          title={`${item.label}${kindSuffixOf(item)}`}
+                        />
                       }
                     >
-                      <EntityAvatar imageDataUrl={item.imageDataUrl} iconText={item.iconText} size="sm" />
-                      <span>{item.label}</span>
+                      <EntityAvatar imageDataUrl={item.imageDataUrl} iconText={item.iconText} personKind={item.personKind} size="sm" />
+                      <span>
+                        {item.label}
+                        <span className="sr-only">{kindSuffixOf(item)}</span>
+                      </span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
@@ -192,6 +209,7 @@ export function CaseSidebar() {
     href: personHref(caseId, person.id, tab),
     imageDataUrl: person.imageDataUrl,
     iconText: personIconText(person),
+    personKind: person.kind,
   }));
 
   const placeItems: ListItem[] = currentCase.places.map((place) => ({

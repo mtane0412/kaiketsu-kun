@@ -23,7 +23,7 @@
  */
 import { buildTimeline, claimLabelOf, USER_SPEAKER_LABEL } from './case-views';
 import { personIconText } from './person-icon';
-import type { Case, Id } from './types';
+import type { Case, Id, PersonKind } from './types';
 
 /** グラフのノードの種類です。人物・証言に加えて、発言者を選ばない証言（ユーザーの推測）をまとめるノードを持ちます。 */
 export type GraphNodeKind = 'person' | 'claim' | 'user';
@@ -48,6 +48,8 @@ export type GraphNode = {
   label: string;
   /** 元になった人物・証言のIDです。ノードを押したときに開く詳細ページに使います。ユーザーのノードには載りません。 */
   entityId?: Id;
+  /** 人物の種別です。人物のノードにだけ載ります。 */
+  personKind?: PersonKind;
   /** 人物に登録された画像です。 */
   imageDataUrl?: string;
   /** 画像が無い場合にアイコンへ表示する1文字です。人物にだけ載ります。 */
@@ -129,6 +131,7 @@ export function buildCaseGraph(target: Case): CaseGraph {
       kind: 'person',
       label: person.name,
       entityId: person.id,
+      personKind: person.kind,
       iconText: personIconText(person),
     };
     if (person.imageDataUrl !== undefined) node.imageDataUrl = person.imageDataUrl;

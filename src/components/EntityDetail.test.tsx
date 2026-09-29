@@ -20,6 +20,19 @@ beforeEach(() => {
 });
 
 describe('PersonDetail', () => {
+  it('人物の編集で、登録済みの種別を示し、種別を変更できる', async () => {
+    const user = userEvent.setup();
+    render(<PersonDetail personId="person-police" />);
+
+    const 種別 = screen.getByRole('combobox', { name: '種別' });
+    expect(種別).toHaveDisplayValue('組織');
+
+    await user.selectOptions(種別, '人物');
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+
+    expect(openedCase().persons.find((person) => person.id === 'person-police')?.kind).toBe('individual');
+  });
+
   it('人物の名前を見出しにして、編集フォームに現在の内容を表示する', () => {
     render(<PersonDetail personId="person-neighbor" />);
 
@@ -82,7 +95,7 @@ describe('PersonDetail', () => {
 
     openTestCase({
       ...sampleFictionalCase,
-      persons: [...sampleFictionalCase.persons, { id: 'person-clerk', name: '町役場の職員' }],
+      persons: [...sampleFictionalCase.persons, { id: 'person-clerk', name: '町役場の職員', kind: 'individual' }],
     });
     render(<PersonDetail personId="person-clerk" />);
 
@@ -190,6 +203,22 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
     expect(登録した人物).toBeDefined();
     // 検証: 保存した直後から、そのまま編集・削除を続けられるよう、登録した人物の詳細へ移る
     expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/persons/${登録した人物!.id}`);
+  });
+
+  it('人物の登録では種別を選べ、既定値は「人物」とする', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation('/cases/case-lakeside/persons/new');
+    render(<NewPersonDetail />);
+
+    const 登録 = screen.getByRole('region', { name: '人物の登録' });
+    const 種別 = within(登録).getByRole('combobox', { name: '種別' });
+    expect(種別).toHaveDisplayValue('人物');
+
+    await user.type(within(登録).getByLabelText('名前'), '駅の改札の記録');
+    await user.selectOptions(種別, '記録・媒体');
+    await user.click(within(登録).getByRole('button', { name: '人物を保存' }));
+
+    expect(openedCase().persons.find((person) => person.name === '駅の改札の記録')?.kind).toBe('record');
   });
 
   it('人物の登録では、削除のボタンを表示しない', () => {

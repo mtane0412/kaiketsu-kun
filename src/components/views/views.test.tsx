@@ -262,6 +262,20 @@ describe('TimelineView への書き足し', () => {
     expect(openedCase().claims).toHaveLength(件数);
   });
 
+  it('発言者の選択肢では、人物ではない種別を名前に添えて示す', async () => {
+    const user = userEvent.setup();
+    render(<StoreBoard />);
+
+    await user.click(screen.getByRole('button', { name: 'ボードに書き足す' }));
+    await user.click(screen.getByRole('button', { name: /^発言者/ }));
+
+    const 発言者 = within(screen.getByRole('group', { name: '発言者' }));
+    expect(発言者.getByRole('checkbox', { name: '県道の防犯カメラ（記録・媒体）' })).toBeInTheDocument();
+    expect(発言者.getByRole('checkbox', { name: '県警（組織）' })).toBeInTheDocument();
+    // 個人（人物）は最も多い種別のため、種別を添えない
+    expect(発言者.getByRole('checkbox', { name: '隣家の住人' })).toBeInTheDocument();
+  });
+
   it('ボードに書き足すときに、誰の発言かを「発言者」で紐づけられる', async () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
@@ -270,7 +284,7 @@ describe('TimelineView への書き足し', () => {
     await user.type(screen.getByLabelText('内容'), '持ち主は几帳面な人だった。');
     await user.click(screen.getByRole('button', { name: /^発言者/ }));
     await user.click(within(screen.getByRole('group', { name: '発言者' })).getByRole('checkbox', { name: '隣家の住人' }));
-    await user.click(within(screen.getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊' }));
+    await user.click(within(screen.getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊（記録・媒体）' }));
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     // 検証: カードに発言者の名前と経由が現れ、本文には発言者の記法が入らない
@@ -367,6 +381,44 @@ describe('PersonLaneView', () => {
     expect(セル[1]).toBeEmptyDOMElement();
     expect(within(セル[2]!).getByText('発言')).toBeInTheDocument();
     expect(within(セル[2]!).getByText(/見回りをしたとき/)).toBeInTheDocument();
+  });
+
+  it('列の見出しに、人物ではない種別を示す', () => {
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 見出し = within(screen.getByRole('table', { name: '人物の動き' })).getAllByRole('columnheader');
+    expect(見出し.find((header) => header.textContent?.includes('県道の防犯カメラ'))).toHaveTextContent('記録・媒体');
+    expect(見出し.find((header) => header.textContent?.includes('管理人'))).not.toHaveTextContent('人物');
+  });
+
+  it('人物の種別のチェックを外すと、その種別の列を表から外す', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 種別 = screen.getByRole('group', { name: '表示する人物の種別' });
+    await user.click(within(種別).getByRole('checkbox', { name: '記録・媒体' }));
+
+    const 表 = screen.getByRole('table', { name: '人物の動き' });
+    expect(within(表).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      '日時',
+      expect.stringContaining('別荘の持ち主'),
+      expect.stringContaining('隣家の住人'),
+      expect.stringContaining('管理人'),
+    ]);
+  });
+
+  it('すべての種別のチェックを外しても、絞り込みを戻せるようにチェックボックスを残す', async () => {
+    const user = userEvent.setup();
+    render(<PersonLaneView target={sampleFictionalCase} />);
+
+    const 種別 = screen.getByRole('group', { name: '表示する人物の種別' });
+    for (const ラベル of ['人物', '組織', '記録・媒体', '物']) {
+      await user.click(within(種別).getByRole('checkbox', { name: ラベル }));
+    }
+
+    expect(screen.queryByRole('table', { name: '人物の動き' })).not.toBeInTheDocument();
+    expect(screen.getByText('表示する種別の人物が登場する証言がありません。')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: '表示する人物の種別' })).getAllByRole('checkbox')).toHaveLength(4);
   });
 
   it('人物の動きを追えるよう、証言が述べる場所をカードの上部に示す', () => {

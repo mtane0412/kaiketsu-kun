@@ -65,6 +65,26 @@ describe('GraphView', () => {
     expect(within(凡例).getByText('言及')).toBeInTheDocument();
   });
 
+  it('人物ではない種別のノードは、読み上げの名前に種別を付ける', () => {
+    render(<GraphView target={sampleFictionalCase} />);
+
+    expect(screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '組織: 県警' })).toBeInTheDocument();
+  });
+
+  it('人物の種別のチェックを外すと、その種別のノードを描かない', async () => {
+    const user = userEvent.setup();
+    render(<GraphView target={sampleFictionalCase} />);
+
+    const 種別 = screen.getByRole('group', { name: '表示する人物の種別' });
+    await user.click(within(種別).getByRole('checkbox', { name: '記録・媒体' }));
+
+    expect(screen.queryByRole('link', { name: '記録・媒体: 県道の防犯カメラ' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '記録・媒体: 架空日報 朝刊' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '人物: 管理人' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '組織: 県警' })).toBeInTheDocument();
+  });
+
   it('人物も証言も登録されていないケースでは、書き足しを促す案内を出す', () => {
     const 空のケース: Case = { ...sampleFictionalCase, persons: [], places: [], claims: [], relationships: [], timelineOrder: [] };
 
@@ -163,8 +183,8 @@ describe('GraphView（人物どうしの関係）', () => {
     return {
       ...sampleFictionalCase,
       persons: [
-        { id: 'person-owner', name: '別荘の持ち主' },
-        { id: 'person-caretaker', name: '管理人' },
+        { id: 'person-owner', name: '別荘の持ち主', kind: 'individual' },
+        { id: 'person-caretaker', name: '管理人', kind: 'individual' },
       ],
       claims: [],
       timelineOrder: [],

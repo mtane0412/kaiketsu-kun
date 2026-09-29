@@ -4,7 +4,8 @@
  * 図そのもの（GraphView が描くSVG）に対する操作を、図の外にまとめます。次の3つを担います。
  *
  * - 拡大・縮小・表示を戻す: 図に重ねたボタンです。図を見ながら押せるよう、SVGの右上に重ねて置きます
- * - 絞り込み: 人物・証言・関係のうち、図に描くものを選ぶチェックボックスです
+ * - 絞り込み: 人物・証言・関係のうち、図に描くものを選ぶチェックボックスと、描く人物の種別を選ぶチェックボックスです
+ *   （種別のチェックボックスに添えた色の見本が、人物のノードの色の凡例を兼ねます）
  * - 凡例: 線の種類（発言・経由・言及・関係）の読み方です
  *
  * 状態は持たず、いまの値と、変更を伝える関数を受け取ります。図の状態はすべて GraphView が持ち、
@@ -17,6 +18,7 @@ import { useId } from 'react';
 import type { GraphEdgeKind } from '@/domain/case-graph';
 import type { GraphFilter } from '@/lib/graph-display';
 import { Button } from '@/components/ui/button';
+import { PersonKindFilter } from './PersonKindFilter';
 
 /** エッジの種類ごとの、線の色です。凡例と図の両方で同じ値を使います。 */
 export const EDGE_CLASSES: Record<GraphEdgeKind, string> = {
@@ -65,7 +67,7 @@ const RELATION_LEGEND_ITEMS: LegendItem[] = [
 ];
 
 /** 絞り込みのチェックボックス1つぶんの定義です。 */
-const FILTER_ITEMS: { key: keyof GraphFilter; label: string }[] = [
+const FILTER_ITEMS: { key: 'persons' | 'claims' | 'relations'; label: string }[] = [
   { key: 'persons', label: '人物を表示' },
   { key: 'claims', label: '証言を表示' },
   { key: 'relations', label: '関係を表示' },
@@ -107,24 +109,34 @@ type GraphFilterControlsProps = {
   onFilterChange: (filter: GraphFilter) => void;
 };
 
-/** 図に描くもの（人物・証言・関係）を選ぶチェックボックスです。 */
+/**
+ * 図に描くもの（人物・証言・関係）と、描く人物の種別を選ぶチェックボックスです。
+ * 「人物を表示」を外している間は、種別を選んでも図が変わらないため、種別のチェックボックスを操作できなくします。
+ */
 export function GraphFilterControls({ filter, onFilterChange }: GraphFilterControlsProps) {
   const idPrefix = useId();
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-      {FILTER_ITEMS.map((item) => (
-        <div key={item.key} className="flex items-center gap-1.5">
-          <input
-            id={`${idPrefix}-${item.key}`}
-            type="checkbox"
-            checked={filter[item.key]}
-            onChange={(event) => onFilterChange({ ...filter, [item.key]: event.target.checked })}
-          />
-          <label htmlFor={`${idPrefix}-${item.key}`} className="text-muted-foreground">
-            {item.label}
-          </label>
-        </div>
-      ))}
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        {FILTER_ITEMS.map((item) => (
+          <div key={item.key} className="flex items-center gap-1.5">
+            <input
+              id={`${idPrefix}-${item.key}`}
+              type="checkbox"
+              checked={filter[item.key]}
+              onChange={(event) => onFilterChange({ ...filter, [item.key]: event.target.checked })}
+            />
+            <label htmlFor={`${idPrefix}-${item.key}`} className="text-muted-foreground">
+              {item.label}
+            </label>
+          </div>
+        ))}
+      </div>
+      <PersonKindFilter
+        value={filter.personKinds}
+        onChange={(personKinds) => onFilterChange({ ...filter, personKinds })}
+        disabled={!filter.persons}
+      />
     </div>
   );
 }

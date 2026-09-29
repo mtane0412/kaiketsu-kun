@@ -128,7 +128,13 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
         )}
         {showSpeaker &&
           view.speakerPersons.map((person) => (
-            <EntityAvatar key={person.id} imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="sm" />
+            <EntityAvatar
+              key={person.id}
+              imageDataUrl={person.imageDataUrl}
+              iconText={personIconText(person)}
+              personKind={person.kind}
+              size="sm"
+            />
           ))}
         {emphasizePlace && view.place && (
           <span className={`flex items-center gap-0.5 rounded px-1 py-0.5 font-medium ${MENTION_STYLES.place}`}>
@@ -180,7 +186,7 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
                     title={person.name}
                     className={`${ABOVE_CARD_LINK} flex rounded-full hover:ring-2 hover:ring-ring`}
                   >
-                    <EntityAvatar imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} size="row" />
+                    <EntityAvatar imageDataUrl={person.imageDataUrl} iconText={personIconText(person)} personKind={person.kind} size="row" />
                   </Link>
                 </li>
               ))}
