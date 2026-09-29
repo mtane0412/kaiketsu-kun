@@ -115,6 +115,14 @@ describe('PersonDetail', () => {
     expect(within(関係).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
   });
 
+  it('聴取ごとに証言を並べる「供述の変遷」の節を並べる', () => {
+    resetMockNavigation('/cases/case-lakeside/persons/person-caretaker');
+    render(<PersonDetail personId="person-caretaker" />);
+
+    const 変遷 = screen.getByRole('region', { name: '供述の変遷' });
+    expect(within(変遷).getByRole('button', { name: '聴取を追加' })).toBeInTheDocument();
+  });
+
   it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
     render(<PersonDetail personId="person-deleted" />);
 
@@ -132,6 +140,12 @@ describe('PlaceDetail', () => {
     render(<PlaceDetail placeId="place-villa" />);
 
     expect(screen.queryByRole('region', { name: '関係' })).not.toBeInTheDocument();
+  });
+
+  it('供述の変遷の節は並べない', () => {
+    render(<PlaceDetail placeId="place-villa" />);
+
+    expect(screen.queryByRole('region', { name: '供述の変遷' })).not.toBeInTheDocument();
   });
 
   it('場所の名前を見出しにして、編集フォームに現在の内容を表示する', () => {

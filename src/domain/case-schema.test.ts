@@ -490,3 +490,90 @@ describe('parseCase（人物のアイコンの文字）', () => {
     expect(() => parseCase(toJsonData(ケース))).toThrow(/persons\.0\.iconText/);
   });
 });
+
+/** 管理人が、書籍の著者の取材に応じた機会です（管理人の証言は書籍を経由して伝わっています）。 */
+const 書籍の取材 = {
+  id: 'interview-caretaker-book',
+  subjectPersonId: 'person-caretaker',
+  interviewerPersonId: 'person-book',
+  at: '2018-05',
+  placeId: 'place-villa',
+  subjectRole: '元管理人',
+  documentRef: '第3章',
+};
+
+/** 書籍の取材に、管理人の証言をひもづけたケースです。 */
+const 聴取を持つケース = {
+  ...sampleFictionalCase,
+  interviews: [書籍の取材],
+  claims: sampleFictionalCase.claims.map((claim) =>
+    claim.id === 'claim-caretaker' ? { ...claim, interviewId: 書籍の取材.id } : claim
+  ),
+};
+
+describe('parseCase（聴取）', () => {
+  it('聴取と、証言の聴取へのひもづけを保持して受け付ける', () => {
+    expect(parseCase(toJsonData(聴取を持つケース))).toEqual(聴取を持つケース);
+  });
+
+  it('聴取を持たない頃に保存したデータは、聴取を空として受け付ける', () => {
+    const { interviews: _聴取, ...聴取の無いケース } = sampleFictionalCase;
+
+    expect(parseCase(toJsonData(聴取の無いケース)).interviews).toEqual([]);
+  });
+
+  it('証言が存在しない聴取を参照している場合は拒否する', () => {
+    const ケース = { ...聴取を持つケース, interviews: [] };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/存在しない聴取を参照しています: interview-caretaker-book/);
+  });
+
+  it('聴取の相手・聴取者・場所が存在しない場合は拒否する', () => {
+    const ケース = {
+      ...sampleFictionalCase,
+      interviews: [
+        { id: 'interview-broken', subjectPersonId: 'person-unknown', interviewerPersonId: 'person-gone', placeId: 'place-gone' },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(
+      /存在しない人物を参照しています: person-unknown[\s\S]*存在しない人物を参照しています: person-gone[\s\S]*存在しない場所を参照しています: place-gone/
+    );
+  });
+
+  it('聴取の日時が時刻参照の形式でない場合は拒否する', () => {
+    const ケース = { ...聴取を持つケース, interviews: [{ ...書籍の取材, at: '2018年ごろ' }] };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/interviews\.0\.at/);
+  });
+
+  it('聴取の相手が、証言の発言者にも経由にも含まれない場合は拒否する', () => {
+    // 前提: 隣家の住人の証言は、隣家の住人が述べ、新聞を経由して伝わったもので、管理人は関わっていない
+    const ケース = {
+      ...聴取を持つケース,
+      claims: 聴取を持つケース.claims.map((claim) =>
+        claim.id === 'claim-neighbor' ? { ...claim, interviewId: 書籍の取材.id } : claim
+      ),
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(
+      /聴取の相手が、証言の発言者にも経由にも含まれていません: claim-neighbor/
+    );
+  });
+
+  it('聴取の相手が経由の一段である証言は、ひもづけを受け付ける（伝聞のその段が述べた機会として扱う）', () => {
+    // 前提: 県警の発表（防犯カメラの記録を伝えた）を、聴取として記録している
+    const 県警の発表 = { id: 'interview-police-press', subjectPersonId: 'person-police', at: '1998-08-13' };
+    const ケース = {
+      ...sampleFictionalCase,
+      interviews: [県警の発表],
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-police-camera' ? { ...claim, interviewId: 県警の発表.id } : claim
+      ),
+    };
+
+    expect(parseCase(toJsonData(ケース)).claims.find((claim) => claim.id === 'claim-police-camera')?.interviewId).toBe(
+      'interview-police-press'
+    );
+  });
+});
