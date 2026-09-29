@@ -290,7 +290,7 @@ export type MapPin = {
 };
 
 /** 場所の座標を返します。緯度と経度が揃っていない場合は undefined を返します。 */
-function coordinatesOf(place: Place): Coordinates | undefined {
+export function coordinatesOf(place: Place): Coordinates | undefined {
   return place.latitude === undefined || place.longitude === undefined
     ? undefined
     : { latitude: place.latitude, longitude: place.longitude };

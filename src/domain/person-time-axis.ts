@@ -13,7 +13,7 @@
 import { buildPersonLanes, type LaneRole, type PersonLane } from './case-views';
 import type { ClaimView } from './case-views';
 import { PERSON_KINDS } from './person-kind';
-import { intervalsOverlap, toInterval, type Interval } from './time-ref';
+import { DAY_MS, HOUR_MS, intervalsOverlap, MINUTE_MS, toInterval, type Interval } from './time-ref';
 import type { TimelineKey } from './timeline-order';
 import type { Case, Id, PersonKind } from './types';
 
@@ -129,10 +129,6 @@ export function placeInRange(interval: Interval, range: Interval): { top: number
 
 /** 時刻軸の目盛りです。at はUTCのエポックミリ秒です。 */
 export type TimeTick = { at: number; label: string };
-
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 /** 目盛りの数の上限の既定値です。これを超えない最も細かい間隔を選びます。 */
 const DEFAULT_MAX_TICKS = 12;
