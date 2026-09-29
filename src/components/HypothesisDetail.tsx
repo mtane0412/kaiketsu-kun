@@ -140,11 +140,16 @@ export function HypothesisDetail({ hypothesisId }: { hypothesisId: Id }) {
 
   const { hypothesis } = detail;
 
-  /** 仮説を書き換えて、すぐに保存します。保存できなかった場合は理由を表示します。 */
+  /**
+   * 仮説を書き換えて、すぐに保存します。保存できなかった場合は理由を表示します。
+   * 再描画を待たずに続けて操作しても前の変更を上書きしないよう、描画時点ではなくストアにある最新の仮説を書き換えます。
+   */
   const update = (change: (current: Hypothesis) => Hypothesis) => {
     setError(null);
+    const latest =
+      useCaseStore.getState().currentCase?.hypotheses.find((candidate) => candidate.id === hypothesisId) ?? hypothesis;
     try {
-      upsert('hypotheses', change(hypothesis));
+      upsert('hypotheses', change(latest));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
