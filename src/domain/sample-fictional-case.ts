@@ -96,6 +96,20 @@ export const sampleFictionalCase: Case = {
     },
   ],
   interviews: [],
+  crossChecks: [
+    {
+      id: 'cross-check-camera-neighbor',
+      claimIds: ['claim-police-camera', 'claim-neighbor'],
+      kind: 'supports',
+      reason: '20:10ごろに持ち主の車が別荘の方向へ走り、21:00ごろに持ち主が庭にいた。時刻の順と行き先が合う。',
+    },
+    {
+      id: 'cross-check-caretaker-neighbor',
+      claimIds: ['claim-caretaker', 'claim-neighbor'],
+      kind: 'contradicts',
+      reason: '管理人は別荘が真っ暗で持ち主の車も無かったと述べ、隣家の住人は明かりがついていて持ち主がいたと述べている。',
+    },
+  ],
   timelineOrder: [
     'claim:claim-caretaker',
     'claim:claim-police-camera',

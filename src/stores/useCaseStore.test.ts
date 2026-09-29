@@ -214,6 +214,54 @@ describe('remove', () => {
   });
 });
 
+describe('照合', () => {
+  it('2件の証言の間に、種類と理由をつけた照合を登録する', () => {
+    useCaseStore.getState().upsert('crossChecks', {
+      id: 'cross-check-report-neighbor',
+      claimIds: ['claim-report', 'claim-neighbor'],
+      kind: 'sameSubject',
+      reason: 'どちらも12日夜の持ち主の様子を述べている。',
+    });
+
+    expect(開いているケース().crossChecks.map((crossCheck) => crossCheck.id)).toContain('cross-check-report-neighbor');
+  });
+
+  it('理由が空の照合は登録できず、ケースを変更しない', () => {
+    expect(() =>
+      useCaseStore.getState().upsert('crossChecks', {
+        id: 'cross-check-no-reason',
+        claimIds: ['claim-report', 'claim-neighbor'],
+        kind: 'supports',
+        reason: '',
+      })
+    ).toThrow('照合の理由がありません');
+    expect(開いているケース()).toEqual(sampleFictionalCase);
+  });
+
+  it('照合を削除しても、照合した証言は残る', () => {
+    useCaseStore.getState().remove('crossChecks', 'cross-check-camera-neighbor');
+
+    const ケース = 開いているケース();
+    expect(ケース.crossChecks.map((crossCheck) => crossCheck.id)).not.toContain('cross-check-camera-neighbor');
+    expect(ケース.claims.map((claim) => claim.id)).toEqual(expect.arrayContaining(['claim-police-camera', 'claim-neighbor']));
+  });
+
+  it('証言を削除すると、その証言を含む照合もあわせて削除する', () => {
+    // 前提: 隣家の住人の証言は、防犯カメラの証言（裏付ける）と管理人の証言（食い違う）の2件の照合に含まれる
+    useCaseStore.getState().remove('claims', 'claim-neighbor');
+
+    expect(開いているケース().crossChecks).toEqual([]);
+  });
+
+  it('関係の根拠として参照されている証言は、照合があっても削除できず、照合も残す', () => {
+    // 前提: 管理人の証言は、雇用主の関係の根拠であり、隣家の住人の証言との照合にも含まれる
+    expect(() => useCaseStore.getState().remove('claims', 'claim-caretaker')).toThrow(
+      '他のデータから参照されているため削除できません'
+    );
+    expect(開いているケース()).toEqual(sampleFictionalCase);
+  });
+});
+
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
 const 書籍の取材: Interview = {
   id: 'interview-caretaker-book',

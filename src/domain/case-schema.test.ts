@@ -577,3 +577,52 @@ describe('parseCase（聴取）', () => {
     );
   });
 });
+
+describe('parseCase（照合）', () => {
+  it('照合を保持して受け付ける', () => {
+    // 前提: サンプルのケースには、裏付ける照合と食い違う照合が1件ずつある
+    expect(parseCase(toJsonData(sampleFictionalCase)).crossChecks).toEqual(sampleFictionalCase.crossChecks);
+  });
+
+  it('照合を持たない頃に保存したデータは、照合を空として受け付ける', () => {
+    const { crossChecks: _照合, ...照合の無いケース } = sampleFictionalCase;
+
+    expect(parseCase(toJsonData(照合の無いケース)).crossChecks).toEqual([]);
+  });
+
+  it('照合が存在しない証言を参照している場合は拒否する', () => {
+    const ケース = {
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-broken', claimIds: ['claim-neighbor', 'claim-gone'], kind: 'supports', reason: '時刻が合う' }],
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/存在しない証言を参照しています: claim-gone/);
+  });
+
+  it('同じ証言どうしの照合は拒否する', () => {
+    const ケース = {
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-self', claimIds: ['claim-neighbor', 'claim-neighbor'], kind: 'supports', reason: '同じ' }],
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/同じ証言どうしは照合できません: cross-check-self/);
+  });
+
+  it('理由が空白だけの照合は拒否する', () => {
+    const ケース = {
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-no-reason', claimIds: ['claim-neighbor', 'claim-report'], kind: 'sameSubject', reason: '  ' }],
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/照合の理由がありません: cross-check-no-reason/);
+  });
+
+  it('照合の種類が決められた値でない場合は拒否する', () => {
+    const ケース = {
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-unknown', claimIds: ['claim-neighbor', 'claim-report'], kind: 'true', reason: '時刻が合う' }],
+    };
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/crossChecks\.0\.kind/);
+  });
+});

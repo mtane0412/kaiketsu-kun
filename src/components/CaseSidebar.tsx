@@ -8,6 +8,9 @@
  *    常に見える場所に置き、選ぶとメインのカラムがその詳細に切り替わるようにしました。
  * 足元には、めったに使わない操作（ケース名の変更・JSONの書き出し・ケースの削除）をメニューに畳んでいます（CaseSettingsMenu）。
  *
+ * 証言の一覧の下には、裏付ける照合を1件も持たない証言だけを並べた「裏付けの無い証言」を置きます（findUncorroboratedClaims）。
+ * どの証言の裏付けがまだ取れていないかを、ボードを見比べ直さずに把握できるようにするためです。
+ *
  * 一覧はどれも折りたためます。証言は数が多くサイドバーを占めてしまうため、最初は折りたたんでおきます。
  * 人物・場所は、見出しの横の「＋」から登録のページ（/cases/<ケースのID>/persons/new・.../places/new）へ進みます。
  * 証言には「＋」を置きません。証言は時系列ボードの書き足したい位置から書くため、並び順の中での位置が決まる入り口に一本化しています。
@@ -19,11 +22,24 @@
  */
 'use client';
 
-import { ChevronRight, Clock, Columns3, FolderOpen, Layers, MapPin, MessageSquare, Plus, Share2, Users } from 'lucide-react';
+import {
+  ChevronRight,
+  CircleDashed,
+  Clock,
+  Columns3,
+  FolderOpen,
+  Layers,
+  MapPin,
+  MessageSquare,
+  Plus,
+  Share2,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo, type ReactNode } from 'react';
-import { buildTimeline, claimLabelOf } from '@/domain/case-views';
+import { buildTimeline, claimLabelOf, type ClaimView } from '@/domain/case-views';
+import { findUncorroboratedClaims } from '@/domain/cross-checks';
 import { personIconText } from '@/domain/person-icon';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -185,12 +201,17 @@ export function CaseSidebar() {
     imageDataUrl: place.imageDataUrl,
   }));
 
+  const uncorroboratedClaims = useMemo(() => findUncorroboratedClaims(currentCase), [currentCase]);
+
+  const toClaimItem = (view: ClaimView): ListItem => ({
+    id: view.claim.id,
+    label: claimLabelOf(view),
+    href: claimHref(caseId, view.claim.id, tab),
+  });
+
   // 証言は、ボードで見える順番（時系列ボードの並び順）と同じ順に並べる
-  const claimItems: ListItem[] = timeline.items.map((item) => ({
-    id: item.view.claim.id,
-    label: claimLabelOf(item.view),
-    href: claimHref(caseId, item.view.claim.id, tab),
-  }));
+  const claimItems: ListItem[] = timeline.items.map((item) => toClaimItem(item.view));
+  const uncorroboratedItems: ListItem[] = uncorroboratedClaims.map(toClaimItem);
 
   /** ケースの切り替えの候補です。いま開いているケースは、切り替え先には並べません。 */
   const otherCases = summaries.filter((summary) => summary.id !== currentCase.id);
@@ -278,6 +299,16 @@ export function CaseSidebar() {
           defaultOpen={false}
           isCurrent={(item) => isCurrentHref(item.href)}
           emptyMessage="ボードの「ここに書き足す」から書けます。"
+        />
+
+        <EntityGroup
+          label="裏付けの無い証言"
+          icon={<CircleDashed />}
+          items={uncorroboratedItems}
+          listLabel="裏付けの無い証言の一覧"
+          defaultOpen={false}
+          isCurrent={(item) => isCurrentHref(item.href)}
+          emptyMessage="すべての証言に裏付けの照合があります。"
         />
       </SidebarContent>
 

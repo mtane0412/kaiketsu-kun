@@ -13,6 +13,7 @@
  * 日時を区間で持っていた頃のデータは、最も早い時点だけを日時として引き継ぎます（migrateLegacyTimeRef）。
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
+ * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
  */
@@ -162,6 +163,17 @@ const caseSchema = z.object({
       })
     )
     .optional(),
+  // 照合を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
+  crossChecks: z
+    .array(
+      z.object({
+        id: idSchema,
+        claimIds: z.tuple([idSchema, idSchema]),
+        kind: z.enum(['supports', 'contradicts', 'sameSubject']),
+        reason: z.string(),
+      })
+    )
+    .optional(),
   // 並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で当時の表示順を補う）
   timelineOrder: z.array(z.string()).optional(),
   // 列の並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の並び順を補う）
@@ -169,7 +181,8 @@ const caseSchema = z.object({
 });
 
 /**
- * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ）を列挙します。
+ * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ、
+ * 同じ証言どうしの照合、理由の無い照合）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
 export function findCaseViolations(target: Case): string[] {
@@ -241,6 +254,16 @@ export function findCaseViolations(target: Case): string[] {
     check(personIds, relationship.fromPersonId, '人物');
     check(personIds, relationship.toPersonId, '人物');
     relationship.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));
+  }
+  for (const crossCheck of target.crossChecks) {
+    crossCheck.claimIds.forEach((id) => check(claimIds, id, '証言'));
+    if (crossCheck.claimIds[0] === crossCheck.claimIds[1]) {
+      violations.push(`同じ証言どうしは照合できません: ${crossCheck.id}`);
+    }
+    // 照合は「どこがどう一致したか・食い違ったか」を残すためのものなので、理由の無い照合は受け付けない
+    if (crossCheck.reason.trim() === '') {
+      violations.push(`照合の理由がありません: ${crossCheck.id}`);
+    }
   }
   return violations;
 }
@@ -346,13 +369,14 @@ export function parseCase(data: unknown): Case {
     throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], ...current } = result.data;
+  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], crossChecks = [], ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
   let parsed: Case = {
     ...current,
     persons,
     personLaneOrder,
     interviews,
+    crossChecks,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
   };
   // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある

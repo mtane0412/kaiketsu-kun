@@ -109,6 +109,22 @@ describe('CaseSidebar', () => {
       );
     });
 
+    it('裏付けの無い証言の一覧は、裏付ける照合を1件も持たない証言だけを、詳細へのリンクで並べる', async () => {
+      const user = userEvent.setup();
+      サイドバーを描画する();
+
+      // 前提: 裏付ける照合は、防犯カメラ↔隣家の住人の1件だけ。管理人の証言は食い違う照合しか持たない
+      await user.click(await screen.findByRole('button', { name: /^裏付けの無い証言/ }));
+
+      const 一覧 = await screen.findByRole('list', { name: '裏付けの無い証言の一覧' });
+      expect(within(一覧).getAllByRole('link')).toHaveLength(3);
+      expect(within(一覧).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+        'href',
+        '/cases/case-lakeside/claims/claim-caretaker'
+      );
+      expect(within(一覧).queryByRole('link', { name: /明かりがついていて/ })).not.toBeInTheDocument();
+    });
+
     it('開いている人物の詳細は、一覧でも現在地として示す', async () => {
       resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
       サイドバーを描画する();

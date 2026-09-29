@@ -119,6 +119,29 @@ describe('ClaimDetail', () => {
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside');
   });
 
+  it('照合を含む証言の削除の確認では、照合もあわせて削除することを伝え、削除すると照合も消える', async () => {
+    // 前提: 隣家の住人の証言は、2件の照合（防犯カメラ・管理人）に含まれる
+    const user = userEvent.setup();
+
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言を含む照合2件も削除します。');
+    await user.click(screen.getByRole('button', { name: '削除する' }));
+
+    expect(openedCase().crossChecks).toEqual([]);
+  });
+
+  it('照合した相手の証言へ、証言の詳細からたどれる', () => {
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const 照合 = screen.getByRole('region', { name: '照合' });
+    expect(within(照合).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/claims/claim-caretaker'
+    );
+  });
+
   it('関係の根拠になっている証言を削除しようとすると、理由を示して削除しない', async () => {
     // 前提: 管理人の証言（claim-caretaker）は、関係「雇用主」の根拠になっている
     const user = userEvent.setup();

@@ -12,6 +12,7 @@
  * - 「ボードに書き足す」: 並び順の末尾に並べます。
  *
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
+ * 読み手が記録した照合（CrossCheck）がある証言は、カードに照合の件数を小さく示します。
  * 証言の編集・削除・日時の入力は、証言のカードから開く詳細ページ（ClaimDetail）で行います。ボード上では編集しません。
  * 本文のメンションは、その人物・場所の詳細ページ（EntityDetail）への導線です。
  */
@@ -33,6 +34,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
+import { countCrossChecksByClaim } from '@/domain/cross-checks';
 import { formatTimeRef } from '@/domain/time-ref';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
 import type { Case } from '@/domain/types';
@@ -128,6 +130,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
 
 export function TimelineView({ target }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
+  const crossCheckCounts = useMemo(() => countCrossChecksByClaim(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
   const closeComposer = () => setComposer(null);
@@ -179,7 +182,7 @@ export function TimelineView({ target }: TimelineViewProps) {
   /** ボードの1項目（証言）のカードを表示します。 */
   const renderItem = ({ view }: TimelineItem) => (
     <ul>
-      <ClaimCard view={view} showSpeaker tab="timeline" />
+      <ClaimCard view={view} showSpeaker tab="timeline" crossCheckCounts={crossCheckCounts.get(view.claim.id)} />
     </ul>
   );
 

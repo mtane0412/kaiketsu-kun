@@ -5,6 +5,7 @@
  * どのケースを開くかはURL（/cases/<ケースのID>）が決めるため、このストアはケースの切り替えをURLから受け取ります（openCase）。
  * ケースの一覧（summaries）は、ケースを開かずに一覧ページへ表示するために保持します。
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
+ * 証言を削除すると、その証言を含む照合（CrossCheck）もあわせて削除します。照合は2件の証言がそろって初めて意味を持つためです。
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
@@ -32,7 +33,7 @@ import {
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews';
+export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks';
 
 /**
  * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。
@@ -78,7 +79,10 @@ type CaseStore = {
    * 新しい人物と、その人物に言及する証言を同時に保存できます。違反がある場合は例外を投げ、どの要素も保存しません。
    */
   upsertMany: (entries: UpsertEntry[]) => void;
-  /** 要素を削除します。他のデータから参照されている場合は例外を投げます。 */
+  /**
+   * 要素を削除します。他のデータから参照されている場合は例外を投げます。
+   * 証言を削除する場合は、その証言を含む照合もあわせて削除します（照合は削除を妨げる参照として扱いません）。
+   */
   remove: (key: CollectionKey, id: Id) => void;
   /**
    * 時系列ボードの項目を動かします。toIndex は、動かした後の並び順の中での位置（0始まり）です。
@@ -183,7 +187,10 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
     remove: (key, id) =>
       updateCurrentCase((current) => {
         const items = current[key] as { id: Id }[];
-        const nextCase = { ...current, [key]: items.filter((item) => item.id !== id) } as Case;
+        let nextCase = { ...current, [key]: items.filter((item) => item.id !== id) } as Case;
+        if (key === 'claims') {
+          nextCase = { ...nextCase, crossChecks: nextCase.crossChecks.filter((crossCheck) => !crossCheck.claimIds.includes(id)) };
+        }
 
         const violations = findCaseViolations(nextCase);
         if (violations.length > 0) {
