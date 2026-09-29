@@ -19,6 +19,9 @@
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
  * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
  *
+ * withEntries を渡すと、保存する証言のIDを使った要素（書き足した証言をひもづけた未了事項など）を、証言と同じ1回の保存で書き込みます。
+ * どちらかが保存できない場合は、証言も含めて何も保存しません（ひもづけ先の無い証言だけが残らないようにするためです）。
+ *
  * initial を渡すと編集、省略すると新規登録になります。
  * フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
  * 呼び出し側で key を変えて再マウントしてください。
@@ -75,9 +78,14 @@ type ClaimFormProps = {
   compact?: boolean;
   /** ボタンの行の左端に置く要素です（「やめる」「この証言を削除」など）。「発言者」と投稿ボタンは右端にまとめます。 */
   actions?: ReactNode;
+  /**
+   * 保存する証言のIDを受け取り、証言とあわせて保存する要素を返します。
+   * 例外を投げると、その理由を表示して、証言も保存しません。
+   */
+  withEntries?: (claimId: Id) => UpsertEntry[];
 };
 
-export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions }: ClaimFormProps) {
+export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions, withEntries }: ClaimFormProps) {
   const currentCase = useCurrentCase();
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
@@ -179,7 +187,7 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     const insertIndex = initial ? undefined : defaults?.insertIndex;
 
     try {
-      upsertMany([...newEntries, { key: 'claims', entity: claim }]);
+      upsertMany([...newEntries, { key: 'claims', entity: claim }, ...(withEntries?.(claim.id) ?? [])]);
       if (insertIndex !== undefined) moveTimelineItem(boardKey, insertIndex);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));

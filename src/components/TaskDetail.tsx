@@ -5,7 +5,8 @@
  * 1. 内容・状態・担当・期限・結果のメモの編集と、未了事項の削除（TaskForm）
  * 2. 対象の証言・人物・場所のひもづけ。選ぶとすぐにひもづけ、外すボタンですぐに外します
  * 3. 確認した結果を、新しい証言として書き足す導線（「結果を証言として書き足す」）。
- *    書き足した証言は、この未了事項の対象の証言にひもづけ、未了事項から結果の証言へたどれるようにします
+ *    書き足した証言は、この未了事項の対象の証言にひもづけ、未了事項から結果の証言へたどれるようにします。
+ *    証言の保存とひもづけは1回の保存で行い、どちらかができない場合は証言も保存しません
  *
  * 未了事項の登録（NewTaskDetail）は、内容・状態・担当・期限・結果のメモだけを入力し、保存すると、ひもづけを続けられるよう詳細へ移ります。
  * 証言・人物・場所の詳細の「未了事項を追加」から開いた場合は、その対象（URLの ?link=）をひもづけた状態で登録します。
@@ -254,9 +255,12 @@ export function TaskDetail({ taskId }: { taskId: Id }) {
         {isComposingResult ? (
           <section aria-label="結果の証言の書き足し" className="rounded-lg border bg-card p-3">
             <ClaimForm
-              onDone={(claimId) => {
-                addLink('claim', claimId);
-                setIsComposingResult(false);
+              onDone={() => setIsComposingResult(false)}
+              withEntries={(claimId) => {
+                // 描画時点の未了事項で上書きしないよう、ストアにある最新の未了事項にひもづける
+                const latest = useCaseStore.getState().currentCase?.tasks.find((candidate) => candidate.id === taskId);
+                if (!latest) throw new Error(`未了事項が見つかりません: ${taskId}`);
+                return [{ key: 'tasks', entity: { ...latest, claimIds: [...latest.claimIds, claimId] } }];
               }}
               autoFocus
               compact
