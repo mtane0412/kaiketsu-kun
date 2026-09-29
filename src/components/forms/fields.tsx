@@ -27,10 +27,14 @@ type TextFieldProps = {
   required?: boolean;
   multiline?: boolean;
   placeholder?: string;
+  /** 入力が誤っているかどうかです。true の場合は、読み上げに誤りとして伝えます（aria-invalid）。 */
+  invalid?: boolean;
+  /** 入力欄の説明にする要素のIDです。誤りの理由（FormError）を、どの欄の誤りかと結び付けるために使います。 */
+  describedBy?: string;
 };
 
 /** ラベル付きのテキスト入力欄です。multiline を指定すると複数行の入力欄になります。 */
-export function TextField({ label, value, onChange, required, multiline, placeholder }: TextFieldProps) {
+export function TextField({ label, value, onChange, required, multiline, placeholder, invalid, describedBy }: TextFieldProps) {
   const id = useId();
   return (
     <div className="grid gap-1.5">
@@ -44,6 +48,8 @@ export function TextField({ label, value, onChange, required, multiline, placeho
           value={value}
           required={required}
           placeholder={placeholder}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
@@ -53,6 +59,8 @@ export function TextField({ label, value, onChange, required, multiline, placeho
           value={value}
           required={required}
           placeholder={placeholder}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
@@ -60,11 +68,15 @@ export function TextField({ label, value, onChange, required, multiline, placeho
   );
 }
 
-/** フォームのエラー表示です。エラーが無い場合は何も表示しません。 */
-export function FormError({ message }: { message: string | null }) {
+/**
+ * フォームのエラー表示です。エラーが無い場合は何も表示しません。
+ * id を指定すると、入力欄の aria-describedby から参照して、誤りの理由を欄の説明として読み上げられます。
+ */
+export function FormError({ message, id }: { message: string | null; id?: string }) {
   if (!message) return null;
   return (
     <p
+      id={id}
       role="alert"
       className="whitespace-pre-line rounded-md bg-destructive/10 px-2 py-1.5 text-sm text-destructive"
     >

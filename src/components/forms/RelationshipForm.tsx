@@ -69,6 +69,9 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
   const [since, setSince] = useState(initial?.since ?? '');
   const [until, setUntil] = useState(initial?.until ?? '');
   const [error, setError] = useState<string | null>(null);
+  /** 表記を解釈できなかった期間の欄です。その欄を誤りとして示し、エラー表示と結び付けるために持ちます。 */
+  const [invalidPeriodField, setInvalidPeriodField] = useState<'since' | 'until' | null>(null);
+  const errorId = `${formId}-error`;
 
   // 自分自身との関係は登録できないため、選択肢から編集中の人物を外す
   const otherPersonOptions = currentCase.persons.filter((person) => person.id !== personId);
@@ -89,6 +92,8 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
+    // 前回の保存で誤りとした欄を、今回の入力で直っている場合に誤りのまま示さないよう、先に解除する
+    setInvalidPeriodField(null);
     const [fromPersonId, toPersonId] = isIncoming ? [otherPersonId, personId] : [personId, otherPersonId];
     const relationship: Relationship = {
       id: initial?.id ?? nanoid(),
@@ -108,6 +113,7 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
       const parsed = parseDateInput(text);
       if (parsed === null) {
         setError(`${fieldName}を解釈できません: ${text.trim()}（例: 1998-08-12、1998年8月12日19時）`);
+        setInvalidPeriodField(key);
         return;
       }
       relationship[key] = parsed;
@@ -171,8 +177,22 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
       </fieldset>
 
       <div className="grid grid-cols-2 gap-2">
-        <TextField label="開始（任意）" value={since} onChange={setSince} placeholder="1995-04、1995年4月 など" />
-        <TextField label="終了（任意）" value={until} onChange={setUntil} placeholder="1998-05、1998年5月 など" />
+        <TextField
+          label="開始（任意）"
+          value={since}
+          onChange={setSince}
+          placeholder="1995-04、1995年4月 など"
+          invalid={invalidPeriodField === 'since'}
+          describedBy={invalidPeriodField === 'since' ? errorId : undefined}
+        />
+        <TextField
+          label="終了（任意）"
+          value={until}
+          onChange={setUntil}
+          placeholder="1998-05、1998年5月 など"
+          invalid={invalidPeriodField === 'until'}
+          describedBy={invalidPeriodField === 'until' ? errorId : undefined}
+        />
       </div>
 
       <fieldset>
@@ -199,7 +219,7 @@ export function RelationshipForm({ personId, personName, initial, onDone, onCanc
         )}
       </fieldset>
 
-      <FormError message={error} />
+      <FormError message={error} id={errorId} />
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           やめる

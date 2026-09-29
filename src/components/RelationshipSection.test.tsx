@@ -223,6 +223,40 @@ describe('RelationshipSection', () => {
     expect(openedCase().relationships).toHaveLength(2);
   });
 
+  it('解釈できない開始を入力すると、開始の欄だけを誤りとして示し、理由を欄の説明として結び付ける', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('開始（任意）'), '去年の春');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    const 開始 = within(登録).getByLabelText('開始（任意）');
+    expect(開始).toHaveAttribute('aria-invalid', 'true');
+    expect(開始).toHaveAccessibleDescription(/開始を解釈できません: 去年の春/);
+    expect(within(登録).getByLabelText('終了（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('解釈できない終了を入力すると、終了の欄を誤りとして示す', async () => {
+    const user = userEvent.setup();
+    持ち主の関係を描画();
+
+    await user.click(screen.getByRole('button', { name: '関係を追加' }));
+    const 登録 = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(登録).getByLabelText('終了（任意）'), 'そのうち');
+    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+
+    const 終了 = within(登録).getByLabelText('終了（任意）');
+    expect(終了).toHaveAttribute('aria-invalid', 'true');
+    expect(終了).toHaveAccessibleDescription(/終了を解釈できません: そのうち/);
+    expect(within(登録).getByLabelText('開始（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('終了が開始より前の場合は、理由を示して保存しない', async () => {
     const user = userEvent.setup();
     持ち主の関係を描画();
