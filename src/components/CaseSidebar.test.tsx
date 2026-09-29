@@ -4,7 +4,7 @@
  * サイドバーは SidebarProvider の中でしか動かないため、実際の画面と同じく
  * ケースを開く枠（CaseGate）と SidebarProvider の中に描画します。
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -187,6 +187,19 @@ describe('CaseSidebar', () => {
       await user.type(screen.getByRole('searchbox', { name: 'ボード全体を検索' }), '管理人{Enter}');
 
       expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}/search?tab=map&q=${encodeURIComponent('管理人')}`);
+    });
+
+    it('URLの検索語が変わると、検索窓の文字列もそれに合わせる', () => {
+      resetMockNavigation(`/cases/${sampleFictionalCase.id}/search?q=${encodeURIComponent('管理人')}`);
+      サイドバーを描画する();
+      const 検索窓 = () => screen.getByRole('searchbox', { name: 'ボード全体を検索' });
+      expect(検索窓()).toHaveValue('管理人');
+
+      act(() => mockRouter.push(`/cases/${sampleFictionalCase.id}/search?q=${encodeURIComponent('隣家')}`));
+      expect(検索窓()).toHaveValue('隣家');
+
+      act(() => mockRouter.push(`/cases/${sampleFictionalCase.id}`));
+      expect(検索窓()).toHaveValue('');
     });
 
     it('IMEの変換中のEnterキーでは、検索結果のページへ移らない', () => {

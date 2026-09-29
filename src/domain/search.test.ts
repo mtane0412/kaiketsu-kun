@@ -70,6 +70,19 @@ describe('findPersonsSharingIdentifiers', () => {
     expect(一致[0]?.identifiers).toEqual([{ type: '電話番号', value: '090-1234-5678' }]);
   });
 
+  it('正規化すると空になる値（ハイフンだけの値など）は、一致として扱わない', () => {
+    const ケース: Case = {
+      ...sampleFictionalCase,
+      persons: sampleFictionalCase.persons.map((person) => {
+        if (person.id === 'person-owner') return { ...person, identifiers: [{ type: '電話番号', value: '-' }] };
+        if (person.id === 'person-caretaker') return { ...person, identifiers: [{ type: '電話番号', value: '－ －' }] };
+        return person;
+      }),
+    };
+
+    expect(findPersonsSharingIdentifiers(ケース, 'person-owner')).toEqual([]);
+  });
+
   it('識別子を持たない人物、存在しない人物では、空の配列を返す', () => {
     expect(findPersonsSharingIdentifiers(識別子のあるケース, 'person-police')).toEqual([]);
     expect(findPersonsSharingIdentifiers(識別子のあるケース, 'person-gone')).toEqual([]);

@@ -207,13 +207,13 @@ function EntityGroup({
 
 /**
  * ボード全体の検索窓です。Enterキーで、入力した検索語の検索結果のページへ移ります。
- * 検索結果のページを開いている間は、その検索語を初期値にします。
+ * URLの検索語（?q=）を初期値にします。呼び出し側は、URLの検索語が変わるたびに key を変えて再マウントしてください
+ * （ブラウザの「戻る」や、検索結果のページを離れたときに、検索窓の文字列をURLに合わせるためです）。
  * 注意: IMEの変換を確定するEnterキー（isComposing）と、空白だけの検索語では移りません。
  */
-function BoardSearchInput({ tab }: { tab: TabKey }) {
+function BoardSearchInput({ tab, initialQuery }: { tab: TabKey; initialQuery: string }) {
   const caseId = useCaseId();
   const router = useRouter();
-  const initialQuery = useSearchParams().get(SEARCH_QUERY_PARAM) ?? '';
   const [query, setQuery] = useState(initialQuery);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -245,7 +245,9 @@ export function CaseSidebar() {
   const caseId = useCaseId();
   const summaries = useCaseStore((state) => state.summaries);
   const pathname = usePathname();
-  const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get(TAB_SEARCH_PARAM));
+  const searchQuery = searchParams.get(SEARCH_QUERY_PARAM) ?? '';
 
   /** 一覧の行が、いま開いている詳細かどうかを判定します。リンク先のうち、クエリを除いた部分で見分けます。 */
   const isCurrentHref = (href: string) => href.split('?')[0] === pathname;
@@ -317,7 +319,7 @@ export function CaseSidebar() {
             </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
-        <BoardSearchInput tab={tab} />
+        <BoardSearchInput key={searchQuery} tab={tab} initialQuery={searchQuery} />
       </SidebarHeader>
 
       <SidebarContent>

@@ -43,10 +43,14 @@ export type IdentifierMatch = {
  * 指定した人物と同じ値の識別子を持つ人物を、ケースの人物の登録順で返します。
  * 識別子の種類は比較に使いません。「電話番号」と「携帯電話」のように、同じものを違う種類の名前で登録しうるためです。
  * 人物が識別子を持たない場合と、人物が見つからない場合は、空の配列を返します。
+ * 正規化すると空になる値（ハイフンや空白だけの値）は、比較に使いません。
  */
 export function findPersonsSharingIdentifiers(target: Case, personId: Id): IdentifierMatch[] {
   const person = target.persons.find((candidate) => candidate.id === personId);
-  const ownValues = new Set((person?.identifiers ?? []).map((identifier) => normalizeForMatching(identifier.value)));
+  // ハイフンだけの値のように正規化すると空になる値は、どの人物とも一致させない
+  const ownValues = new Set(
+    (person?.identifiers ?? []).map((identifier) => normalizeForMatching(identifier.value)).filter((value) => value !== '')
+  );
   if (ownValues.size === 0) return [];
 
   return target.persons.flatMap((other) => {
