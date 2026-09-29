@@ -14,6 +14,7 @@
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
+ * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
  * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
  *
  * 注意: 検証に失敗した場合は、問題点を列挙した例外を投げます。不正なデータを部分的に受け入れることはしません。
@@ -177,6 +178,30 @@ const caseSchema = z.object({
       })
     )
     .optional(),
+  // 仮説を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
+  hypotheses: z
+    .array(
+      z.object({
+        id: idSchema,
+        title: z.string(),
+        description: z.string().optional(),
+        status: z.enum(['open', 'likely', 'rejected']),
+        rejectionReason: z.string().optional(),
+        supportingClaimIds: z.array(idSchema),
+        opposingClaimIds: z.array(idSchema),
+        targets: z.array(
+          z.object({
+            personId: idSchema,
+            claimIds: z.object({
+              motive: z.array(idSchema),
+              opportunity: z.array(idSchema),
+              means: z.array(idSchema),
+            }),
+          })
+        ),
+      })
+    )
+    .optional(),
   // 並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で当時の表示順を補う）
   timelineOrder: z.array(z.string()).optional(),
   // 列の並び順を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の並び順を補う）
@@ -185,7 +210,8 @@ const caseSchema = z.object({
 
 /**
  * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ、
- * 同じ証言どうしの照合、理由の無い照合）を列挙します。
+ * 同じ証言どうしの照合、理由の無い照合、見出しの無い仮説、否定の理由と状態の食い違い、
+ * 支える証言と反する証言の両方にひもづけた証言、仮説の対象の重複）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
 export function findCaseViolations(target: Case): string[] {
@@ -266,6 +292,32 @@ export function findCaseViolations(target: Case): string[] {
     // 照合は「どこがどう一致したか・食い違ったか」を残すためのものなので、理由の無い照合は受け付けない
     if (crossCheck.reason.trim() === '') {
       violations.push(`照合の理由がありません: ${crossCheck.id}`);
+    }
+  }
+  for (const hypothesis of target.hypotheses) {
+    hypothesis.supportingClaimIds.forEach((id) => check(claimIds, id, '証言'));
+    hypothesis.opposingClaimIds.forEach((id) => check(claimIds, id, '証言'));
+    for (const hypothesisTarget of hypothesis.targets) {
+      check(personIds, hypothesisTarget.personId, '人物');
+      Object.values(hypothesisTarget.claimIds).flat().forEach((id) => check(claimIds, id, '証言'));
+    }
+    if (hypothesis.title.trim() === '') {
+      violations.push(`仮説の見出しがありません: ${hypothesis.id}`);
+    }
+    // 否定の理由は、否定された仮説にだけ持たせる。否定したときに理由を残し、同じ見立てを検討し直さないためです
+    const hasRejectionReason = (hypothesis.rejectionReason ?? '').trim() !== '';
+    if (hypothesis.status === 'rejected' && !hasRejectionReason) {
+      violations.push(`否定された仮説に否定の理由がありません: ${hypothesis.id}`);
+    }
+    if (hypothesis.status !== 'rejected' && hypothesis.rejectionReason !== undefined) {
+      violations.push(`否定されていない仮説に否定の理由は指定できません: ${hypothesis.id}`);
+    }
+    if (hypothesis.supportingClaimIds.some((id) => hypothesis.opposingClaimIds.includes(id))) {
+      violations.push(`同じ証言を、仮説を支える証言と反する証言の両方にひもづけることはできません: ${hypothesis.id}`);
+    }
+    const targetPersonIds = hypothesis.targets.map((hypothesisTarget) => hypothesisTarget.personId);
+    if (new Set(targetPersonIds).size !== targetPersonIds.length) {
+      violations.push(`同じ人物を仮説の対象に2回以上含めることはできません: ${hypothesis.id}`);
     }
   }
   return violations;
@@ -372,7 +424,7 @@ export function parseCase(data: unknown): Case {
     throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], crossChecks = [], ...current } = result.data;
+  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], crossChecks = [], hypotheses = [], ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
   let parsed: Case = {
     ...current,
@@ -380,6 +432,7 @@ export function parseCase(data: unknown): Case {
     personLaneOrder,
     interviews,
     crossChecks,
+    hypotheses,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
   };
   // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある

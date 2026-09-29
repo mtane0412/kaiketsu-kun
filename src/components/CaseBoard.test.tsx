@@ -133,6 +133,19 @@ describe('CaseBoard', () => {
     );
   });
 
+  it('「仮説」に切り替えると、仮説の一覧を表示し、仮説の詳細ページへのリンクを並べる', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    await 表示を切り替える(user, '仮説');
+
+    const 一覧 = await screen.findByRole('list', { name: '仮説の一覧' });
+    expect(within(一覧).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses'
+    );
+  });
+
   describe('詳細を1カラムで表示する', () => {
     it('証言の詳細ページのURLでは、詳細だけを表示し、ボードは隠す', async () => {
       resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
@@ -198,6 +211,21 @@ describe('CaseBoard', () => {
       renderBoard(<p>場所の登録フォーム</p>);
 
       expect(await screen.findByRole('region', { name: '場所の登録' })).toBeInTheDocument();
+    });
+
+    it('仮説の詳細ページのURLでは、仮説の詳細だけを表示する', async () => {
+      resetMockNavigation('/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses');
+      renderBoard(<p>管理人の仮説の詳細</p>);
+
+      const 詳細 = await screen.findByRole('region', { name: '仮説の詳細' });
+      expect(within(詳細).getByText('管理人の仮説の詳細')).toBeInTheDocument();
+    });
+
+    it('仮説を新しく登録するURLでも、登録の枠だけを表示する', async () => {
+      resetMockNavigation('/cases/case-lakeside/hypotheses/new?tab=hypotheses');
+      renderBoard(<p>仮説の登録フォーム</p>);
+
+      expect(await screen.findByRole('region', { name: '仮説の登録' })).toBeInTheDocument();
     });
 
     it('詳細を開いたまま表示を切り替えると、詳細を閉じてボードへ戻る', async () => {

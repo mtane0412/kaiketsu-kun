@@ -668,3 +668,73 @@ describe('parseCase（照合）', () => {
     expect(() => parseCase(toJsonData(ケース))).toThrow(/crossChecks\.0\.kind/);
   });
 });
+
+describe('parseCase（仮説）', () => {
+  /** サンプルの「管理人が失踪に関わっている」仮説を、一部の項目だけ差し替えたケースを作ります。 */
+  function 管理人の仮説を差し替えたケース(変更: Record<string, unknown>) {
+    const [管理人の仮説, ...他の仮説] = sampleFictionalCase.hypotheses;
+    return { ...sampleFictionalCase, hypotheses: [{ ...管理人の仮説, ...変更 }, ...他の仮説] };
+  }
+
+  it('仮説を保持して受け付ける', () => {
+    // 前提: サンプルのケースには、検討中の仮説と、否定された仮説が1件ずつある
+    expect(parseCase(toJsonData(sampleFictionalCase)).hypotheses).toEqual(sampleFictionalCase.hypotheses);
+  });
+
+  it('仮説を持たない頃に保存したデータは、仮説を空として受け付ける', () => {
+    const { hypotheses: _仮説, ...仮説の無いケース } = sampleFictionalCase;
+
+    expect(parseCase(toJsonData(仮説の無いケース)).hypotheses).toEqual([]);
+  });
+
+  it('仮説が存在しない証言・人物を参照している場合は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({
+      opposingClaimIds: ['claim-gone'],
+      targets: [{ personId: 'person-gone', claimIds: { motive: [], opportunity: ['claim-lost'], means: [] } }],
+    });
+
+    const 読み込み = () => parseCase(toJsonData(ケース));
+    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-gone/);
+    expect(読み込み).toThrow(/存在しない人物を参照しています: person-gone/);
+    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-lost/);
+  });
+
+  it('見出しが空白だけの仮説は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({ title: '  ' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/仮説の見出しがありません: hypothesis-caretaker/);
+  });
+
+  it('否定された仮説に否定の理由が無い場合は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({ status: 'rejected', rejectionReason: ' ' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/否定された仮説に否定の理由がありません: hypothesis-caretaker/);
+  });
+
+  it('否定されていない仮説に否定の理由がある場合は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({ status: 'likely', rejectionReason: '記録と合わない' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/否定されていない仮説に否定の理由は指定できません: hypothesis-caretaker/);
+  });
+
+  it('同じ証言を、支える証言と反する証言の両方にひもづけた仮説は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({ opposingClaimIds: ['claim-user-guess'] });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(
+      /同じ証言を、仮説を支える証言と反する証言の両方にひもづけることはできません: hypothesis-caretaker/
+    );
+  });
+
+  it('同じ人物を2回以上対象にした仮説は拒否する', () => {
+    const 対象 = { personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: [] } };
+    const ケース = 管理人の仮説を差し替えたケース({ targets: [対象, 対象] });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/同じ人物を仮説の対象に2回以上含めることはできません: hypothesis-caretaker/);
+  });
+
+  it('仮説の状態が決められた値でない場合は拒否する', () => {
+    const ケース = 管理人の仮説を差し替えたケース({ status: 'true' });
+
+    expect(() => parseCase(toJsonData(ケース))).toThrow(/hypotheses\.0\.status/);
+  });
+});

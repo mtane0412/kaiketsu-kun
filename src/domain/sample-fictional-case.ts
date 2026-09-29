@@ -110,6 +110,31 @@ export const sampleFictionalCase: Case = {
       reason: '管理人は別荘が真っ暗で持ち主の車も無かったと述べ、隣家の住人は明かりがついていて持ち主がいたと述べている。',
     },
   ],
+  hypotheses: [
+    {
+      id: 'hypothesis-caretaker',
+      title: '管理人が失踪に関わっている',
+      description: '管理人の証言だけが、持ち主が19時にはいなかったと述べている。',
+      status: 'open',
+      supportingClaimIds: ['claim-user-guess'],
+      opposingClaimIds: [],
+      targets: [
+        {
+          personId: 'person-caretaker',
+          claimIds: { motive: ['claim-user-guess'], opportunity: ['claim-caretaker'], means: [] },
+        },
+      ],
+    },
+    {
+      id: 'hypothesis-left-early',
+      title: '持ち主は19時より前に別荘を離れた',
+      status: 'rejected',
+      rejectionReason: '20:10に持ち主の車が別荘の方向へ走り、21:00に持ち主が庭にいたという記録と証言がある。',
+      supportingClaimIds: ['claim-caretaker'],
+      opposingClaimIds: ['claim-police-camera', 'claim-neighbor'],
+      targets: [],
+    },
+  ],
   timelineOrder: [
     'claim:claim-caretaker',
     'claim:claim-police-camera',
