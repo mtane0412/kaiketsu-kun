@@ -197,8 +197,10 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
         if (violations.length > 0) {
           throw new Error(violations.join('\n'));
         }
-        if (touchedKeys.length > 0) {
-          nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, touchedKeys) };
+        // 並び順の移動で置く項目は、直後の placeTimelineItem が位置を決め直すため、ここでは寄せない
+        const keysToSettle = touchedKeys.filter((key) => key !== timelineMove?.key);
+        if (keysToSettle.length > 0) {
+          nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, keysToSettle) };
         }
         if (timelineMove !== undefined) {
           nextCase = { ...nextCase, timelineOrder: placeTimelineItem(nextCase, timelineMove.key, timelineMove.toIndex) };

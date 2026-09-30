@@ -169,6 +169,13 @@ describe('placeTimelineItem', () => {
 
     expect(() => placeTimelineItem(target, 'claim:claim-unknown', 0)).toThrow('ボードに項目が見つかりません');
   });
+
+  it('並び順の範囲外の位置を指定すると、例外を投げる', () => {
+    const target = makeCase({ claims: [makeClaim('claim-arrival'), makeClaim('claim-search')] });
+
+    expect(() => placeTimelineItem(target, 'claim:claim-search', -1)).toThrow('並び順の範囲外の位置です');
+    expect(() => placeTimelineItem(target, 'claim:claim-search', 2)).toThrow('並び順の範囲外の位置です');
+  });
 });
 
 describe('settleTimelineItems', () => {

@@ -40,6 +40,13 @@ export function resolveTimelineOrder(target: Case): TimelineKey[] {
   return [...listed, ...onBoard.filter((key) => !listedKeys.has(key))];
 }
 
+/** 項目がボードの並び順に無い場合に、例外を投げます。 */
+function assertOnBoard(order: TimelineKey[], key: TimelineKey): void {
+  if (!order.includes(key)) {
+    throw new Error(`ボードに項目が見つかりません: ${key}`);
+  }
+}
+
 /** ボードの項目が持つ日時の区間を返します。日時を持たない項目は null を返します。 */
 function intervalOf(target: Case, key: TimelineKey): Interval | null {
   const when = target.claims.find((claim) => timelineKeyOf(claim.id) === key)?.when;
@@ -55,9 +62,7 @@ function intervalOf(target: Case, key: TimelineKey): Interval | null {
  */
 export function allowedIndexRange(target: Case, key: TimelineKey): { min: number; max: number } {
   const order = resolveTimelineOrder(target);
-  if (!order.includes(key)) {
-    throw new Error(`ボードに項目が見つかりません: ${key}`);
-  }
+  assertOnBoard(order, key);
   const others = order.filter((other) => other !== key);
   const moving = intervalOf(target, key);
   if (!moving) return { min: 0, max: others.length };
@@ -94,12 +99,14 @@ export function moveTimelineItem(target: Case, key: TimelineKey, toIndex: number
  * 新しく書き足した証言を書いた位置に並べるために使います。書き足しを拒否しないのは、settleTimelineItems と同じく、
  * 日時の入力を拒否せずに位置のほうを合わせる方針のためです（ドラッグで動かす場合は moveTimelineItem を使い、矛盾する位置を拒否します）。
  *
- * 注意: ボードに無い項目を指定した場合は例外を投げます。
+ * 注意: ボードに無い項目と、並び順の範囲外の位置（0未満・他の項目の件数より大きい位置）を指定した場合は例外を投げます。
  */
 export function placeTimelineItem(target: Case, key: TimelineKey, toIndex: number): TimelineKey[] {
   const order = resolveTimelineOrder(target);
-  if (!order.includes(key)) {
-    throw new Error(`ボードに項目が見つかりません: ${key}`);
+  assertOnBoard(order, key);
+  // 置いた後の位置は、自分以外の項目の件数（末尾）までしか取れない
+  if (toIndex < 0 || toIndex > order.length - 1) {
+    throw new Error(`並び順の範囲外の位置です: ${toIndex}`);
   }
   return settleTimelineItems({ ...target, timelineOrder: moved(order, key, toIndex) }, [key]);
 }
