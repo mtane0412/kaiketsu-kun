@@ -2,7 +2,7 @@
  * 証言の詳細に並べる「照合」（証言同士の突き合わせの結果の一覧・登録・編集・削除）のテスト
  */
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { openedCase, openTestCase } from '@/test/open-case';
@@ -17,6 +17,13 @@ beforeEach(() => {
   openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
 });
+
+/** 「反応の記録」の「発言者」のパネルで、登録済みの人物を発言者に選びます。 */
+async function chooseReactionSpeaker(user: UserEvent, reactionRegion: HTMLElement, personName: string) {
+  await user.click(within(reactionRegion).getByRole('button', { name: /^発言者/ }));
+  const speakerField = within(reactionRegion).getByRole('group', { name: '発言者' });
+  await user.click(within(speakerField).getByRole('checkbox', { name: personName }));
+}
 
 /** 隣家の住人の証言の詳細に並ぶ「照合」を描画します。 */
 function renderNeighborCrossCheck() {
@@ -61,7 +68,7 @@ describe('CrossCheckSection', () => {
     expect(within(registerButton).queryByRole('option', { name: /明かりがついていて/ })).not.toBeInTheDocument();
     await user.selectOptions(within(registerButton).getByLabelText('相手の証言'), 'claim-report');
     await user.click(within(registerButton).getByRole('radio', { name: '同じ事柄を述べている' }));
-    await user.type(within(registerButton).getByLabelText('理由'), 'どちらも12日夜の持ち主の様子を述べている。');
+    await user.type(within(registerButton).getByLabelText('理由（任意）'), 'どちらも12日夜の持ち主の様子を述べている。');
     await user.click(within(registerButton).getByRole('button', { name: '照合を保存' }));
 
     const addedCrossCheck = openedCase().crossChecks.find((crossCheck) => crossCheck.claimIds.includes('claim-report'));
@@ -73,18 +80,20 @@ describe('CrossCheckSection', () => {
     expect(screen.queryByRole('region', { name: '照合の登録' })).not.toBeInTheDocument();
   });
 
-  it('理由を空白だけにして保存しようとすると、理由を示して保存しない', async () => {
+  it('理由を書かずに保存すると、理由を持たない照合として追加する', async () => {
     const user = userEvent.setup();
     renderNeighborCrossCheck();
 
     await user.click(screen.getByRole('button', { name: '照合を追加' }));
     const registerButton = screen.getByRole('region', { name: '照合の登録' });
     await user.selectOptions(within(registerButton).getByLabelText('相手の証言'), 'claim-report');
-    await user.type(within(registerButton).getByLabelText('理由'), '   ');
+    await user.type(within(registerButton).getByLabelText('理由（任意）'), '   ');
     await user.click(within(registerButton).getByRole('button', { name: '照合を保存' }));
 
-    expect(await within(registerButton).findByRole('alert')).toHaveTextContent('照合の理由がありません');
-    expect(openedCase().crossChecks).toHaveLength(2);
+    const addedCrossCheck = openedCase().crossChecks.find((crossCheck) => crossCheck.claimIds.includes('claim-report'));
+    // 検証: 空白だけの理由は、理由のキーごと持たせない
+    expect(addedCrossCheck).toBeDefined();
+    expect(addedCrossCheck).not.toHaveProperty('reason');
   });
 
   it('照合の種類と理由を編集できる', async () => {
@@ -97,8 +106,8 @@ describe('CrossCheckSection', () => {
     expect(within(editButton).getByLabelText('相手の証言')).toHaveValue('claim-caretaker');
     expect(within(editButton).getByRole('radio', { name: '食い違う' })).toBeChecked();
     await user.click(within(editButton).getByRole('radio', { name: '同じ事柄を述べている' }));
-    await user.clear(within(editButton).getByLabelText('理由'));
-    await user.type(within(editButton).getByLabelText('理由'), '見た時刻が2時間ずれており、両立しうる。');
+    await user.clear(within(editButton).getByLabelText('理由（任意）'));
+    await user.type(within(editButton).getByLabelText('理由（任意）'), '見た時刻が2時間ずれており、両立しうる。');
     await user.click(within(editButton).getByRole('button', { name: '照合を保存' }));
 
     const afterEdit = openedCase().crossChecks.find((crossCheck) => crossCheck.id === 'cross-check-caretaker-neighbor');
@@ -140,5 +149,95 @@ describe('CrossCheckSection', () => {
     const caseData = openedCase();
     expect(caseData.crossChecks.map((crossCheck) => crossCheck.id)).toEqual(['cross-check-caretaker-neighbor']);
     expect(caseData.claims.map((claim) => claim.id)).toContain('claim-police-camera');
+  });
+});
+
+describe('CrossCheckSection の反応の記録', () => {
+  it('反応を書いて保存すると、反応した人物の証言と、元の証言との照合（食い違う）を同時に追加する', async () => {
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    // 検証: 反応の多くは否定のため、種類の初期値は「食い違う」にする
+    expect(within(reactionRegion).getByRole('radio', { name: '食い違う' })).toBeChecked();
+    await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await chooseReactionSpeaker(user, reactionRegion, '管理人');
+    await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
+
+    const caseData = openedCase();
+    const reactionClaim = caseData.claims.at(-1);
+    expect(reactionClaim).toMatchObject({
+      content: 'その夜、持ち主は別荘にいなかった。',
+      speaker: { kind: 'person', personIds: ['person-caretaker'] },
+    });
+    const reactionCrossCheck = caseData.crossChecks.find((crossCheck) => crossCheck.claimIds.includes(reactionClaim!.id));
+    // 検証: 反応の本文が食い違いの中身を表すため、照合の理由は持たせない
+    expect(reactionCrossCheck).toMatchObject({ claimIds: ['claim-neighbor', reactionClaim!.id], kind: 'contradicts' });
+    expect(reactionCrossCheck).not.toHaveProperty('reason');
+    expect(screen.queryByRole('region', { name: '反応の記録' })).not.toBeInTheDocument();
+  });
+
+  it('反応の証言を、時系列の並び順で元の証言の直後に置く', async () => {
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await chooseReactionSpeaker(user, reactionRegion, '管理人');
+    await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
+
+    const caseData = openedCase();
+    const reactionClaimId = caseData.claims.at(-1)!.id;
+    const order = caseData.timelineOrder;
+    expect(order.indexOf(`claim:${reactionClaimId}`)).toBe(order.indexOf('claim:claim-neighbor') + 1);
+  });
+
+  it('種類を「裏付ける」に切り替えて、同意の反応を記録できる', async () => {
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    await user.click(within(reactionRegion).getByRole('radio', { name: '裏付ける' }));
+    await user.type(within(reactionRegion).getByLabelText('内容'), '自分も庭に人影を見た。');
+    await chooseReactionSpeaker(user, reactionRegion, '管理人');
+    await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
+
+    const caseData = openedCase();
+    const reactionClaimId = caseData.claims.at(-1)!.id;
+    expect(caseData.crossChecks.find((crossCheck) => crossCheck.claimIds.includes(reactionClaimId))).toMatchObject({
+      kind: 'supports',
+    });
+  });
+
+  it('発言者を選ばずに保存しようとすると、理由を示して、証言も照合も追加しない', async () => {
+    // 前提: 反応は別の人物の反応を記録するものであり、発言者の無い証言（ユーザーの推測）にはしない
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
+
+    expect(await within(reactionRegion).findByRole('alert')).toHaveTextContent('反応した人物を発言者に選んでください');
+    expect(openedCase().claims).toHaveLength(sampleFictionalCase.claims.length);
+    expect(openedCase().crossChecks).toHaveLength(sampleFictionalCase.crossChecks.length);
+  });
+
+  it('「やめる」で閉じると、証言も照合も追加しない', async () => {
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await user.click(within(reactionRegion).getByRole('button', { name: 'やめる' }));
+
+    expect(screen.queryByRole('region', { name: '反応の記録' })).not.toBeInTheDocument();
+    expect(openedCase().claims).toHaveLength(sampleFictionalCase.claims.length);
+    expect(openedCase().crossChecks).toHaveLength(sampleFictionalCase.crossChecks.length);
   });
 });

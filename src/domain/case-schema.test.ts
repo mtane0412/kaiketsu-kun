@@ -679,13 +679,16 @@ describe('parseCase（照合）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(/同じ証言どうしは照合できません: cross-check-self/);
   });
 
-  it('理由が空白だけの照合は拒否する', () => {
+  it('理由を持たない照合も受け付ける', () => {
+    // 前提: 2件の証言を見比べれば一致・食い違いが明らかな照合では、理由を書かないことがある
     const caseData = {
       ...sampleFictionalCase,
-      crossChecks: [{ id: 'cross-check-no-reason', claimIds: ['claim-neighbor', 'claim-report'], kind: 'sameSubject', reason: '  ' }],
+      crossChecks: [{ id: 'cross-check-no-reason', claimIds: ['claim-neighbor', 'claim-report'], kind: 'sameSubject' }],
     };
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/照合の理由がありません: cross-check-no-reason/);
+    expect(parseCase(toJsonData(caseData)).crossChecks).toEqual([
+      { id: 'cross-check-no-reason', claimIds: ['claim-neighbor', 'claim-report'], kind: 'sameSubject' },
+    ]);
   });
 
   it('照合の種類が決められた値でない場合は拒否する', () => {

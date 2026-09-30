@@ -49,6 +49,9 @@ export const COLLECTION_KEY_BY_MENTION_KIND: Record<MentionKind, CollectionKey> 
 };
 
 /** 一覧の名前と、その一覧に保存する要素の組です。 */
+/** upsertMany で要素とあわせて反映する、時系列ボードの項目の移動です。toIndex は、動かした後の並び順の中での位置（0始まり）です。 */
+export type TimelineMove = { key: TimelineKey; toIndex: number };
+
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
 
 type CaseStore = {
@@ -81,8 +84,10 @@ type CaseStore = {
   /**
    * 複数の要素をまとめて保存します。すべてを反映した状態で参照の整合性を1回だけ検証するため、
    * 新しい人物と、その人物に言及する証言を同時に保存できます。違反がある場合は例外を投げ、どの要素も保存しません。
+   * timelineMove を渡すと、保存した後の並び順で時系列ボードの項目を動かし、要素と並び順を1回で保存します
+   * （新しい証言を書いた位置に並べるためです）。移動が日時と矛盾する場合も例外を投げ、どの要素も保存しません。
    */
-  upsertMany: (entries: UpsertEntry[]) => void;
+  upsertMany: (entries: UpsertEntry[], timelineMove?: TimelineMove) => void;
   /**
    * 要素を削除します。他のデータから参照されている場合は例外を投げます。
    * 証言を削除する場合は、その証言を含む照合もあわせて削除し、仮説からはその証言のひもづけを外します
@@ -174,7 +179,7 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 
     upsert: (key, entity) => get().upsertMany([{ key, entity } as UpsertEntry]),
 
-    upsertMany: (entries) =>
+    upsertMany: (entries, timelineMove) =>
       updateCurrentCase((current) => {
         let nextCase = current;
         /** 日時が変わった可能性のあるボードの項目です。 */
@@ -193,6 +198,9 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
         }
         if (touchedKeys.length > 0) {
           nextCase = { ...nextCase, timelineOrder: settleTimelineItems(nextCase, touchedKeys) };
+        }
+        if (timelineMove !== undefined) {
+          nextCase = { ...nextCase, timelineOrder: moveTimelineItem(nextCase, timelineMove.key, timelineMove.toIndex) };
         }
         return nextCase;
       }),
