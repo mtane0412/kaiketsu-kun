@@ -89,6 +89,22 @@ export function moveTimelineItem(target: Case, key: TimelineKey, toIndex: number
 }
 
 /**
+ * 項目を指定した位置に置いた並び順を返します。指定した位置が日時と矛盾する場合は、拒否せずに、最も近い矛盾しない位置に置きます。
+ * toIndex は、置いた後の並び順の中での、その項目の位置（0始まり）です。
+ * 新しく書き足した証言を書いた位置に並べるために使います。書き足しを拒否しないのは、settleTimelineItems と同じく、
+ * 日時の入力を拒否せずに位置のほうを合わせる方針のためです（ドラッグで動かす場合は moveTimelineItem を使い、矛盾する位置を拒否します）。
+ *
+ * 注意: ボードに無い項目を指定した場合は例外を投げます。
+ */
+export function placeTimelineItem(target: Case, key: TimelineKey, toIndex: number): TimelineKey[] {
+  const order = resolveTimelineOrder(target);
+  if (!order.includes(key)) {
+    throw new Error(`ボードに項目が見つかりません: ${key}`);
+  }
+  return settleTimelineItems({ ...target, timelineOrder: moved(order, key, toIndex) }, [key]);
+}
+
+/**
  * 日時の入力などで現在の位置が日時と矛盾するようになった項目を、最も近い矛盾しない位置へ動かした並び順を返します。
  * 日時の編集を拒否せずに位置を合わせるのは、「日時と矛盾するので動かせず、位置と矛盾するので日時を直せない」
  * という行き詰まりを避けるためです。

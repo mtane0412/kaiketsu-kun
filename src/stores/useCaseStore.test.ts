@@ -479,17 +479,24 @@ describe('時系列ボードの並び順', () => {
     ]);
   });
 
-  it('upsertMany に渡した移動が日時と矛盾する場合は、要素も保存せず、ケースを変更しない', () => {
-    // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている
-    const beforeChange = getOpenCase();
+  it('upsertMany に渡した移動が日時と矛盾する場合は、拒否せずに、最も近い矛盾しない位置に置いて保存する', () => {
+    // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている。先頭（位置0）は8月12日の証言より前になる
+    useCaseStore.getState().upsertMany([{ key: 'claims', entity: searchGuess }], {
+      key: 'claim:claim-police-search',
+      toIndex: 0,
+    });
 
-    expect(() =>
-      useCaseStore.getState().upsertMany([{ key: 'claims', entity: searchGuess }], {
-        key: 'claim:claim-police-search',
-        toIndex: 0,
-      })
-    ).toThrow('日時と矛盾するため');
-    expect(getOpenCase()).toBe(beforeChange);
+    const caseData = loadCase(sampleFictionalCase.id);
+    expect(caseData.claims.map((claim) => claim.id)).toContain('claim-police-search');
+    // 検証: 8月12日の証言（最後は隣家の住人）がすべて前に来る位置のうち、指定した先頭に最も近い位置に置く
+    expect(caseData.timelineOrder).toEqual([
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-police-search',
+      'claim:claim-report',
+      'claim:claim-user-guess',
+    ]);
   });
 });
 

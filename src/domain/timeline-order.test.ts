@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   allowedIndexRange,
   moveTimelineItem,
+  placeTimelineItem,
   resolveTimelineOrder,
   settleTimelineItems,
 } from './timeline-order';
@@ -135,6 +136,38 @@ describe('moveTimelineItem', () => {
     const target = makeCase({ claims: [makeClaim('claim-arrival')] });
 
     expect(() => moveTimelineItem(target, 'claim:claim-unknown', 0)).toThrow('ボードに項目が見つかりません');
+  });
+});
+
+describe('placeTimelineItem', () => {
+  it('日時と矛盾しない位置は、指定したとおりの位置に置く', () => {
+    const target = makeCase({ claims: [makeClaim('claim-arrival'), makeClaim('claim-memo'), makeClaim('claim-search')] });
+
+    expect(placeTimelineItem(target, 'claim:claim-search', 1)).toEqual([
+      'claim:claim-arrival',
+      'claim:claim-search',
+      'claim:claim-memo',
+    ]);
+  });
+
+  it('日時と矛盾する位置を指定すると、拒否せずに、最も近い矛盾しない位置に置く', () => {
+    // 前提: 8月10日と8月12日の証言の間（位置1）を指定して、8月15日の証言を書き足した
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-last-seen', august12), makeClaim('claim-search', august15)],
+      timelineOrder: ['claim:claim-arrival', 'claim:claim-last-seen', 'claim:claim-search'],
+    });
+
+    expect(placeTimelineItem(target, 'claim:claim-search', 1)).toEqual([
+      'claim:claim-arrival',
+      'claim:claim-last-seen',
+      'claim:claim-search',
+    ]);
+  });
+
+  it('ボードに無い項目を置こうとすると、例外を投げる', () => {
+    const target = makeCase({ claims: [makeClaim('claim-arrival')] });
+
+    expect(() => placeTimelineItem(target, 'claim:claim-unknown', 0)).toThrow('ボードに項目が見つかりません');
   });
 });
 
