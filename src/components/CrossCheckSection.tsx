@@ -5,9 +5,11 @@
  * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている）を記録した一次データです。
  * 自動では判定しません。どちらの証言が正しいかも判定しません。
  *
- * 各行には、照合の種類・相手の証言へのリンク・理由を並べます。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
+ * 各行には、照合の種類・相手の証言へのリンク・理由（ある場合）を並べます。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
  * 開いているタブ（tab）はリンク先のURLに引き継ぎます。
+ *
+ * 「反応を記録」からは、この証言に対する別の人物の反応を、反応した人物の証言と照合として1回で記録します（ReactionForm）。
  *
  * 注意: 照合の入力は、この一覧の中でフォームを開いて行います（CrossCheckForm）。
  * 編集対象を切り替えるたびにフォームを作り直せるよう、フォームには対象のIDを key に渡します。
@@ -24,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { ClaimLink } from './ClaimLink';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { CrossCheckForm } from './forms/CrossCheckForm';
+import { ReactionForm } from './forms/ReactionForm';
 import { FormError } from './forms/fields';
 import type { TabKey } from './routes';
 
@@ -40,7 +43,7 @@ function actionLabelOf(view: ClaimCrossCheckView, action: string): string {
 }
 
 /** 入力フォームの状態です。編集の場合は、対象の照合のIDを持ちます。 */
-type FormState = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; crossCheckId: Id };
+type FormState = { kind: 'closed' } | { kind: 'new' } | { kind: 'reaction' } | { kind: 'edit'; crossCheckId: Id };
 
 type CrossCheckSectionProps = {
   claimId: Id;
@@ -83,7 +86,7 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
             <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
               <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
               <ClaimLink view={view.other} tab={tab} />
-              <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>
+              {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
 
               <div className="flex items-center justify-end gap-2">
                 <Button
@@ -122,14 +125,25 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
 
       <FormError message={deleteError} />
 
-      {form.kind === 'new' ? (
+      {form.kind === 'new' && (
         <section aria-label="照合の登録" className="rounded-lg border bg-card p-3">
           <CrossCheckForm claimId={claimId} onDone={closeForm} onCancel={closeForm} />
         </section>
-      ) : (
-        <Button type="button" variant="outline" size="sm" onClick={() => setForm({ kind: 'new' })}>
-          照合を追加
-        </Button>
+      )}
+      {form.kind === 'reaction' && (
+        <section aria-label="反応の記録" className="rounded-lg border bg-card p-3">
+          <ReactionForm claimId={claimId} onDone={closeForm} onCancel={closeForm} />
+        </section>
+      )}
+      {form.kind !== 'new' && form.kind !== 'reaction' && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setForm({ kind: 'new' })}>
+            照合を追加
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setForm({ kind: 'reaction' })}>
+            反応を記録
+          </Button>
+        </div>
       )}
     </section>
   );

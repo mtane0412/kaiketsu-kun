@@ -182,7 +182,7 @@ const caseSchema = z.object({
         id: idSchema,
         claimIds: z.tuple([idSchema, idSchema]),
         kind: z.enum(['supports', 'contradicts', 'sameSubject']),
-        reason: z.string(),
+        reason: z.string().optional(),
       })
     )
     .optional(),
@@ -328,10 +328,6 @@ export function findCaseViolations(target: Case): string[] {
     crossCheck.claimIds.forEach((id) => check(claimIds, id, '証言'));
     if (crossCheck.claimIds[0] === crossCheck.claimIds[1]) {
       violations.push(`同じ証言どうしは照合できません: ${crossCheck.id}`);
-    }
-    // 照合は「どこがどう一致したか・食い違ったか」を残すためのものなので、理由の無い照合は受け付けない
-    if (crossCheck.reason.trim() === '') {
-      violations.push(`照合の理由がありません: ${crossCheck.id}`);
     }
   }
   for (const hypothesis of target.hypotheses) {

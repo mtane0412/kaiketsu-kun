@@ -226,15 +226,14 @@ describe('照合', () => {
     expect(getOpenCase().crossChecks.map((crossCheck) => crossCheck.id)).toContain('cross-check-report-neighbor');
   });
 
-  it('理由が空の照合は登録できず、ケースを変更しない', () => {
+  it('同じ証言どうしの照合は登録できず、ケースを変更しない', () => {
     expect(() =>
       useCaseStore.getState().upsert('crossChecks', {
-        id: 'cross-check-no-reason',
-        claimIds: ['claim-report', 'claim-neighbor'],
+        id: 'cross-check-self',
+        claimIds: ['claim-report', 'claim-report'],
         kind: 'supports',
-        reason: '',
       })
-    ).toThrow('照合の理由がありません');
+    ).toThrow('同じ証言どうしは照合できません');
     expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 
