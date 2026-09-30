@@ -18,7 +18,7 @@ import { CaseSettingsMenu } from './CaseSettingsMenu';
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 /** 実際の画面と同じく、ケースを開く枠（CaseGate）の中にメニューを描画します。 */
-function メニューを描画する() {
+function renderMenu() {
   render(
     <CaseGate caseId={sampleFictionalCase.id}>
       <CaseSettingsMenu />
@@ -27,7 +27,7 @@ function メニューを描画する() {
 }
 
 /** ケース設定のメニューを開きます。 */
-async function メニューを開く(user: ReturnType<typeof userEvent.setup>) {
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'ケース設定' }));
 }
 
@@ -44,9 +44,9 @@ afterEach(() => {
 describe('CaseSettingsMenu', () => {
   it('ケース名を変更する', async () => {
     const user = userEvent.setup();
-    メニューを描画する();
+    renderMenu();
 
-    await メニューを開く(user);
+    await openMenu(user);
     await user.click(await screen.findByRole('menuitem', { name: 'ケース名を変更' }));
 
     await user.clear(await screen.findByLabelText('ケース名'));
@@ -65,9 +65,9 @@ describe('CaseSettingsMenu', () => {
     });
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-    メニューを描画する();
+    renderMenu();
 
-    await メニューを開く(user);
+    await openMenu(user);
     await user.click(await screen.findByRole('menuitem', { name: 'JSONを書き出す' }));
 
     expect(JSON.parse(await exported!.text())).toEqual(sampleFictionalCase);
@@ -75,9 +75,9 @@ describe('CaseSettingsMenu', () => {
 
   it('ケースを削除する前に確認し、承認された場合は削除して一覧へ移る', async () => {
     const user = userEvent.setup();
-    メニューを描画する();
+    renderMenu();
 
-    await メニューを開く(user);
+    await openMenu(user);
     await user.click(await screen.findByRole('menuitem', { name: 'このケースを削除' }));
     // 削除は取り消せないため、確認の画面で改めて承認する
     await user.click(await screen.findByRole('button', { name: '削除する' }));
@@ -88,9 +88,9 @@ describe('CaseSettingsMenu', () => {
 
   it('ケースの削除が取り消された場合は、ケースを消さない', async () => {
     const user = userEvent.setup();
-    メニューを描画する();
+    renderMenu();
 
-    await メニューを開く(user);
+    await openMenu(user);
     await user.click(await screen.findByRole('menuitem', { name: 'このケースを削除' }));
     await user.click(await screen.findByRole('button', { name: 'やめる' }));
 

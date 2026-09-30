@@ -7,17 +7,17 @@ import type { PersonKind } from '@/domain/types';
 import type { PositionedGraphEdge, PositionedGraphNode } from './graph-layout';
 
 /** 人物のノードを作ります。 */
-function 人物ノード(id: string, name: string, x: number, y: number, personKind: PersonKind = 'individual'): PositionedGraphNode {
+function makePersonNode(id: string, name: string, x: number, y: number, personKind: PersonKind = 'individual'): PositionedGraphNode {
   return { id, kind: 'person', label: name, entityId: id, personKind, x, y };
 }
 
 /** 証言のノードを作ります。 */
-function 証言ノード(id: string, label: string, x: number, y: number): PositionedGraphNode {
+function makeClaimNode(id: string, label: string, x: number, y: number): PositionedGraphNode {
   return { id, kind: 'claim', label, entityId: id, x, y };
 }
 
 /** 2つのノードを結ぶエッジを作ります。 */
-function エッジ(
+function makeEdge(
   id: string,
   kind: PositionedGraphEdge['kind'],
   source: PositionedGraphNode,
@@ -26,26 +26,26 @@ function エッジ(
   return { id, kind, sourceId: source.id, targetId: target.id, source, target };
 }
 
-const 管理人 = 人物ノード('person:管理人', '管理人', 0, 0);
-const 別荘の持ち主 = 人物ノード('person:持ち主', '別荘の持ち主', 100, 0);
-const 防犯カメラ = 人物ノード('person:防犯カメラ', '県道の防犯カメラ', 200, 0, 'record');
-const ユーザー: PositionedGraphNode = { id: 'user', kind: 'user', label: 'ユーザーの推測', x: 0, y: 100 };
-const 管理人の証言 = 証言ノード('claim:見回り', '見回りをしたとき…', 50, 50);
-const ユーザーの推測 = 証言ノード('claim:推測', '犯人は内部の人物では…', 0, 150);
+const caretaker = makePersonNode('person:管理人', '管理人', 0, 0);
+const villaOwner = makePersonNode('person:持ち主', '別荘の持ち主', 100, 0);
+const securityCamera = makePersonNode('person:防犯カメラ', '県道の防犯カメラ', 200, 0, 'record');
+const user: PositionedGraphNode = { id: 'user', kind: 'user', label: 'ユーザーの推測', x: 0, y: 100 };
+const caretakerClaim = makeClaimNode('claim:見回り', '見回りをしたとき…', 50, 50);
+const userGuess = makeClaimNode('claim:推測', '犯人は内部の人物では…', 0, 150);
 
 /** 人物2人・ユーザー・証言2件と、発言・言及・関係の線を持つグラフです。 */
-const 見本のグラフ: PositionedGraph = {
-  nodes: [管理人, 別荘の持ち主, ユーザー, 管理人の証言, ユーザーの推測],
+const sampleGraph: PositionedGraph = {
+  nodes: [caretaker, villaOwner, user, caretakerClaim, userGuess],
   edges: [
-    エッジ('edge:発言', 'speaks', 管理人, 管理人の証言),
-    エッジ('edge:言及', 'mentions', 管理人の証言, 別荘の持ち主),
-    エッジ('edge:ユーザーの発言', 'speaks', ユーザー, ユーザーの推測),
-    エッジ('edge:関係', 'relates', 別荘の持ち主, 管理人),
+    makeEdge('edge:発言', 'speaks', caretaker, caretakerClaim),
+    makeEdge('edge:言及', 'mentions', caretakerClaim, villaOwner),
+    makeEdge('edge:ユーザーの発言', 'speaks', user, userGuess),
+    makeEdge('edge:関係', 'relates', villaOwner, caretaker),
   ],
 };
 
 /** すべてを表示する絞り込みの設定です。各テストでは、ここから1つだけ変えます。 */
-const すべて表示: GraphFilter = {
+const showAll: GraphFilter = {
   persons: true,
   personKinds: new Set<PersonKind>(['individual', 'organization', 'record', 'object']),
   claims: true,
@@ -54,117 +54,117 @@ const すべて表示: GraphFilter = {
 
 describe('filterGraph', () => {
   it('何も絞り込まない場合は、すべてのノードと線をそのまま返す', () => {
-    const 結果 = filterGraph(見本のグラフ, すべて表示);
+    const result = filterGraph(sampleGraph, showAll);
 
-    expect(結果.nodes).toHaveLength(5);
-    expect(結果.edges).toHaveLength(4);
+    expect(result.nodes).toHaveLength(5);
+    expect(result.edges).toHaveLength(4);
   });
 
   it('人物の種別を外すと、その種別の人物のノードと、そこにつながる線を描かない', () => {
-    const 防犯カメラの証言 = 証言ノード('claim:映像', '車が映っていた', 200, 50);
-    const グラフ: PositionedGraph = {
-      nodes: [管理人, 防犯カメラ, 防犯カメラの証言],
-      edges: [エッジ('edge:カメラの発言', 'speaks', 防犯カメラ, 防犯カメラの証言), エッジ('edge:カメラの言及', 'mentions', 防犯カメラの証言, 管理人)],
+    const securityCameraClaim = makeClaimNode('claim:映像', '車が映っていた', 200, 50);
+    const graph: PositionedGraph = {
+      nodes: [caretaker, securityCamera, securityCameraClaim],
+      edges: [makeEdge('edge:カメラの発言', 'speaks', securityCamera, securityCameraClaim), makeEdge('edge:カメラの言及', 'mentions', securityCameraClaim, caretaker)],
     };
 
-    const 結果 = filterGraph(グラフ, { ...すべて表示, personKinds: new Set<PersonKind>(['individual']) });
+    const result = filterGraph(graph, { ...showAll, personKinds: new Set<PersonKind>(['individual']) });
 
-    expect(結果.nodes.map((node) => node.id)).toEqual(['person:管理人', 'claim:映像']);
-    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:カメラの言及']);
+    expect(result.nodes.map((node) => node.id)).toEqual(['person:管理人', 'claim:映像']);
+    expect(result.edges.map((edge) => edge.id)).toEqual(['edge:カメラの言及']);
   });
 
   it('人物を隠すと、人物のノードと、人物につながる線を描かない', () => {
-    const 結果 = filterGraph(見本のグラフ, { ...すべて表示, persons: false });
+    const result = filterGraph(sampleGraph, { ...showAll, persons: false });
 
-    expect(結果.nodes.map((node) => node.id)).toEqual(['claim:見回り', 'claim:推測']);
+    expect(result.nodes.map((node) => node.id)).toEqual(['claim:見回り', 'claim:推測']);
     // 発言・言及・関係は、いずれも人物につながるため残らない
-    expect(結果.edges).toHaveLength(0);
+    expect(result.edges).toHaveLength(0);
   });
 
   it('発言者を選ばない証言をまとめるノードは、発言者であるため人物と一緒に隠す', () => {
-    const 結果 = filterGraph(見本のグラフ, { ...すべて表示, persons: false });
+    const result = filterGraph(sampleGraph, { ...showAll, persons: false });
 
-    expect(結果.nodes.some((node) => node.kind === 'user')).toBe(false);
+    expect(result.nodes.some((node) => node.kind === 'user')).toBe(false);
   });
 
   it('証言を隠すと、証言のノードとその線は消えるが、人物どうしの関係の線は残る', () => {
-    const 結果 = filterGraph(見本のグラフ, { ...すべて表示, claims: false });
+    const result = filterGraph(sampleGraph, { ...showAll, claims: false });
 
-    expect(結果.nodes.map((node) => node.id)).toEqual(['person:管理人', 'person:持ち主', 'user']);
-    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:関係']);
+    expect(result.nodes.map((node) => node.id)).toEqual(['person:管理人', 'person:持ち主', 'user']);
+    expect(result.edges.map((edge) => edge.id)).toEqual(['edge:関係']);
   });
 
   it('関係を隠すと、関係の線だけを消し、ノードはすべて残す', () => {
-    const 結果 = filterGraph(見本のグラフ, { ...すべて表示, relations: false });
+    const result = filterGraph(sampleGraph, { ...showAll, relations: false });
 
-    expect(結果.nodes).toHaveLength(5);
-    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言']);
+    expect(result.nodes).toHaveLength(5);
+    expect(result.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言']);
   });
 
   it('時点を指定すると、その時点で成り立たない関係の線だけを消す', () => {
-    const 離婚した関係: PositionedGraphEdge = {
-      ...エッジ('edge:婚姻', 'relates', 別荘の持ち主, 管理人),
+    const divorcedRelationship: PositionedGraphEdge = {
+      ...makeEdge('edge:婚姻', 'relates', villaOwner, caretaker),
       relation: { directed: false, hasBasis: false, until: '1998-05' },
     };
-    const 続いている関係: PositionedGraphEdge = {
-      ...エッジ('edge:雇用', 'relates', 別荘の持ち主, 管理人),
+    const ongoingRelationship: PositionedGraphEdge = {
+      ...makeEdge('edge:雇用', 'relates', villaOwner, caretaker),
       relation: { directed: true, hasBasis: true, since: '1995-04' },
     };
-    const グラフ: PositionedGraph = { ...見本のグラフ, edges: [...見本のグラフ.edges, 離婚した関係, 続いている関係] };
+    const graph: PositionedGraph = { ...sampleGraph, edges: [...sampleGraph.edges, divorcedRelationship, ongoingRelationship] };
 
-    const 結果 = filterGraph(グラフ, { ...すべて表示, relationsAt: '1998-08-12' });
+    const result = filterGraph(graph, { ...showAll, relationsAt: '1998-08-12' });
 
     // 期間を持たない関係（edge:関係）は、すべての時点で成り立つものとして残る
-    expect(結果.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言', 'edge:関係', 'edge:雇用']);
-    expect(結果.nodes).toHaveLength(5);
+    expect(result.edges.map((edge) => edge.id)).toEqual(['edge:発言', 'edge:言及', 'edge:ユーザーの発言', 'edge:関係', 'edge:雇用']);
+    expect(result.nodes).toHaveLength(5);
   });
 });
 
 describe('moveNodes', () => {
   it('手で動かしたノードの座標を差し替える', () => {
-    const 結果 = moveNodes(見本のグラフ, new Map([['person:管理人', { x: 300, y: 400 }]]));
+    const result = moveNodes(sampleGraph, new Map([['person:管理人', { x: 300, y: 400 }]]));
 
-    expect(結果.nodes.find((node) => node.id === 'person:管理人')).toMatchObject({ x: 300, y: 400, label: '管理人' });
+    expect(result.nodes.find((node) => node.id === 'person:管理人')).toMatchObject({ x: 300, y: 400, label: '管理人' });
   });
 
   it('動かしていないノードは、計算された位置のままにする', () => {
-    const 結果 = moveNodes(見本のグラフ, new Map([['person:管理人', { x: 300, y: 400 }]]));
+    const result = moveNodes(sampleGraph, new Map([['person:管理人', { x: 300, y: 400 }]]));
 
-    expect(結果.nodes.find((node) => node.id === 'person:持ち主')).toMatchObject({ x: 100, y: 0 });
+    expect(result.nodes.find((node) => node.id === 'person:持ち主')).toMatchObject({ x: 100, y: 0 });
   });
 
   it('動かしたノードにつながる線の端も、一緒に動かす', () => {
-    const 結果 = moveNodes(見本のグラフ, new Map([['person:管理人', { x: 300, y: 400 }]]));
+    const result = moveNodes(sampleGraph, new Map([['person:管理人', { x: 300, y: 400 }]]));
 
-    const 発言の線 = 結果.edges.find((edge) => edge.id === 'edge:発言');
-    expect(発言の線?.source).toMatchObject({ x: 300, y: 400 });
-    expect(発言の線?.target).toMatchObject({ x: 50, y: 50 });
+    const statementLine = result.edges.find((edge) => edge.id === 'edge:発言');
+    expect(statementLine?.source).toMatchObject({ x: 300, y: 400 });
+    expect(statementLine?.target).toMatchObject({ x: 50, y: 50 });
   });
 
   it('1つも動かしていない場合は、もとのグラフをそのまま返す', () => {
-    expect(moveNodes(見本のグラフ, new Map())).toBe(見本のグラフ);
+    expect(moveNodes(sampleGraph, new Map())).toBe(sampleGraph);
   });
 });
 
 describe('neighborhoodOf', () => {
   it('選んだノード自身と、つながる相手のノード・線を返す', () => {
-    const 近傍 = neighborhoodOf(見本のグラフ.edges, 'person:管理人');
+    const neighborhood = neighborhoodOf(sampleGraph.edges, 'person:管理人');
 
-    expect([...近傍.nodeIds].sort()).toEqual(['claim:見回り', 'person:持ち主', 'person:管理人']);
-    expect([...近傍.edgeIds].sort()).toEqual(['edge:発言', 'edge:関係']);
+    expect([...neighborhood.nodeIds].sort()).toEqual(['claim:見回り', 'person:持ち主', 'person:管理人']);
+    expect([...neighborhood.edgeIds].sort()).toEqual(['edge:発言', 'edge:関係']);
   });
 
   it('つながっていないノードと線は含めない', () => {
-    const 近傍 = neighborhoodOf(見本のグラフ.edges, 'person:管理人');
+    const neighborhood = neighborhoodOf(sampleGraph.edges, 'person:管理人');
 
-    expect(近傍.nodeIds.has('claim:推測')).toBe(false);
-    expect(近傍.edgeIds.has('edge:ユーザーの発言')).toBe(false);
+    expect(neighborhood.nodeIds.has('claim:推測')).toBe(false);
+    expect(neighborhood.edgeIds.has('edge:ユーザーの発言')).toBe(false);
   });
 
   it('線が1本もつながっていないノードでは、そのノード自身だけを返す', () => {
-    const 近傍 = neighborhoodOf([], 'person:管理人');
+    const neighborhood = neighborhoodOf([], 'person:管理人');
 
-    expect([...近傍.nodeIds]).toEqual(['person:管理人']);
-    expect(近傍.edgeIds.size).toBe(0);
+    expect([...neighborhood.nodeIds]).toEqual(['person:管理人']);
+    expect(neighborhood.edgeIds.size).toBe(0);
   });
 });

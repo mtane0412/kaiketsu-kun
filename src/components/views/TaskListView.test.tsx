@@ -18,28 +18,28 @@ describe('TaskListView', () => {
   it('未完了の未了事項を、状態・担当・期限・ひもづけた対象とともに、対応中・未着手の順に並べる', () => {
     render(<TaskListView target={sampleFictionalCase} />);
 
-    const 一覧 = screen.getByRole('list', { name: '未完了の未了事項の一覧' });
-    const [防犯カメラの確認, 管理人への再聴取] = within(一覧).getAllByRole('listitem');
-    expect(within(防犯カメラの確認!).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+    const list = screen.getByRole('list', { name: '未完了の未了事項の一覧' });
+    const [securityCameraCheck, caretakerReinterview] = within(list).getAllByRole('listitem');
+    expect(within(securityCameraCheck!).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/task-camera?tab=tasks'
     );
-    expect(防犯カメラの確認).toHaveTextContent('対応中');
-    expect(防犯カメラの確認).toHaveTextContent('担当: 捜査1係');
-    expect(防犯カメラの確認).toHaveTextContent('期限: 1998年8月20日');
-    expect(管理人への再聴取).toHaveTextContent('未着手');
-    expect(管理人への再聴取).toHaveTextContent('対象: 証言1件・管理人・湖畔の別荘');
+    expect(securityCameraCheck).toHaveTextContent('対応中');
+    expect(securityCameraCheck).toHaveTextContent('担当: 捜査1係');
+    expect(securityCameraCheck).toHaveTextContent('期限: 1998年8月20日');
+    expect(caretakerReinterview).toHaveTextContent('未着手');
+    expect(caretakerReinterview).toHaveTextContent('対象: 証言1件・管理人・湖畔の別荘');
     // 検証: 完了した未了事項は、未完了の一覧には並べない
-    expect(within(一覧).queryByText(/天気/)).not.toBeInTheDocument();
+    expect(within(list).queryByText(/天気/)).not.toBeInTheDocument();
   });
 
   it('完了した未了事項を、結果のメモとともに、別の一覧に区別して並べる', () => {
     render(<TaskListView target={sampleFictionalCase} />);
 
-    const 完了 = screen.getByRole('list', { name: '完了した未了事項の一覧' });
-    const [項目] = within(完了).getAllByRole('listitem');
-    expect(within(項目!).getByRole('link', { name: /当夜の湖畔の天気を調べる/ })).toBeInTheDocument();
-    expect(項目).toHaveTextContent('月明かりがあった');
+    const completeButton = screen.getByRole('list', { name: '完了した未了事項の一覧' });
+    const [item] = within(completeButton).getAllByRole('listitem');
+    expect(within(item!).getByRole('link', { name: /当夜の湖畔の天気を調べる/ })).toBeInTheDocument();
+    expect(item).toHaveTextContent('月明かりがあった');
   });
 
   it('未了事項を追加するページへのリンクを置く', () => {

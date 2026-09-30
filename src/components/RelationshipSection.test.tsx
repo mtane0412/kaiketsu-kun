@@ -19,28 +19,28 @@ beforeEach(() => {
 });
 
 /** 別荘の持ち主の詳細に並ぶ「関係」を描画します。 */
-function 持ち主の関係を描画() {
+function renderOwnerRelationships() {
   render(<RelationshipSection personId="person-owner" personName="別荘の持ち主" tab="timeline" />);
   return screen.getByRole('region', { name: '関係' });
 }
 
 describe('RelationshipSection', () => {
   it('この人物が関わる関係を、向きが分かる説明と、相手の人物へのリンクで並べる', () => {
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    expect(within(関係).getByText('雇用主（別荘の持ち主から管理人へ）')).toBeInTheDocument();
-    expect(within(関係).getByText('金銭トラブル？（別荘の持ち主と管理人の双方向）')).toBeInTheDocument();
-    expect(within(関係).getAllByRole('link', { name: '管理人' })[0]).toHaveAttribute(
+    expect(within(relationship).getByText('雇用主（別荘の持ち主から管理人へ）')).toBeInTheDocument();
+    expect(within(relationship).getByText('金銭トラブル？（別荘の持ち主と管理人の双方向）')).toBeInTheDocument();
+    expect(within(relationship).getAllByRole('link', { name: '管理人' })[0]).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-caretaker'
     );
   });
 
   it('根拠の証言を、証言の詳細へのリンクで示す', () => {
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
     // 前提: 雇用主の関係は、管理人の証言（claim-caretaker）を根拠にしている
-    expect(within(関係).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+    expect(within(relationship).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
@@ -61,33 +61,33 @@ describe('RelationshipSection', () => {
       ],
     });
 
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    expect(within(関係).getByText('根拠未登録')).toBeInTheDocument();
+    expect(within(relationship).getByText('根拠未登録')).toBeInTheDocument();
   });
 
   it('関係が1件も無い人物では、関係の登録を促す案内を表示する', () => {
     render(<RelationshipSection personId="person-neighbor" personName="隣家の住人" tab="timeline" />);
 
-    const 関係 = screen.getByRole('region', { name: '関係' });
-    expect(within(関係).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
-    expect(within(関係).queryByRole('listitem')).not.toBeInTheDocument();
+    const relationship = screen.getByRole('region', { name: '関係' });
+    expect(within(relationship).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
+    expect(within(relationship).queryByRole('listitem')).not.toBeInTheDocument();
   });
 
   it('相手・関係の名前・向き・根拠の証言を入力して保存すると、関係をケースに追加する', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.click(within(登録).getByRole('radio', { name: /別荘の持ち主から隣家の住人へ/ }));
-    await user.click(within(登録).getByRole('checkbox', { name: /明かりがついていて/ }));
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.click(within(registerButton).getByRole('radio', { name: /別荘の持ち主から隣家の住人へ/ }));
+    await user.click(within(registerButton).getByRole('checkbox', { name: /明かりがついていて/ }));
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    const 追加された関係 = openedCase().relationships.at(-1);
-    expect(追加された関係).toMatchObject({
+    const addedRelationship = openedCase().relationships.at(-1);
+    expect(addedRelationship).toMatchObject({
       fromPersonId: 'person-owner',
       toPersonId: 'person-neighbor',
       label: '近所付き合い',
@@ -98,43 +98,43 @@ describe('RelationshipSection', () => {
 
   it('向きを双方向のままにすると、向きを持たない関係として保存する', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
     expect(openedCase().relationships.at(-1)).toMatchObject({ label: '近所付き合い', directed: false });
   });
 
   it('相手の人物の選択肢に、開いている人物自身を並べない', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 相手 = screen.getByLabelText('相手の人物');
+    const counterpart = screen.getByLabelText('相手の人物');
 
-    expect(within(相手).queryByRole('option', { name: '別荘の持ち主' })).not.toBeInTheDocument();
-    expect(within(相手).getByRole('option', { name: '管理人' })).toBeInTheDocument();
+    expect(within(counterpart).queryByRole('option', { name: '別荘の持ち主' })).not.toBeInTheDocument();
+    expect(within(counterpart).getByRole('option', { name: '管理人' })).toBeInTheDocument();
   });
 
   it('登録済みの関係を編集して保存すると、同じ関係を書き換える', async () => {
     const user = userEvent.setup();
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    await user.click(within(関係).getByRole('button', { name: '雇用主（管理人）の関係を編集' }));
-    const 編集 = screen.getByRole('region', { name: '関係の編集' });
-    expect(within(編集).getByLabelText('関係の名前')).toHaveValue('雇用主');
+    await user.click(within(relationship).getByRole('button', { name: '雇用主（管理人）の関係を編集' }));
+    const editButton = screen.getByRole('region', { name: '関係の編集' });
+    expect(within(editButton).getByLabelText('関係の名前')).toHaveValue('雇用主');
 
-    await user.clear(within(編集).getByLabelText('関係の名前'));
-    await user.type(within(編集).getByLabelText('関係の名前'), '元の雇用主');
-    await user.click(within(編集).getByRole('button', { name: '関係を保存' }));
+    await user.clear(within(editButton).getByLabelText('関係の名前'));
+    await user.type(within(editButton).getByLabelText('関係の名前'), '元の雇用主');
+    await user.click(within(editButton).getByRole('button', { name: '関係を保存' }));
 
-    const 関係の一覧 = openedCase().relationships;
-    expect(関係の一覧).toHaveLength(2);
-    expect(関係の一覧.find((item) => item.id === 'relationship-employment')).toMatchObject({
+    const relationshipList = openedCase().relationships;
+    expect(relationshipList).toHaveLength(2);
+    expect(relationshipList.find((item) => item.id === 'relationship-employment')).toMatchObject({
       fromPersonId: 'person-owner',
       toPersonId: 'person-caretaker',
       label: '元の雇用主',
@@ -148,11 +148,11 @@ describe('RelationshipSection', () => {
     render(<RelationshipSection personId="person-caretaker" personName="管理人" tab="timeline" />);
 
     await user.click(screen.getByRole('button', { name: '雇用主（別荘の持ち主）の関係を編集' }));
-    const 編集 = screen.getByRole('region', { name: '関係の編集' });
+    const editButton = screen.getByRole('region', { name: '関係の編集' });
     // 前提: 管理人から見ると、雇用主の関係は「別荘の持ち主から管理人へ」向いている
-    expect(within(編集).getByRole('radio', { name: /別荘の持ち主から管理人へ/ })).toBeChecked();
+    expect(within(editButton).getByRole('radio', { name: /別荘の持ち主から管理人へ/ })).toBeChecked();
 
-    await user.click(within(編集).getByRole('button', { name: '関係を保存' }));
+    await user.click(within(editButton).getByRole('button', { name: '関係を保存' }));
 
     expect(openedCase().relationships.find((item) => item.id === 'relationship-employment')).toMatchObject({
       fromPersonId: 'person-owner',
@@ -167,109 +167,109 @@ describe('RelationshipSection', () => {
       relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04', until: '1998-05' }],
     });
 
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    expect(within(関係).getByText('期間: 1995年4月〜1998年5月')).toBeInTheDocument();
+    expect(within(relationship).getByText('期間: 1995年4月〜1998年5月')).toBeInTheDocument();
   });
 
   it('期間を持たない関係には、期間を表示しない', () => {
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    expect(within(関係).queryByText(/期間:/)).not.toBeInTheDocument();
+    expect(within(relationship).queryByText(/期間:/)).not.toBeInTheDocument();
   });
 
   it('開始と終了を入力して保存すると、時刻参照の形式で関係に保存する', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '金の貸し借り');
-    await user.type(within(登録).getByLabelText('開始（任意）'), '1998年8月11日');
-    await user.type(within(登録).getByLabelText('終了（任意）'), '1998-08-20');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '金の貸し借り');
+    await user.type(within(registerButton).getByLabelText('開始（任意）'), '1998年8月11日');
+    await user.type(within(registerButton).getByLabelText('終了（任意）'), '1998-08-20');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
     expect(openedCase().relationships.at(-1)).toMatchObject({ label: '金の貸し借り', since: '1998-08-11', until: '1998-08-20' });
   });
 
   it('開始と終了を空のまま保存すると、期間を持たない関係として保存する', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    const 追加された関係 = openedCase().relationships.at(-1);
-    expect(追加された関係).not.toHaveProperty('since');
-    expect(追加された関係).not.toHaveProperty('until');
+    const addedRelationship = openedCase().relationships.at(-1);
+    expect(addedRelationship).not.toHaveProperty('since');
+    expect(addedRelationship).not.toHaveProperty('until');
   });
 
   it('解釈できない開始を入力すると、理由を示して保存しない', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.type(within(登録).getByLabelText('開始（任意）'), '去年の春');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(registerButton).getByLabelText('開始（任意）'), '去年の春');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    expect(within(登録).getByText(/開始を解釈できません: 去年の春/)).toBeInTheDocument();
+    expect(within(registerButton).getByText(/開始を解釈できません: 去年の春/)).toBeInTheDocument();
     expect(openedCase().relationships).toHaveLength(2);
   });
 
   it('解釈できない開始を入力すると、開始の欄だけを誤りとして示し、理由を欄の説明として結び付ける', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.type(within(登録).getByLabelText('開始（任意）'), '去年の春');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(registerButton).getByLabelText('開始（任意）'), '去年の春');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    const 開始 = within(登録).getByLabelText('開始（任意）');
-    expect(開始).toHaveAttribute('aria-invalid', 'true');
-    expect(開始).toHaveAccessibleDescription(/開始を解釈できません: 去年の春/);
-    expect(within(登録).getByLabelText('終了（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+    const start = within(registerButton).getByLabelText('開始（任意）');
+    expect(start).toHaveAttribute('aria-invalid', 'true');
+    expect(start).toHaveAccessibleDescription(/開始を解釈できません: 去年の春/);
+    expect(within(registerButton).getByLabelText('終了（任意）')).not.toHaveAttribute('aria-invalid', 'true');
   });
 
   it('解釈できない終了を入力すると、終了の欄を誤りとして示す', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.type(within(登録).getByLabelText('終了（任意）'), 'そのうち');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(registerButton).getByLabelText('終了（任意）'), 'そのうち');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    const 終了 = within(登録).getByLabelText('終了（任意）');
-    expect(終了).toHaveAttribute('aria-invalid', 'true');
-    expect(終了).toHaveAccessibleDescription(/終了を解釈できません: そのうち/);
-    expect(within(登録).getByLabelText('開始（任意）')).not.toHaveAttribute('aria-invalid', 'true');
+    const end = within(registerButton).getByLabelText('終了（任意）');
+    expect(end).toHaveAttribute('aria-invalid', 'true');
+    expect(end).toHaveAccessibleDescription(/終了を解釈できません: そのうち/);
+    expect(within(registerButton).getByLabelText('開始（任意）')).not.toHaveAttribute('aria-invalid', 'true');
   });
 
   it('終了が開始より前の場合は、理由を示して保存しない', async () => {
     const user = userEvent.setup();
-    持ち主の関係を描画();
+    renderOwnerRelationships();
 
     await user.click(screen.getByRole('button', { name: '関係を追加' }));
-    const 登録 = screen.getByRole('region', { name: '関係の登録' });
-    await user.selectOptions(within(登録).getByLabelText('相手の人物'), 'person-neighbor');
-    await user.type(within(登録).getByLabelText('関係の名前'), '近所付き合い');
-    await user.type(within(登録).getByLabelText('開始（任意）'), '1998-08');
-    await user.type(within(登録).getByLabelText('終了（任意）'), '1998-05');
-    await user.click(within(登録).getByRole('button', { name: '関係を保存' }));
+    const registerButton = screen.getByRole('region', { name: '関係の登録' });
+    await user.selectOptions(within(registerButton).getByLabelText('相手の人物'), 'person-neighbor');
+    await user.type(within(registerButton).getByLabelText('関係の名前'), '近所付き合い');
+    await user.type(within(registerButton).getByLabelText('開始（任意）'), '1998-08');
+    await user.type(within(registerButton).getByLabelText('終了（任意）'), '1998-05');
+    await user.click(within(registerButton).getByRole('button', { name: '関係を保存' }));
 
-    expect(within(登録).getByText(/関係の終了が開始より前です/)).toBeInTheDocument();
+    expect(within(registerButton).getByText(/関係の終了が開始より前です/)).toBeInTheDocument();
     expect(openedCase().relationships).toHaveLength(2);
   });
 
@@ -279,23 +279,23 @@ describe('RelationshipSection', () => {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04' }],
     });
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    await user.click(within(関係).getByRole('button', { name: '雇用主（管理人）の関係を編集' }));
-    const 編集 = screen.getByRole('region', { name: '関係の編集' });
-    expect(within(編集).getByLabelText('開始（任意）')).toHaveValue('1995-04');
+    await user.click(within(relationship).getByRole('button', { name: '雇用主（管理人）の関係を編集' }));
+    const editButton = screen.getByRole('region', { name: '関係の編集' });
+    expect(within(editButton).getByLabelText('開始（任意）')).toHaveValue('1995-04');
 
-    await user.clear(within(編集).getByLabelText('開始（任意）'));
-    await user.click(within(編集).getByRole('button', { name: '関係を保存' }));
+    await user.clear(within(editButton).getByLabelText('開始（任意）'));
+    await user.click(within(editButton).getByRole('button', { name: '関係を保存' }));
 
     expect(openedCase().relationships[0]).not.toHaveProperty('since');
   });
 
   it('関係を削除すると、ケースから関係を取り除く', async () => {
     const user = userEvent.setup();
-    const 関係 = 持ち主の関係を描画();
+    const relationship = renderOwnerRelationships();
 
-    await user.click(within(関係).getByRole('button', { name: '雇用主（管理人）の関係を削除' }));
+    await user.click(within(relationship).getByRole('button', { name: '雇用主（管理人）の関係を削除' }));
     await user.click(screen.getByRole('button', { name: '削除する' }));
 
     expect(openedCase().relationships.map((item) => item.id)).toEqual(['relationship-money-trouble']);

@@ -8,14 +8,14 @@ import type { Case } from '@/domain/types';
 import { layoutGraph, NODE_RADIUS, shortLabelOf } from './graph-layout';
 
 /** 人物も証言も持たない、空のケースです。 */
-const 空のケース: Case = { id: 'case-empty', name: '空のケース', persons: [], places: [], claims: [], relationships: [], interviews: [], crossChecks: [], hypotheses: [], tasks: [], timelineOrder: [], personLaneOrder: [] };
+const emptyCase: Case = { id: 'case-empty', name: '空のケース', persons: [], places: [], claims: [], relationships: [], interviews: [], crossChecks: [], hypotheses: [], tasks: [], timelineOrder: [], personLaneOrder: [] };
 
 describe('layoutGraph', () => {
   it('すべてのノードに座標を与える', () => {
-    const 配置 = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const layout = layoutGraph(buildCaseGraph(sampleFictionalCase));
 
-    expect(配置.nodes).toHaveLength(buildCaseGraph(sampleFictionalCase).nodes.length);
-    for (const node of 配置.nodes) {
+    expect(layout.nodes).toHaveLength(buildCaseGraph(sampleFictionalCase).nodes.length);
+    for (const node of layout.nodes) {
       expect(Number.isFinite(node.x)).toBe(true);
       expect(Number.isFinite(node.y)).toBe(true);
     }
@@ -23,17 +23,17 @@ describe('layoutGraph', () => {
 
   it('同じケースからは、毎回同じ配置を返す', () => {
     // 前提: 開き直すたびに図の形が変わると、どこに何があったかを覚えられないため、配置は決定的にする
-    const 一度目 = layoutGraph(buildCaseGraph(sampleFictionalCase));
-    const 二度目 = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const firstTime = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const secondTime = layoutGraph(buildCaseGraph(sampleFictionalCase));
 
-    expect(二度目.nodes.map((node) => [node.id, node.x, node.y])).toEqual(一度目.nodes.map((node) => [node.id, node.x, node.y]));
+    expect(secondTime.nodes.map((node) => [node.id, node.x, node.y])).toEqual(firstTime.nodes.map((node) => [node.id, node.x, node.y]));
   });
 
   it('ノード同士を重ねない', () => {
-    const 配置 = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const layout = layoutGraph(buildCaseGraph(sampleFictionalCase));
 
-    for (const a of 配置.nodes) {
-      for (const b of 配置.nodes) {
+    for (const a of layout.nodes) {
+      for (const b of layout.nodes) {
         if (a === b) continue;
         expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(NODE_RADIUS[a.kind]);
       }
@@ -41,20 +41,20 @@ describe('layoutGraph', () => {
   });
 
   it('エッジの両端を、配置済みのノードとして解決する', () => {
-    const 配置 = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const layout = layoutGraph(buildCaseGraph(sampleFictionalCase));
 
-    const 発言のエッジ = 配置.edges.find((edge) => edge.kind === 'speaks');
-    expect(発言のエッジ?.source.id).toBe(発言のエッジ?.sourceId);
-    expect(発言のエッジ?.target.id).toBe(発言のエッジ?.targetId);
+    const statementEdge = layout.edges.find((edge) => edge.kind === 'speaks');
+    expect(statementEdge?.source.id).toBe(statementEdge?.sourceId);
+    expect(statementEdge?.target.id).toBe(statementEdge?.targetId);
   });
 
   it('すべてのノードが収まる表示範囲（viewBox）を返す', () => {
-    const 配置 = layoutGraph(buildCaseGraph(sampleFictionalCase));
-    const { x, y, width, height } = 配置.viewBox;
+    const layout = layoutGraph(buildCaseGraph(sampleFictionalCase));
+    const { x, y, width, height } = layout.viewBox;
 
     expect(width).toBeGreaterThan(0);
     expect(height).toBeGreaterThan(0);
-    for (const node of 配置.nodes) {
+    for (const node of layout.nodes) {
       expect(node.x).toBeGreaterThanOrEqual(x);
       expect(node.x).toBeLessThanOrEqual(x + width);
       expect(node.y).toBeGreaterThanOrEqual(y);
@@ -64,11 +64,11 @@ describe('layoutGraph', () => {
 
   it('ノードが1つも無いケースでも、幅と高さのある表示範囲を返す', () => {
     // 前提: 幅または高さが0のviewBoxを渡すと、SVGは何も描画しない
-    const 配置 = layoutGraph(buildCaseGraph(空のケース));
+    const layout = layoutGraph(buildCaseGraph(emptyCase));
 
-    expect(配置.nodes).toEqual([]);
-    expect(配置.viewBox.width).toBeGreaterThan(0);
-    expect(配置.viewBox.height).toBeGreaterThan(0);
+    expect(layout.nodes).toEqual([]);
+    expect(layout.viewBox.width).toBeGreaterThan(0);
+    expect(layout.viewBox.height).toBeGreaterThan(0);
   });
 });
 

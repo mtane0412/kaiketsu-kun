@@ -41,8 +41,8 @@ describe('CaseList', () => {
 
     await user.click(screen.getByRole('button', { name: '新しいケース' }));
 
-    const 作ったケースのId = listCaseSummaries()[0]!.id;
-    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${作ったケースのId}`);
+    const createdCaseId = listCaseSummaries()[0]!.id;
+    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${createdCaseId}`);
   });
 
   it('架空のサンプルを、新しいケースとして読み込む', async () => {

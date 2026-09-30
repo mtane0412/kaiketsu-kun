@@ -31,9 +31,9 @@ describe('ClaimDetail', () => {
     await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 保存後 = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
-    expect(保存後?.content).toContain('窓は開いていた。');
-    expect(保存後?.when).toBe('1998-08-12T21:00');
+    const afterSave = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
+    expect(afterSave?.content).toContain('窓は開いていた。');
+    expect(afterSave?.when).toBe('1998-08-12T21:00');
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
   });
 
@@ -41,27 +41,27 @@ describe('ClaimDetail', () => {
     // 検証: 削除が「発言者」と「証言を保存」の中間に浮かないよう、行の左端に置くこと
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 削除 = screen.getByRole('button', { name: 'この証言を削除' });
-    const 発言者 = screen.getByRole('button', { name: /^発言者:/ });
-    const 保存 = screen.getByRole('button', { name: '証言を保存' });
+    const deleteButton = screen.getByRole('button', { name: 'この証言を削除' });
+    const speaker = screen.getByRole('button', { name: /^発言者:/ });
+    const saveButton = screen.getByRole('button', { name: '証言を保存' });
 
-    expect(削除.compareDocumentPosition(発言者)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(発言者.compareDocumentPosition(保存)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(deleteButton.compareDocumentPosition(speaker)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(speaker.compareDocumentPosition(saveButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('時系列の前後の証言へのリンクを表示する', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
-    expect(within(前後).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-police-camera');
-    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report');
+    const beforeAndAfter = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(within(beforeAndAfter).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-police-camera');
+    expect(within(beforeAndAfter).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report');
   });
 
   it('同じ人物・場所に触れている他の証言を、人物・場所ごとにまとめてリンクにする', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
-    const links = within(within(湖畔の別荘).getByRole('list')).getAllByRole('link');
+    const lakesideVilla = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    const links = within(within(lakesideVilla).getByRole('list')).getAllByRole('link');
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker');
     expect(links[0]).toHaveTextContent('管理人');
@@ -72,20 +72,20 @@ describe('ClaimDetail', () => {
     // 前提: 隣家の住人の証言は、発言者が隣家の住人で、架空日報 朝刊を経由し、別荘の持ち主に言及し、湖畔の別荘を述べている
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 触れている先 = screen.getByRole('navigation', { name: 'この証言が触れている人物・場所' });
-    expect(within(触れている先).getByRole('link', { name: '発言者 隣家の住人' })).toHaveAttribute(
+    const mentionedTargets = screen.getByRole('navigation', { name: 'この証言が触れている人物・場所' });
+    expect(within(mentionedTargets).getByRole('link', { name: '発言者 隣家の住人' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-neighbor'
     );
-    expect(within(触れている先).getByRole('link', { name: '経由 架空日報 朝刊' })).toHaveAttribute(
+    expect(within(mentionedTargets).getByRole('link', { name: '経由 架空日報 朝刊' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-newspaper'
     );
-    expect(within(触れている先).getByRole('link', { name: '言及 別荘の持ち主' })).toHaveAttribute(
+    expect(within(mentionedTargets).getByRole('link', { name: '言及 別荘の持ち主' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-owner'
     );
-    expect(within(触れている先).getByRole('link', { name: '場所 湖畔の別荘' })).toHaveAttribute(
+    expect(within(mentionedTargets).getByRole('link', { name: '場所 湖畔の別荘' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/places/place-villa'
     );
@@ -94,8 +94,8 @@ describe('ClaimDetail', () => {
   it('「〇〇に触れている他の証言」の見出しを、その人物・場所の詳細へのリンクにする', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 湖畔の別荘 = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
-    expect(within(湖畔の別荘).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
+    const lakesideVilla = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    expect(within(lakesideVilla).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 
   it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {
@@ -103,8 +103,8 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside?tab=map');
-    const 前後 = screen.getByRole('navigation', { name: '時系列の前後の証言' });
-    expect(within(前後).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report?tab=map');
+    const beforeAndAfter = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(within(beforeAndAfter).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report?tab=map');
   });
 
   it('証言を削除すると、ボードに戻る', async () => {
@@ -135,8 +135,8 @@ describe('ClaimDetail', () => {
   it('照合した相手の証言へ、証言の詳細からたどれる', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const 照合 = screen.getByRole('region', { name: '照合' });
-    expect(within(照合).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+    const crossCheck = screen.getByRole('region', { name: '照合' });
+    expect(within(crossCheck).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
@@ -146,30 +146,30 @@ describe('ClaimDetail', () => {
     // 前提: 管理人の証言は、管理人の仮説の「管理人の機会」と、否定された仮説の「支える証言」にひもづいている
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    const 仮説 = screen.getByRole('region', { name: 'この証言を使っている仮説' });
-    const 項目 = within(仮説).getAllByRole('listitem');
-    expect(within(項目[0]!).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
+    const hypothesis = screen.getByRole('region', { name: 'この証言を使っている仮説' });
+    const item = within(hypothesis).getAllByRole('listitem');
+    expect(within(item[0]!).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/hypotheses/hypothesis-caretaker'
     );
-    expect(項目[0]).toHaveTextContent('管理人の機会');
-    expect(項目[1]).toHaveTextContent('持ち主は19時より前に別荘を離れた');
-    expect(項目[1]).toHaveTextContent('支える証言');
-    expect(項目[1]).toHaveTextContent('否定された');
+    expect(item[0]).toHaveTextContent('管理人の機会');
+    expect(item[1]).toHaveTextContent('持ち主は19時より前に別荘を離れた');
+    expect(item[1]).toHaveTextContent('支える証言');
+    expect(item[1]).toHaveTextContent('否定された');
   });
 
   it('この証言の未了事項を、状態とともに並べ、この証言をひもづけた未了事項を追加するページへのリンクを置く', () => {
     // 前提: 防犯カメラの証言は、対応中の「防犯カメラの映像の確認」にひもづいている
     render(<ClaimDetail claimId="claim-police-camera" />);
 
-    const 未了事項 = screen.getByRole('region', { name: 'この証言の未了事項' });
-    const [項目] = within(未了事項).getAllByRole('listitem');
-    expect(within(項目!).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+    const task = screen.getByRole('region', { name: 'この証言の未了事項' });
+    const [item] = within(task).getAllByRole('listitem');
+    expect(within(item!).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/task-camera'
     );
-    expect(項目).toHaveTextContent('対応中');
-    expect(within(未了事項).getByRole('link', { name: 'この証言の未了事項を追加' })).toHaveAttribute(
+    expect(item).toHaveTextContent('対応中');
+    expect(within(task).getByRole('link', { name: 'この証言の未了事項を追加' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/new?link=claim%3Aclaim-police-camera'
     );

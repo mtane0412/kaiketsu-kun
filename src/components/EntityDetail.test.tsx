@@ -24,10 +24,10 @@ describe('PersonDetail', () => {
     const user = userEvent.setup();
     render(<PersonDetail personId="person-police" />);
 
-    const 種別 = screen.getByRole('combobox', { name: '種別' });
-    expect(種別).toHaveDisplayValue('組織');
+    const kind = screen.getByRole('combobox', { name: '種別' });
+    expect(kind).toHaveDisplayValue('組織');
 
-    await user.selectOptions(種別, '人物');
+    await user.selectOptions(kind, '人物');
     await user.click(screen.getByRole('button', { name: '人物を保存' }));
 
     expect(openedCase().persons.find((person) => person.id === 'person-police')?.kind).toBe('individual');
@@ -37,19 +37,19 @@ describe('PersonDetail', () => {
     render(<PersonDetail personId="person-neighbor" />);
 
     expect(screen.getByRole('heading', { name: '隣家の住人' })).toBeInTheDocument();
-    const 編集 = screen.getByRole('region', { name: '人物の編集' });
-    expect(within(編集).getByLabelText('名前')).toHaveValue('隣家の住人');
+    const editButton = screen.getByRole('region', { name: '人物の編集' });
+    expect(within(editButton).getByLabelText('名前')).toHaveValue('隣家の住人');
   });
 
   it('この人物が述べた証言と、言及している証言を、証言の詳細へのリンクで並べる', () => {
     render(<PersonDetail personId="person-neighbor" />);
 
     // 前提: 隣家の住人は「夜9時ごろ」の証言を述べ、ユーザーの推測から言及されている
-    const 述べた証言 = screen.getByRole('region', { name: 'この人物が述べた証言' });
-    expect(within(述べた証言).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-neighbor');
+    const statedClaims = screen.getByRole('region', { name: 'この人物が述べた証言' });
+    expect(within(statedClaims).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-neighbor');
 
-    const 言及している証言 = screen.getByRole('region', { name: 'この人物に言及している証言' });
-    expect(within(言及している証言).getByRole('link', { name: /管理人の証言は事件の20年後/ })).toHaveAttribute(
+    const mentioningClaims = screen.getByRole('region', { name: 'この人物に言及している証言' });
+    expect(within(mentioningClaims).getByRole('link', { name: /管理人の証言は事件の20年後/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-user-guess'
     );
@@ -64,17 +64,17 @@ describe('PersonDetail', () => {
 
   it('メモのメンションでつながったエンティティを、そのエンティティの詳細へのリンクで表示する', () => {
     // 前提: 隣家の住人のメモから、湖畔の別荘に言及している
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-neighbor' ? { ...person, note: '@[湖畔の別荘](place:place-villa)の隣に住んでいます。' } : person
       ),
     };
-    openTestCase(ケース);
+    openTestCase(caseData);
     render(<PersonDetail personId="person-neighbor" />);
 
-    const 関連 = screen.getByRole('region', { name: '関連するエンティティ' });
-    expect(within(関連).getByRole('link', { name: /湖畔の別荘/ })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
+    const related = screen.getByRole('region', { name: '関連するエンティティ' });
+    expect(within(related).getByRole('link', { name: /湖畔の別荘/ })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 
   it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、証言へのリンクに反映する', () => {
@@ -82,8 +82,8 @@ describe('PersonDetail', () => {
     render(<PersonDetail personId="person-neighbor" />);
 
     expect(screen.getByRole('link', { name: '人物の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside?tab=map');
-    const 述べた証言 = screen.getByRole('region', { name: 'この人物が述べた証言' });
-    expect(within(述べた証言).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute(
+    const statedClaims = screen.getByRole('region', { name: 'この人物が述べた証言' });
+    expect(within(statedClaims).getByRole('link', { name: /明かりがついていて/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-neighbor?tab=map'
     );
@@ -123,17 +123,17 @@ describe('PersonDetail', () => {
     resetMockNavigation('/cases/case-lakeside/persons/person-owner');
     render(<PersonDetail personId="person-owner" />);
 
-    const 関係 = screen.getByRole('region', { name: '関係' });
-    expect(within(関係).getByText('雇用主（別荘の持ち主から管理人へ）')).toBeInTheDocument();
-    expect(within(関係).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
+    const relationship = screen.getByRole('region', { name: '関係' });
+    expect(within(relationship).getByText('雇用主（別荘の持ち主から管理人へ）')).toBeInTheDocument();
+    expect(within(relationship).getByRole('button', { name: '関係を追加' })).toBeInTheDocument();
   });
 
   it('聴取ごとに証言を並べる「供述の変遷」の節を並べる', () => {
     resetMockNavigation('/cases/case-lakeside/persons/person-caretaker');
     render(<PersonDetail personId="person-caretaker" />);
 
-    const 変遷 = screen.getByRole('region', { name: '供述の変遷' });
-    expect(within(変遷).getByRole('button', { name: '聴取を追加' })).toBeInTheDocument();
+    const history = screen.getByRole('region', { name: '供述の変遷' });
+    expect(within(history).getByRole('button', { name: '聴取を追加' })).toBeInTheDocument();
   });
 
   it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {
@@ -165,16 +165,16 @@ describe('PlaceDetail', () => {
     render(<PlaceDetail placeId="place-villa" />);
 
     expect(screen.getByRole('heading', { name: '湖畔の別荘' })).toBeInTheDocument();
-    const 編集 = screen.getByRole('region', { name: '場所の編集' });
-    expect(within(編集).getByLabelText('名前')).toHaveValue('湖畔の別荘');
+    const editButton = screen.getByRole('region', { name: '場所の編集' });
+    expect(within(editButton).getByLabelText('名前')).toHaveValue('湖畔の別荘');
   });
 
   it('この場所を述べている証言を、時系列の並び順で、証言の詳細へのリンクにする', () => {
     render(<PlaceDetail placeId="place-villa" />);
 
     // 前提: 湖畔の別荘を述べているのは、管理人の証言と隣家の住人の証言の2件
-    const 述べている証言 = screen.getByRole('region', { name: 'この場所を述べている証言' });
-    const links = within(述べている証言).getAllByRole('link');
+    const statingClaims = screen.getByRole('region', { name: 'この場所を述べている証言' });
+    const links = within(statingClaims).getAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/cases/case-lakeside/claims/claim-caretaker',
       '/cases/case-lakeside/claims/claim-neighbor',
@@ -194,13 +194,13 @@ describe('人物・場所の未了事項', () => {
     // 前提: 管理人は、未着手の「管理人への再聴取」にひもづいている
     render(<PersonDetail personId="person-caretaker" />);
 
-    const 未了事項 = screen.getByRole('region', { name: 'この人物の未了事項' });
-    expect(within(未了事項).getByRole('link', { name: /再度聞く/ })).toHaveAttribute(
+    const taskSection = screen.getByRole('region', { name: 'この人物の未了事項' });
+    expect(within(taskSection).getByRole('link', { name: /再度聞く/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/task-caretaker'
     );
-    expect(未了事項).toHaveTextContent('未着手');
-    expect(within(未了事項).getByRole('link', { name: 'この人物の未了事項を追加' })).toHaveAttribute(
+    expect(taskSection).toHaveTextContent('未着手');
+    expect(within(taskSection).getByRole('link', { name: 'この人物の未了事項を追加' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/new?link=person%3Aperson-caretaker'
     );
@@ -210,9 +210,9 @@ describe('人物・場所の未了事項', () => {
     // 前提: 湖畔の別荘は、管理人への再聴取と、完了した天気の確認にひもづいている
     render(<PlaceDetail placeId="place-villa" />);
 
-    const 未了事項 = screen.getByRole('region', { name: 'この場所の未了事項' });
-    expect(within(未了事項).getAllByRole('listitem')).toHaveLength(2);
-    expect(未了事項).toHaveTextContent('完了');
+    const taskSection = screen.getByRole('region', { name: 'この場所の未了事項' });
+    expect(within(taskSection).getAllByRole('listitem')).toHaveLength(2);
+    expect(taskSection).toHaveTextContent('完了');
   });
 
   it('未了事項にひもづいた人物の削除の確認では、未了事項からひもづけを外すことを伝え、削除すると外れる', async () => {
@@ -241,14 +241,14 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
     resetMockNavigation('/cases/case-lakeside/persons/new');
     render(<NewPersonDetail />);
 
-    const 登録 = screen.getByRole('region', { name: '人物の登録' });
-    await user.type(within(登録).getByLabelText('名前'), '通報した釣り人');
-    await user.click(within(登録).getByRole('button', { name: '人物を保存' }));
+    const registerButton = screen.getByRole('region', { name: '人物の登録' });
+    await user.type(within(registerButton).getByLabelText('名前'), '通報した釣り人');
+    await user.click(within(registerButton).getByRole('button', { name: '人物を保存' }));
 
-    const 登録した人物 = openedCase().persons.find((person) => person.name === '通報した釣り人');
-    expect(登録した人物).toBeDefined();
+    const registeredPerson = openedCase().persons.find((person) => person.name === '通報した釣り人');
+    expect(registeredPerson).toBeDefined();
     // 検証: 保存した直後から、そのまま編集・削除を続けられるよう、登録した人物の詳細へ移る
-    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/persons/${登録した人物!.id}`);
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/persons/${registeredPerson!.id}`);
   });
 
   it('人物の登録では種別を選べ、既定値は「人物」とする', async () => {
@@ -256,13 +256,13 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
     resetMockNavigation('/cases/case-lakeside/persons/new');
     render(<NewPersonDetail />);
 
-    const 登録 = screen.getByRole('region', { name: '人物の登録' });
-    const 種別 = within(登録).getByRole('combobox', { name: '種別' });
-    expect(種別).toHaveDisplayValue('人物');
+    const registerButton = screen.getByRole('region', { name: '人物の登録' });
+    const kind = within(registerButton).getByRole('combobox', { name: '種別' });
+    expect(kind).toHaveDisplayValue('人物');
 
-    await user.type(within(登録).getByLabelText('名前'), '駅の改札の記録');
-    await user.selectOptions(種別, '記録・媒体');
-    await user.click(within(登録).getByRole('button', { name: '人物を保存' }));
+    await user.type(within(registerButton).getByLabelText('名前'), '駅の改札の記録');
+    await user.selectOptions(kind, '記録・媒体');
+    await user.click(within(registerButton).getByRole('button', { name: '人物を保存' }));
 
     expect(openedCase().persons.find((person) => person.name === '駅の改札の記録')?.kind).toBe('record');
   });
@@ -280,20 +280,20 @@ describe('NewPersonDetail・NewPlaceDetail', () => {
     resetMockNavigation('/cases/case-lakeside/places/new?tab=map');
     render(<NewPlaceDetail />);
 
-    const 登録 = screen.getByRole('region', { name: '場所の登録' });
-    await user.type(within(登録).getByLabelText('名前'), '桟橋');
-    await user.click(within(登録).getByRole('button', { name: '場所を保存' }));
+    const registerButton = screen.getByRole('region', { name: '場所の登録' });
+    await user.type(within(registerButton).getByLabelText('名前'), '桟橋');
+    await user.click(within(registerButton).getByRole('button', { name: '場所を保存' }));
 
-    const 登録した場所 = openedCase().places.find((place) => place.name === '桟橋');
-    expect(登録した場所).toBeDefined();
+    const registeredPlace = openedCase().places.find((place) => place.name === '桟橋');
+    expect(registeredPlace).toBeDefined();
     // 検証: 戻り先の表示（?tab=map）も引き継ぐ
-    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/places/${登録した場所!.id}?tab=map`);
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/places/${registeredPlace!.id}?tab=map`);
   });
 });
 
 describe('人物の識別子', () => {
   /** 別荘の持ち主と管理人が、表記の違う同じ電話番号を持つケースです。 */
-  const 電話番号が同じケース: Case = {
+  const samePhoneNumberCase: Case = {
     ...sampleFictionalCase,
     persons: sampleFictionalCase.persons.map((person) => {
       if (person.id === 'person-owner') return { ...person, identifiers: [{ type: '電話番号', value: '090-1234-5678' }] };
@@ -322,7 +322,7 @@ describe('人物の識別子', () => {
 
   it('登録済みの識別子を表示し、削除できる', async () => {
     const user = userEvent.setup();
-    openTestCase(電話番号が同じケース);
+    openTestCase(samePhoneNumberCase);
     render(<PersonDetail personId="person-owner" />);
 
     expect(screen.getByRole('combobox', { name: '識別子1の種類' })).toHaveValue('電話番号');
@@ -348,25 +348,25 @@ describe('人物の識別子', () => {
   });
 
   it('同じ識別子を持つ人物を、一致した識別子とともに、互いの詳細に表示する', () => {
-    openTestCase(電話番号が同じケース);
+    openTestCase(samePhoneNumberCase);
     const { unmount } = render(<PersonDetail personId="person-owner" />);
 
-    const 持ち主から = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
-    const 管理人へのリンク = within(持ち主から).getByRole('link', { name: /管理人/ });
-    expect(管理人へのリンク).toHaveAttribute('href', '/cases/case-lakeside/persons/person-caretaker');
-    expect(管理人へのリンク).toHaveTextContent('携帯電話: 09012345678');
+    const fromOwner = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
+    const linkToCaretaker = within(fromOwner).getByRole('link', { name: /管理人/ });
+    expect(linkToCaretaker).toHaveAttribute('href', '/cases/case-lakeside/persons/person-caretaker');
+    expect(linkToCaretaker).toHaveTextContent('携帯電話: 09012345678');
     unmount();
 
     render(<PersonDetail personId="person-caretaker" />);
-    const 管理人から = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
-    expect(within(管理人から).getByRole('link', { name: /別荘の持ち主/ })).toHaveTextContent('電話番号: 090-1234-5678');
+    const fromCaretaker = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
+    expect(within(fromCaretaker).getByRole('link', { name: /別荘の持ち主/ })).toHaveTextContent('電話番号: 090-1234-5678');
   });
 
   it('識別子を持つが一致する人物がいない場合は、いないことを示し、識別子を持たない人物では節を表示しない', () => {
     // 前提: 管理人の識別子を外すと、別荘の持ち主の電話番号と一致する人物はいない
     openTestCase({
-      ...電話番号が同じケース,
-      persons: 電話番号が同じケース.persons.map((person) =>
+      ...samePhoneNumberCase,
+      persons: samePhoneNumberCase.persons.map((person) =>
         person.id === 'person-caretaker' ? { ...person, identifiers: undefined } : person
       ),
     });

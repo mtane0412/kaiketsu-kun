@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 
 /** 「隣家の住人」を削除する確認ボタンを描画します。 */
-function 確認ボタンを描画する(onConfirm: () => void) {
+function renderConfirmButton(onConfirm: () => void) {
   render(
     <DeleteConfirmButton
       label="この人物を削除"
@@ -24,7 +24,7 @@ describe('DeleteConfirmButton', () => {
   it('押しただけでは削除せず、確認の画面を開く', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
-    確認ボタンを描画する(onConfirm);
+    renderConfirmButton(onConfirm);
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
 
@@ -35,7 +35,7 @@ describe('DeleteConfirmButton', () => {
   it('確認の画面で承認すると、削除を実行する', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
-    確認ボタンを描画する(onConfirm);
+    renderConfirmButton(onConfirm);
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
     await user.click(await screen.findByRole('button', { name: '削除する' }));
@@ -45,7 +45,7 @@ describe('DeleteConfirmButton', () => {
 
   it('承認したあとは、確認の画面を閉じる', async () => {
     const user = userEvent.setup();
-    確認ボタンを描画する(vi.fn());
+    renderConfirmButton(vi.fn());
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
     await user.click(await screen.findByRole('button', { name: '削除する' }));
@@ -57,7 +57,7 @@ describe('DeleteConfirmButton', () => {
   it('確認の画面でやめると、削除を実行しない', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
-    確認ボタンを描画する(onConfirm);
+    renderConfirmButton(onConfirm);
 
     await user.click(screen.getByRole('button', { name: 'この人物を削除' }));
     await user.click(await screen.findByRole('button', { name: 'やめる' }));

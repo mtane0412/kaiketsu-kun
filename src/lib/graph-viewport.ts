@@ -48,9 +48,9 @@ export function zoomOf(base: ViewBox, current: ViewBox): number {
  * 倍率は base（図の全体が収まる表示範囲）を1として、MIN_ZOOM 以上 MAX_ZOOM 以下に収めます。
  */
 export function zoomViewBox(base: ViewBox, current: ViewBox, factor: number, anchor: Point): ViewBox {
-  const 目標の倍率 = zoomOf(base, current) * factor;
-  const 収めた倍率 = Math.min(Math.max(目標の倍率, MIN_ZOOM), MAX_ZOOM);
-  const width = base.width / 収めた倍率;
+  const targetZoom = zoomOf(base, current) * factor;
+  const clampedZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+  const width = base.width / clampedZoom;
   // 拡大・縮小の前後で、anchor が表示範囲の中で占める割合を変えない
   const ratio = width / current.width;
   const height = current.height * ratio;
@@ -85,15 +85,15 @@ export function pixelsPerUnit(rect: ElementRect, viewBox: ViewBox): number {
  * 図が飛んでしまうため、例外を投げて呼び出し側で気付けるようにします。
  */
 export function clientToSvgPoint(client: Point, rect: ElementRect, viewBox: ViewBox): Point {
-  const 倍率 = pixelsPerUnit(rect, viewBox);
-  if (!Number.isFinite(倍率) || 倍率 <= 0) {
+  const scale = pixelsPerUnit(rect, viewBox);
+  if (!Number.isFinite(scale) || scale <= 0) {
     throw new Error('図の大きさが取得できないため、画面の座標を図の座標へ直せません');
   }
   // 中央揃え（xMidYMid）のため、図の左上は、要素の左上から余白の半分だけ内側にある
-  const 左の余白 = (rect.width - viewBox.width * 倍率) / 2;
-  const 上の余白 = (rect.height - viewBox.height * 倍率) / 2;
+  const leftMargin = (rect.width - viewBox.width * scale) / 2;
+  const topMargin = (rect.height - viewBox.height * scale) / 2;
   return {
-    x: viewBox.x + (client.x - rect.left - 左の余白) / 倍率,
-    y: viewBox.y + (client.y - rect.top - 上の余白) / 倍率,
+    x: viewBox.x + (client.x - rect.left - leftMargin) / scale,
+    y: viewBox.y + (client.y - rect.top - topMargin) / scale,
   };
 }

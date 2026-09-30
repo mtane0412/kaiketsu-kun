@@ -124,50 +124,50 @@ describe('formatTimeRef（区間表記）', () => {
 });
 
 describe('intervalsOverlap', () => {
-  const 七時台 = toInterval('2026-09-28T19:00/19:59');
+  const sevenOClockHour = toInterval('2026-09-28T19:00/19:59');
   it('一部でも重なる区間同士は、重なると判定する', () => {
-    expect(intervalsOverlap(七時台, toInterval('2026-09-28T19:30/20:30'))).toBe(true);
+    expect(intervalsOverlap(sevenOClockHour, toInterval('2026-09-28T19:30/20:30'))).toBe(true);
   });
 
   it('片方がもう片方を含む区間同士は、重なると判定する', () => {
-    expect(intervalsOverlap(toInterval('2026-09-28'), 七時台)).toBe(true);
+    expect(intervalsOverlap(toInterval('2026-09-28'), sevenOClockHour)).toBe(true);
   });
 
   it('接しているだけで重ならない区間同士は、重ならないと判定する', () => {
-    expect(intervalsOverlap(七時台, toInterval('2026-09-28T20:00'))).toBe(false);
+    expect(intervalsOverlap(sevenOClockHour, toInterval('2026-09-28T20:00'))).toBe(false);
   });
 });
 
 describe('compareTimeRef', () => {
   it('区間の始まりが早い順に並ぶ', () => {
-    const 夜7時 = '1998-08-12T19:00';
-    const 夜9時 = '1998-08-12T21:00';
+    const at7pm = '1998-08-12T19:00';
+    const at9pm = '1998-08-12T21:00';
 
-    expect([夜9時, 夜7時].sort(compareTimeRef)).toEqual([夜7時, 夜9時]);
+    expect([at9pm, at7pm].sort(compareTimeRef)).toEqual([at7pm, at9pm]);
   });
 
   it('区間の始まりが同じ場合は、精度の細かい（区間の終わりが早い）ものが先に並ぶ', () => {
-    const その年 = '1998';
-    const その年の元日 = '1998-01-01';
+    const thatYear = '1998';
+    const newYearsDayOfThatYear = '1998-01-01';
 
-    expect([その年, その年の元日].sort(compareTimeRef)).toEqual([その年の元日, その年]);
+    expect([thatYear, newYearsDayOfThatYear].sort(compareTimeRef)).toEqual([newYearsDayOfThatYear, thatYear]);
   });
 
   it('区間表記も、始まりが早い順（同じなら終わりが早い順）に並ぶ', () => {
-    const 七時十分から四十分 = '2026-09-28T19:10/19:40';
-    const 七時十分から八時 = '2026-09-28T19:10/20:00';
-    const 七時 = '2026-09-28T19:00';
+    const from710To740 = '2026-09-28T19:10/19:40';
+    const from710To8 = '2026-09-28T19:10/20:00';
+    const sevenOClock = '2026-09-28T19:00';
 
-    expect([七時十分から八時, 七時十分から四十分, 七時].sort(compareTimeRef)).toEqual([
-      七時,
-      七時十分から四十分,
-      七時十分から八時,
+    expect([from710To8, from710To740, sevenOClock].sort(compareTimeRef)).toEqual([
+      sevenOClock,
+      from710To740,
+      from710To8,
     ]);
   });
 
   it('日時を持たないものは、日時を持つものの後ろに並ぶ', () => {
-    const 日時あり = '1998-08-12';
+    const dated = '1998-08-12';
 
-    expect([undefined, 日時あり].sort(compareTimeRef)).toEqual([日時あり, undefined]);
+    expect([undefined, dated].sort(compareTimeRef)).toEqual([dated, undefined]);
   });
 });

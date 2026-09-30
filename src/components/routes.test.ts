@@ -22,7 +22,7 @@ import {
 } from './routes';
 
 /** テストで使うケースのIDです。 */
-const ケースのId = 'case-villa';
+const caseId = 'case-villa';
 
 describe('parseTab', () => {
   it('URLの tab の値を、ボードのタブとして読み取る', () => {
@@ -48,11 +48,11 @@ describe('casesHref', () => {
 
 describe('boardHref', () => {
   it('時系列のタブは、クエリの無いURLにする', () => {
-    expect(boardHref(ケースのId, 'timeline')).toBe('/cases/case-villa');
+    expect(boardHref(caseId, 'timeline')).toBe('/cases/case-villa');
   });
 
   it('時系列以外のタブは、tab をクエリに持たせる', () => {
-    expect(boardHref(ケースのId, 'map')).toBe('/cases/case-villa?tab=map');
+    expect(boardHref(caseId, 'map')).toBe('/cases/case-villa?tab=map');
   });
 
   it('ケースのIDに含まれる記号は、URLとして安全な形に変換する', () => {
@@ -62,63 +62,63 @@ describe('boardHref', () => {
 
 describe('claimHref', () => {
   it('証言の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(claimHref(ケースのId, 'claim-neighbor', 'timeline')).toBe('/cases/case-villa/claims/claim-neighbor');
-    expect(claimHref(ケースのId, 'claim-neighbor', 'map')).toBe('/cases/case-villa/claims/claim-neighbor?tab=map');
+    expect(claimHref(caseId, 'claim-neighbor', 'timeline')).toBe('/cases/case-villa/claims/claim-neighbor');
+    expect(claimHref(caseId, 'claim-neighbor', 'map')).toBe('/cases/case-villa/claims/claim-neighbor?tab=map');
   });
 
   it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
-    expect(claimHref(ケースのId, 'a/b', 'timeline')).toBe('/cases/case-villa/claims/a%2Fb');
+    expect(claimHref(caseId, 'a/b', 'timeline')).toBe('/cases/case-villa/claims/a%2Fb');
   });
 });
 
 describe('personHref', () => {
   it('人物の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(personHref(ケースのId, 'person-neighbor', 'timeline')).toBe('/cases/case-villa/persons/person-neighbor');
-    expect(personHref(ケースのId, 'person-neighbor', 'speaker')).toBe(
+    expect(personHref(caseId, 'person-neighbor', 'timeline')).toBe('/cases/case-villa/persons/person-neighbor');
+    expect(personHref(caseId, 'person-neighbor', 'speaker')).toBe(
       '/cases/case-villa/persons/person-neighbor?tab=speaker'
     );
   });
 
   it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
-    expect(personHref(ケースのId, 'a/b', 'timeline')).toBe('/cases/case-villa/persons/a%2Fb');
+    expect(personHref(caseId, 'a/b', 'timeline')).toBe('/cases/case-villa/persons/a%2Fb');
   });
 });
 
 describe('placeHref', () => {
   it('場所の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(placeHref(ケースのId, 'place-villa', 'timeline')).toBe('/cases/case-villa/places/place-villa');
-    expect(placeHref(ケースのId, 'place-villa', 'map')).toBe('/cases/case-villa/places/place-villa?tab=map');
+    expect(placeHref(caseId, 'place-villa', 'timeline')).toBe('/cases/case-villa/places/place-villa');
+    expect(placeHref(caseId, 'place-villa', 'map')).toBe('/cases/case-villa/places/place-villa?tab=map');
   });
 
   it('IDに含まれる記号は、URLとして安全な形に変換する', () => {
-    expect(placeHref(ケースのId, 'a/b', 'timeline')).toBe('/cases/case-villa/places/a%2Fb');
+    expect(placeHref(caseId, 'a/b', 'timeline')).toBe('/cases/case-villa/places/a%2Fb');
   });
 });
 
 describe('mentionHref', () => {
   it('メンションの種類に応じて、人物・場所の詳細ページのURLを返す', () => {
-    expect(mentionHref(ケースのId, 'person', 'person-neighbor', 'map')).toBe(
+    expect(mentionHref(caseId, 'person', 'person-neighbor', 'map')).toBe(
       '/cases/case-villa/persons/person-neighbor?tab=map'
     );
-    expect(mentionHref(ケースのId, 'place', 'place-villa', 'map')).toBe('/cases/case-villa/places/place-villa?tab=map');
+    expect(mentionHref(caseId, 'place', 'place-villa', 'map')).toBe('/cases/case-villa/places/place-villa?tab=map');
   });
 });
 
 describe('newPersonHref・newPlaceHref', () => {
   it('人物・場所を新しく登録するページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(newPersonHref(ケースのId, 'timeline')).toBe('/cases/case-villa/persons/new');
-    expect(newPersonHref(ケースのId, 'map')).toBe('/cases/case-villa/persons/new?tab=map');
-    expect(newPlaceHref(ケースのId, 'timeline')).toBe('/cases/case-villa/places/new');
-    expect(newPlaceHref(ケースのId, 'speaker')).toBe('/cases/case-villa/places/new?tab=speaker');
+    expect(newPersonHref(caseId, 'timeline')).toBe('/cases/case-villa/persons/new');
+    expect(newPersonHref(caseId, 'map')).toBe('/cases/case-villa/persons/new?tab=map');
+    expect(newPlaceHref(caseId, 'timeline')).toBe('/cases/case-villa/places/new');
+    expect(newPlaceHref(caseId, 'speaker')).toBe('/cases/case-villa/places/new?tab=speaker');
   });
 
   it('登録のURLは、IDが「new」の人物・場所の詳細より優先される', () => {
     // 前提: IDが「new」のエンティティは、アプリが振るID（nanoid）では生まれない。
     // 読み込んだJSONに書かれていた場合だけ起こりうる衝突で、そのときは登録のページが優先される。
     // Next.js が静的なセグメント（new）を動的なセグメント（[personId]）より優先するため、判定もそれに合わせる。
-    expect(parseDetailKind(personHref(ケースのId, 'new', 'timeline'))).toBe('newPerson');
-    expect(parseDetailKind(personHref(ケースのId, 'person-neighbor', 'timeline'))).toBe('person');
-    expect(parseDetailKind(newPersonHref(ケースのId, 'timeline'))).toBe('newPerson');
+    expect(parseDetailKind(personHref(caseId, 'new', 'timeline'))).toBe('newPerson');
+    expect(parseDetailKind(personHref(caseId, 'person-neighbor', 'timeline'))).toBe('person');
+    expect(parseDetailKind(newPersonHref(caseId, 'timeline'))).toBe('newPerson');
   });
 });
 
@@ -143,10 +143,10 @@ describe('parseDetailKind', () => {
 
 describe('hypothesisHref・newHypothesisHref', () => {
   it('仮説の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(hypothesisHref(ケースのId, 'hypothesis-caretaker', 'hypotheses')).toBe(
+    expect(hypothesisHref(caseId, 'hypothesis-caretaker', 'hypotheses')).toBe(
       '/cases/case-villa/hypotheses/hypothesis-caretaker?tab=hypotheses'
     );
-    expect(newHypothesisHref(ケースのId, 'hypotheses')).toBe('/cases/case-villa/hypotheses/new?tab=hypotheses');
+    expect(newHypothesisHref(caseId, 'hypotheses')).toBe('/cases/case-villa/hypotheses/new?tab=hypotheses');
   });
 
   it('仮説の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
@@ -157,15 +157,15 @@ describe('hypothesisHref・newHypothesisHref', () => {
 
 describe('taskHref・newTaskHref', () => {
   it('未了事項の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
-    expect(taskHref(ケースのId, 'task-camera', 'tasks')).toBe('/cases/case-villa/tasks/task-camera?tab=tasks');
-    expect(newTaskHref(ケースのId, 'tasks')).toBe('/cases/case-villa/tasks/new?tab=tasks');
+    expect(taskHref(caseId, 'task-camera', 'tasks')).toBe('/cases/case-villa/tasks/task-camera?tab=tasks');
+    expect(newTaskHref(caseId, 'tasks')).toBe('/cases/case-villa/tasks/new?tab=tasks');
   });
 
   it('登録ページのURLに、最初からひもづける証言・人物・場所を持たせる', () => {
-    expect(newTaskHref(ケースのId, 'timeline', { kind: 'claim', id: 'claim-caretaker' })).toBe(
+    expect(newTaskHref(caseId, 'timeline', { kind: 'claim', id: 'claim-caretaker' })).toBe(
       '/cases/case-villa/tasks/new?link=claim%3Aclaim-caretaker'
     );
-    expect(newTaskHref(ケースのId, 'map', { kind: 'place', id: 'place-villa' })).toBe(
+    expect(newTaskHref(caseId, 'map', { kind: 'place', id: 'place-villa' })).toBe(
       '/cases/case-villa/tasks/new?tab=map&link=place%3Aplace-villa'
     );
   });
@@ -191,11 +191,11 @@ describe('parseTaskLink', () => {
 
 describe('searchHref', () => {
   it('検索結果のページのURLに、検索語と戻り先のタブを持たせる', () => {
-    expect(searchHref(ケースのId, '090-1234 5678', 'timeline')).toBe(`/cases/${ケースのId}/search?q=090-1234+5678`);
-    expect(searchHref(ケースのId, '管理人', 'map')).toBe(`/cases/${ケースのId}/search?tab=map&q=%E7%AE%A1%E7%90%86%E4%BA%BA`);
+    expect(searchHref(caseId, '090-1234 5678', 'timeline')).toBe(`/cases/${caseId}/search?q=090-1234+5678`);
+    expect(searchHref(caseId, '管理人', 'map')).toBe(`/cases/${caseId}/search?tab=map&q=%E7%AE%A1%E7%90%86%E4%BA%BA`);
   });
 
   it('検索結果のページのURLから、開いている詳細の種類を読み取る', () => {
-    expect(parseDetailKind(`/cases/${ケースのId}/search`)).toBe('search');
+    expect(parseDetailKind(`/cases/${caseId}/search`)).toBe('search');
   });
 });

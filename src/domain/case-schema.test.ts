@@ -17,23 +17,23 @@ describe('parseCase', () => {
 
   it('証言の見出しを保持して受け付ける', () => {
     // 前提: 隣家の住人の証言に、長い本文を要約する見出しを付けている
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.id === 'claim-neighbor' ? { ...claim, title: '夜9時に持ち主を庭で見た' } : claim
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(ケース));
+    const afterLoad = parseCase(toJsonData(caseData));
 
-    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')?.title).toBe('夜9時に持ち主を庭で見た');
+    expect(afterLoad.claims.find((claim) => claim.id === 'claim-neighbor')?.title).toBe('夜9時に持ち主を庭で見た');
   });
 
   it('並び順を持たない頃に保存したデータは、当時の表示順（日時の早い順）を並び順として補って受け付ける', () => {
     // 前提: 以前の版では、ボード上の位置を証言が述べる日時から決めており、timelineOrder を保存していなかった
-    const { timelineOrder: _並び順, ...並び順の無いケース } = sampleFictionalCase;
-    const 並び順の無い旧データ = {
-      ...並び順の無いケース,
+    const { timelineOrder: _timelineOrder, ...caseWithoutTimelineOrder } = sampleFictionalCase;
+    const legacyDataWithoutOrder = {
+      ...caseWithoutTimelineOrder,
       claims: [
         ...sampleFictionalCase.claims,
         {
@@ -47,7 +47,7 @@ describe('parseCase', () => {
     };
 
     // 検証: 日時を持つ証言を早い順に、次に日時を持たない証言をケースへの登録順に並べる
-    expect(parseCase(toJsonData(並び順の無い旧データ)).timelineOrder).toEqual([
+    expect(parseCase(toJsonData(legacyDataWithoutOrder)).timelineOrder).toEqual([
       'claim:claim-arrival',
       'claim:claim-caretaker',
       'claim:claim-police-camera',
@@ -58,40 +58,40 @@ describe('parseCase', () => {
   });
 
   it('人物の列の並び順を持たない頃に保存したデータは、並び順を空として受け付ける', () => {
-    const { personLaneOrder: _列の並び順, ...列の並び順の無いケース } = sampleFictionalCase;
+    const { personLaneOrder: _personLaneOrder, ...caseWithoutPersonLaneOrder } = sampleFictionalCase;
 
-    expect(parseCase(toJsonData(列の並び順の無いケース)).personLaneOrder).toEqual([]);
+    expect(parseCase(toJsonData(caseWithoutPersonLaneOrder)).personLaneOrder).toEqual([]);
   });
 
   it('人物の種別を保持して受け付ける', () => {
-    const 読み込んだケース = parseCase(toJsonData(sampleFictionalCase));
+    const loadedCase = parseCase(toJsonData(sampleFictionalCase));
 
-    expect(読み込んだケース.persons.find((person) => person.id === 'person-road-camera')?.kind).toBe('record');
+    expect(loadedCase.persons.find((person) => person.id === 'person-road-camera')?.kind).toBe('record');
   });
 
   it('人物の種別を持たない頃に保存したデータは、すべての人物を個人（人物）として受け付ける', () => {
-    const 種別の無いケース = {
+    const caseWithoutKind = {
       ...sampleFictionalCase,
-      persons: sampleFictionalCase.persons.map(({ kind: _種別, ...person }) => person),
+      persons: sampleFictionalCase.persons.map(({ kind: _kind, ...person }) => person),
     };
 
-    const 読み込んだケース = parseCase(toJsonData(種別の無いケース));
+    const loadedCase = parseCase(toJsonData(caseWithoutKind));
 
-    expect(new Set(読み込んだケース.persons.map((person) => person.kind))).toEqual(new Set(['individual']));
+    expect(new Set(loadedCase.persons.map((person) => person.kind))).toEqual(new Set(['individual']));
   });
 
   it('未知の人物の種別を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       persons: [{ id: 'person-owner', name: '別荘の持ち主', kind: '動物' }, ...sampleFictionalCase.persons.slice(1)],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
+    expect(() => parseCase(toJsonData(data))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('出来事に証言を束ねていた頃のデータは、束を解いて証言だけを並べる形に変換して受け付ける', () => {
     // 前提: 以前の版では、隣家の住人と管理人の証言を、出来事「持ち主が最後に目撃された」に束ねていた
-    const 出来事を持つ旧データ = {
+    const legacyDataWithEvents = {
       ...sampleFictionalCase,
       events: [{ id: 'event-last-seen', title: '持ち主が最後に目撃された', description: '目撃の時刻が食い違う' }],
       claims: sampleFictionalCase.claims.map((claim) =>
@@ -102,35 +102,35 @@ describe('parseCase', () => {
       timelineOrder: ['claim:claim-police-camera', 'event:event-last-seen', 'claim:claim-report', 'claim:claim-user-guess'],
     };
 
-    const 読み込み後 = parseCase(toJsonData(出来事を持つ旧データ));
+    const afterLoad = parseCase(toJsonData(legacyDataWithEvents));
 
     // 検証: 束の位置に、束ねていた証言が述べる日時の早い順（管理人の夜7時 → 隣家の住人の夜9時ごろ）で並ぶ。
     // 束の前にあった防犯カメラの記録（夜8時10分ごろ）は、束を解くと管理人の夜7時より前にあって日時と矛盾するため、矛盾しない位置へ動かす
-    expect(読み込み後.timelineOrder).toEqual([
+    expect(afterLoad.timelineOrder).toEqual([
       'claim:claim-caretaker',
       'claim:claim-police-camera',
       'claim:claim-neighbor',
       'claim:claim-report',
       'claim:claim-user-guess',
     ]);
-    expect(読み込み後).not.toHaveProperty('events');
-    expect(読み込み後.claims).toEqual(sampleFictionalCase.claims);
+    expect(afterLoad).not.toHaveProperty('events');
+    expect(afterLoad.claims).toEqual(sampleFictionalCase.claims);
   });
 
   it('評価を廃止する前に保存したデータは、証言の評価を取り除いて受け付ける', () => {
     // 前提: 以前の版では、証言ごとに assessment（信頼できる・疑わしい・未検証）を保存していた
-    const 評価付きの旧データ = {
+    const legacyDataWithEvaluation = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, assessment: 'credible' })),
     };
 
     // 検証: 読み込みに成功し、評価の項目は残らない
-    expect(parseCase(toJsonData(評価付きの旧データ))).toEqual(sampleFictionalCase);
+    expect(parseCase(toJsonData(legacyDataWithEvaluation))).toEqual(sampleFictionalCase);
   });
 
   it('発言者を1人しか持てなかった頃のデータは、発言者を1人の一覧に変換して受け付ける', () => {
     // 前提: 以前の版では、人物の発言者を speaker.personId（1人）で保存していた
-    const 旧データ = {
+    const legacyData = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.speaker.kind === 'person'
@@ -139,12 +139,12 @@ describe('parseCase', () => {
       ),
     };
 
-    expect(parseCase(toJsonData(旧データ))).toEqual(sampleFictionalCase);
+    expect(parseCase(toJsonData(legacyData))).toEqual(sampleFictionalCase);
   });
 
   it('発言者を本文の先頭に「@人物:」と書いていた頃のデータは、本文から発言者の記法を取り除いて受け付ける', () => {
     // 前提: 以前の版では、本文の先頭の「@人物:」から発言者を導出しており、本文に発言者の記法が残っている
-    const 旧データ = {
+    const legacyData = {
       ...sampleFictionalCase,
       claims: [
         ...sampleFictionalCase.claims,
@@ -159,64 +159,64 @@ describe('parseCase', () => {
       timelineOrder: [...sampleFictionalCase.timelineOrder, 'claim:claim-newspaper-left'],
     };
 
-    const 読み込んだ証言 = parseCase(toJsonData(旧データ)).claims.at(-1);
+    const loadedClaim = parseCase(toJsonData(legacyData)).claims.at(-1);
 
     // 検証: 発言者は項目に残り、本文からは記法だけが消える
-    expect(読み込んだ証言?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
-    expect(読み込んだ証言?.content).toBe('郵便受けに新聞が残っていた。');
+    expect(loadedClaim?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor'] });
+    expect(loadedClaim?.content).toBe('郵便受けに新聞が残っていた。');
   });
 
   it('人物の発言者が1人もいない証言を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: [] } }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
+    expect(() => parseCase(toJsonData(data))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('発言者の1人が存在しない人物である証言を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [
         { ...sampleFictionalCase.claims[1], speaker: { kind: 'person', personIds: ['person-neighbor', 'person-unknown'] } },
       ],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
   it('必須の項目が欠けているデータを拒否する', () => {
-    const 証言一覧が無いデータ = { ...sampleFictionalCase, claims: undefined };
+    const dataWithoutClaims = { ...sampleFictionalCase, claims: undefined };
 
-    expect(() => parseCase(toJsonData(証言一覧が無いデータ))).toThrow('ケースデータの形式が正しくありません');
+    expect(() => parseCase(toJsonData(dataWithoutClaims))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('解釈できない日時の表記を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, when: '1998年8月12日' })),
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('ケースデータの形式が正しくありません');
+    expect(() => parseCase(toJsonData(data))).toThrow('ケースデータの形式が正しくありません');
   });
 
   it('区間表記の日時と、区間表記の日時のメンションを受け付ける', () => {
-    const 区間 = '1998-08-12T19:10/19:40';
-    const データ = {
+    const segment = '1998-08-12T19:10/19:40';
+    const data = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim, index) =>
         index === 0
-          ? { ...claim, content: `@[1998年8月12日 19:10〜19:40](date:${区間})に別荘の周りを歩いていた。`, when: 区間 }
+          ? { ...claim, content: `@[1998年8月12日 19:10〜19:40](date:${segment})に別荘の周りを歩いていた。`, when: segment }
           : claim
       ),
     };
 
-    expect(parseCase(toJsonData(データ)).claims[0]?.when).toBe(区間);
+    expect(parseCase(toJsonData(data)).claims[0]?.when).toBe(segment);
   });
 
   it('本文に解釈できない日時のメンションを含む証言を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [
         {
@@ -226,12 +226,12 @@ describe('parseCase', () => {
       ],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('日時を解釈できません: 1998-08-32');
+    expect(() => parseCase(toJsonData(data))).toThrow('日時を解釈できません: 1998-08-32');
   });
 
   it('日時を区間で持っていた頃のデータは、最も早い時点を日時として受け付ける', () => {
     // 前提: 以前の版では、日時を { text, earliest, latest, order } の形で持っていた
-    const 旧データ = {
+    const legacyData = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.id === 'claim-neighbor'
@@ -240,28 +240,28 @@ describe('parseCase', () => {
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(旧データ));
+    const afterLoad = parseCase(toJsonData(legacyData));
 
-    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')?.when).toBe('1998-08-12T20:30');
+    expect(afterLoad.claims.find((claim) => claim.id === 'claim-neighbor')?.when).toBe('1998-08-12T20:30');
   });
 
   it('実在の日時を持たない旧形式の時刻参照は、日時なしとして受け付ける', () => {
     // 前提: 以前の版では、実在の日時が無い時刻を、原文表記（text）と並び順（order）だけで持てた
-    const 旧データ = {
+    const legacyData = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) =>
         claim.id === 'claim-neighbor' ? { ...claim, when: { text: '第3話', order: 3 } } : claim
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(旧データ));
+    const afterLoad = parseCase(toJsonData(legacyData));
 
-    expect(読み込み後.claims.find((claim) => claim.id === 'claim-neighbor')).not.toHaveProperty('when');
+    expect(afterLoad.claims.find((claim) => claim.id === 'claim-neighbor')).not.toHaveProperty('when');
   });
 
   it('証言が述べられた時点を持っていた頃のデータは、その時点を取り除いて受け付ける', () => {
     // 前提: 以前の版では、証言が述べられた時点（statedAt）を、述べる内容の日時とは別の時間軸として持っていた
-    const 旧データ = {
+    const legacyData = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.map((claim) => ({
         ...claim,
@@ -269,43 +269,43 @@ describe('parseCase', () => {
       })),
     };
 
-    const 読み込み後 = parseCase(toJsonData(旧データ));
+    const afterLoad = parseCase(toJsonData(legacyData));
 
-    expect(読み込み後.claims.every((claim) => !('statedAt' in claim))).toBe(true);
+    expect(afterLoad.claims.every((claim) => !('statedAt' in claim))).toBe(true);
   });
 
   it('経由が存在しない人物を参照している証言を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[1], viaPersonIds: ['person-unknown'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
   it('ユーザーの推測に経由を指定した証言を拒否する', () => {
     // 経由は「誰かの発言を誰が伝えたか」を表すため、発言者がいないユーザーの推測には付けられない
-    const 推測 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-user-guess')!;
-    const データ = {
+    const guess = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-user-guess')!;
+    const data = {
       ...sampleFictionalCase,
-      claims: [...sampleFictionalCase.claims.filter((claim) => claim !== 推測), { ...推測, viaPersonIds: ['person-newspaper'] }],
+      claims: [...sampleFictionalCase.claims.filter((claim) => claim !== guess), { ...guess, viaPersonIds: ['person-newspaper'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('ユーザーの推測に経由は指定できません: claim-user-guess');
+    expect(() => parseCase(toJsonData(data))).toThrow('ユーザーの推測に経由は指定できません: claim-user-guess');
   });
 
   it('存在しない人物を参照している証言を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[0], mentionedPersonIds: ['person-unknown'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
   it('本文のメンションが存在しない場所を参照している証言を拒否する', () => {
     // 2つ目以降の場所のメンションは placeId に現れないため、本文のトークン自体を検証する必要がある
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       claims: [
         {
@@ -316,21 +316,21 @@ describe('parseCase', () => {
       relationships: [],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない場所を参照しています: place-unknown');
   });
 
   it('メモのメンションが存在しない人物を参照している場所を拒否する', () => {
     // 前提: 人物・場所のメモも、証言の本文と同じ形式のメンションを含められる
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       places: [{ id: 'place-villa', name: '湖畔の別荘', note: '@[前の持ち主](person:person-unknown)から買い取った。' }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない人物を参照しています: person-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない人物を参照しています: person-unknown');
   });
 
   it('メモのメンションが存在しない場所を参照している人物を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       persons: [
         ...sampleFictionalCase.persons,
@@ -338,50 +338,50 @@ describe('parseCase', () => {
       ],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない場所を参照しています: place-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない場所を参照しています: place-unknown');
   });
 
   it('存在しない証言を根拠にしている関係を拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0], basisClaimIds: ['claim-unknown'] }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('存在しない証言を参照しています: claim-unknown');
+    expect(() => parseCase(toJsonData(data))).toThrow('存在しない証言を参照しています: claim-unknown');
   });
 
   it('関係の開始と終了を保持して受け付ける', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0], since: '1995-04', until: '1998-05' }],
     };
 
-    expect(parseCase(toJsonData(データ)).relationships[0]).toMatchObject({ since: '1995-04', until: '1998-05' });
+    expect(parseCase(toJsonData(data)).relationships[0]).toMatchObject({ since: '1995-04', until: '1998-05' });
   });
 
   it('関係の開始・終了が時刻参照の形式でない場合は拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0], since: '去年の春' }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow('日時は');
+    expect(() => parseCase(toJsonData(data))).toThrow('日時は');
   });
 
   it('関係の終了が開始より前の場合は拒否する', () => {
-    const データ = {
+    const data = {
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0], since: '1998-08', until: '1998-05' }],
     };
 
-    expect(() => parseCase(toJsonData(データ))).toThrow(
+    expect(() => parseCase(toJsonData(data))).toThrow(
       `関係の終了が開始より前です: ${sampleFictionalCase.relationships[0]?.id}`
     );
   });
 });
 
 /** ソース（Source）を人物とは別の種類のエンティティとして持っていた頃のケースデータです。 */
-const ソースを持つ旧データ = {
+const legacyDataWithSources = {
   id: 'case-legacy',
   name: 'ソースを持っていた頃のケース',
   sources: [
@@ -426,10 +426,10 @@ const ソースを持つ旧データ = {
 
 describe('parseCase（ソースを人物に統合する前のデータ）', () => {
   it('ソースを人物に変換し、URL・公開時点・メモを人物のメモにまとめる', () => {
-    const 読み込んだケース = parseCase(toJsonData(ソースを持つ旧データ));
+    const loadedCase = parseCase(toJsonData(legacyDataWithSources));
 
     // 旧データは種別を持たないため、ソースから変換した人物も含めて、すべて個人（人物）になる
-    expect(読み込んだケース.persons).toEqual([
+    expect(loadedCase.persons).toEqual([
       { id: 'person-neighbor', name: '隣家の住人', kind: 'individual' },
       {
         id: 'source-newspaper',
@@ -438,14 +438,14 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
         note: '社会面の記事\nhttps://example.co.jp/news/19980814\n公開・刊行: 1998年8月14日',
       },
     ]);
-    expect(読み込んだケース).not.toHaveProperty('sources');
+    expect(loadedCase).not.toHaveProperty('sources');
   });
 
   it('人物の証言は、ソースを経由に移し、本文の末尾のソースのメンションを取り除く', () => {
-    const 証言 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-testimony');
+    const testimonyClaim = parseCase(toJsonData(legacyDataWithSources)).claims.find((claim) => claim.id === 'claim-testimony');
 
     // 検証: ソース内の位置（locator）は入力欄を廃止したが、値は失わない
-    expect(証言).toEqual({
+    expect(testimonyClaim).toEqual({
       id: 'claim-testimony',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['source-newspaper'],
@@ -456,9 +456,9 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
   });
 
   it('ソース自体の記述は、ソースだった人物を発言者にする（経由は無し）', () => {
-    const 記述 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-narration');
+    const statement = parseCase(toJsonData(legacyDataWithSources)).claims.find((claim) => claim.id === 'claim-narration');
 
-    expect(記述).toEqual({
+    expect(statement).toEqual({
       id: 'claim-narration',
       speaker: { kind: 'person', personIds: ['source-newspaper'] },
       viaPersonIds: [],
@@ -468,9 +468,9 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
   });
 
   it('ユーザーの推測が言及していたソースは、本文の人物のメンションに変換する（発言者にも経由にもしない）', () => {
-    const 推測 = parseCase(toJsonData(ソースを持つ旧データ)).claims.find((claim) => claim.id === 'claim-guess');
+    const guess = parseCase(toJsonData(legacyDataWithSources)).claims.find((claim) => claim.id === 'claim-guess');
 
-    expect(推測).toEqual({
+    expect(guess).toEqual({
       id: 'claim-guess',
       speaker: { kind: 'user' },
       viaPersonIds: [],
@@ -481,8 +481,8 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
 
   it('ソースと同じ名前の人物が登録済みの場合は、人物を増やさずにその人物へまとめる', () => {
     // 前提: 「県警」が人物としてもソースとしても登録されている
-    const 旧データ = {
-      ...ソースを持つ旧データ,
+    const legacyData = {
+      ...legacyDataWithSources,
       sources: [{ id: 'source-police', title: '県警', kind: 'other', note: '記者発表' }],
       persons: [{ id: 'person-police', name: '県警', note: '組織です。' }],
       claims: [
@@ -497,73 +497,73 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
       timelineOrder: ['claim:claim-announcement'],
     };
 
-    const 読み込んだケース = parseCase(toJsonData(旧データ));
+    const loadedCase = parseCase(toJsonData(legacyData));
 
-    expect(読み込んだケース.persons).toEqual([{ id: 'person-police', name: '県警', kind: 'individual', note: '組織です。\n記者発表' }]);
-    expect(読み込んだケース.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
+    expect(loadedCase.persons).toEqual([{ id: 'person-police', name: '県警', kind: 'individual', note: '組織です。\n記者発表' }]);
+    expect(loadedCase.claims[0]?.speaker).toEqual({ kind: 'person', personIds: ['person-police'] });
   });
 
   it('変換後のデータは、もう一度読み込んでも変わらない', () => {
-    const 一度目 = parseCase(toJsonData(ソースを持つ旧データ));
+    const firstTime = parseCase(toJsonData(legacyDataWithSources));
 
-    expect(parseCase(toJsonData(一度目))).toEqual(一度目);
+    expect(parseCase(toJsonData(firstTime))).toEqual(firstTime);
   });
 });
 
 describe('parseCase（人物・場所の画像）', () => {
-  const 縮小済みの画像 = 'data:image/jpeg;base64,AAAA';
+  const resizedImage = 'data:image/jpeg;base64,AAAA';
 
   it('人物と場所の画像（data URL）を保持して受け付ける', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
-        person.id === 'person-owner' ? { ...person, imageDataUrl: 縮小済みの画像 } : person
+        person.id === 'person-owner' ? { ...person, imageDataUrl: resizedImage } : person
       ),
-      places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 縮小済みの画像 })),
+      places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: resizedImage })),
     };
 
-    const 読み込み後 = parseCase(toJsonData(ケース));
+    const afterLoad = parseCase(toJsonData(caseData));
 
-    expect(読み込み後.persons.find((person) => person.id === 'person-owner')?.imageDataUrl).toBe(縮小済みの画像);
-    expect(読み込み後.places[0]?.imageDataUrl).toBe(縮小済みの画像);
+    expect(afterLoad.persons.find((person) => person.id === 'person-owner')?.imageDataUrl).toBe(resizedImage);
+    expect(afterLoad.places[0]?.imageDataUrl).toBe(resizedImage);
   });
 
   it('画像が data URL でない場合は拒否する（読み込んだファイルから外部のURLを表示しないため）', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       places: sampleFictionalCase.places.map((place) => ({ ...place, imageDataUrl: 'https://example.com/villa.png' })),
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/places\.0\.imageDataUrl/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/places\.0\.imageDataUrl/);
   });
 });
 
 describe('parseCase（人物のアイコンの文字）', () => {
   it('人物のアイコンの文字を保持して受け付ける', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-caretaker' ? { ...person, iconText: '鍵' } : person
       ),
     };
 
-    const 読み込み後 = parseCase(toJsonData(ケース));
+    const afterLoad = parseCase(toJsonData(caseData));
 
-    expect(読み込み後.persons.find((person) => person.id === 'person-caretaker')?.iconText).toBe('鍵');
+    expect(afterLoad.persons.find((person) => person.id === 'person-caretaker')?.iconText).toBe('鍵');
   });
 
   it('アイコンの文字が空文字列の場合は拒否する（指定しない場合は項目ごと省略するため）', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) => ({ ...person, iconText: '' })),
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/persons\.0\.iconText/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/persons\.0\.iconText/);
   });
 });
 
 /** 管理人が、書籍の著者の取材に応じた機会です（管理人の証言は書籍を経由して伝わっています）。 */
-const 書籍の取材 = {
+const bookInterview = {
   id: 'interview-caretaker-book',
   subjectPersonId: 'person-caretaker',
   interviewerPersonId: 'person-book',
@@ -574,76 +574,76 @@ const 書籍の取材 = {
 };
 
 /** 書籍の取材に、管理人の証言をひもづけたケースです。 */
-const 聴取を持つケース = {
+const caseWithInterviews = {
   ...sampleFictionalCase,
-  interviews: [書籍の取材],
+  interviews: [bookInterview],
   claims: sampleFictionalCase.claims.map((claim) =>
-    claim.id === 'claim-caretaker' ? { ...claim, interviewId: 書籍の取材.id } : claim
+    claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
   ),
 };
 
 describe('parseCase（聴取）', () => {
   it('聴取と、証言の聴取へのひもづけを保持して受け付ける', () => {
-    expect(parseCase(toJsonData(聴取を持つケース))).toEqual(聴取を持つケース);
+    expect(parseCase(toJsonData(caseWithInterviews))).toEqual(caseWithInterviews);
   });
 
   it('聴取を持たない頃に保存したデータは、聴取を空として受け付ける', () => {
-    const { interviews: _聴取, ...聴取の無いケース } = sampleFictionalCase;
+    const { interviews: _interviews, ...caseWithoutInterviews } = sampleFictionalCase;
 
-    expect(parseCase(toJsonData(聴取の無いケース)).interviews).toEqual([]);
+    expect(parseCase(toJsonData(caseWithoutInterviews)).interviews).toEqual([]);
   });
 
   it('証言が存在しない聴取を参照している場合は拒否する', () => {
-    const ケース = { ...聴取を持つケース, interviews: [] };
+    const caseData = { ...caseWithInterviews, interviews: [] };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/存在しない聴取を参照しています: interview-caretaker-book/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない聴取を参照しています: interview-caretaker-book/);
   });
 
   it('聴取の相手・聴取者・場所が存在しない場合は拒否する', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       interviews: [
         { id: 'interview-broken', subjectPersonId: 'person-unknown', interviewerPersonId: 'person-gone', placeId: 'place-gone' },
       ],
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(
+    expect(() => parseCase(toJsonData(caseData))).toThrow(
       /存在しない人物を参照しています: person-unknown[\s\S]*存在しない人物を参照しています: person-gone[\s\S]*存在しない場所を参照しています: place-gone/
     );
   });
 
   it('聴取の日時が時刻参照の形式でない場合は拒否する', () => {
-    const ケース = { ...聴取を持つケース, interviews: [{ ...書籍の取材, at: '2018年ごろ' }] };
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, at: '2018年ごろ' }] };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/interviews\.0\.at/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.at/);
   });
 
   it('聴取の相手が、証言の発言者にも経由にも含まれない場合は拒否する', () => {
     // 前提: 隣家の住人の証言は、隣家の住人が述べ、新聞を経由して伝わったもので、管理人は関わっていない
-    const ケース = {
-      ...聴取を持つケース,
-      claims: 聴取を持つケース.claims.map((claim) =>
-        claim.id === 'claim-neighbor' ? { ...claim, interviewId: 書籍の取材.id } : claim
+    const caseData = {
+      ...caseWithInterviews,
+      claims: caseWithInterviews.claims.map((claim) =>
+        claim.id === 'claim-neighbor' ? { ...claim, interviewId: bookInterview.id } : claim
       ),
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(
+    expect(() => parseCase(toJsonData(caseData))).toThrow(
       /聴取の相手が、証言の発言者にも経由にも含まれていません: claim-neighbor/
     );
   });
 
   it('聴取の相手が経由の一段である証言は、ひもづけを受け付ける（伝聞のその段が述べた機会として扱う）', () => {
     // 前提: 県警の発表（防犯カメラの記録を伝えた）を、聴取として記録している
-    const 県警の発表 = { id: 'interview-police-press', subjectPersonId: 'person-police', at: '1998-08-13' };
-    const ケース = {
+    const policeAnnouncement = { id: 'interview-police-press', subjectPersonId: 'person-police', at: '1998-08-13' };
+    const caseData = {
       ...sampleFictionalCase,
-      interviews: [県警の発表],
+      interviews: [policeAnnouncement],
       claims: sampleFictionalCase.claims.map((claim) =>
-        claim.id === 'claim-police-camera' ? { ...claim, interviewId: 県警の発表.id } : claim
+        claim.id === 'claim-police-camera' ? { ...claim, interviewId: policeAnnouncement.id } : claim
       ),
     };
 
-    expect(parseCase(toJsonData(ケース)).claims.find((claim) => claim.id === 'claim-police-camera')?.interviewId).toBe(
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-police-camera')?.interviewId).toBe(
       'interview-police-press'
     );
   });
@@ -656,53 +656,53 @@ describe('parseCase（照合）', () => {
   });
 
   it('照合を持たない頃に保存したデータは、照合を空として受け付ける', () => {
-    const { crossChecks: _照合, ...照合の無いケース } = sampleFictionalCase;
+    const { crossChecks: _crossChecks, ...caseWithoutCrossChecks } = sampleFictionalCase;
 
-    expect(parseCase(toJsonData(照合の無いケース)).crossChecks).toEqual([]);
+    expect(parseCase(toJsonData(caseWithoutCrossChecks)).crossChecks).toEqual([]);
   });
 
   it('照合が存在しない証言を参照している場合は拒否する', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-broken', claimIds: ['claim-neighbor', 'claim-gone'], kind: 'supports', reason: '時刻が合う' }],
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/存在しない証言を参照しています: claim-gone/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない証言を参照しています: claim-gone/);
   });
 
   it('同じ証言どうしの照合は拒否する', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-self', claimIds: ['claim-neighbor', 'claim-neighbor'], kind: 'supports', reason: '同じ' }],
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/同じ証言どうしは照合できません: cross-check-self/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/同じ証言どうしは照合できません: cross-check-self/);
   });
 
   it('理由が空白だけの照合は拒否する', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-no-reason', claimIds: ['claim-neighbor', 'claim-report'], kind: 'sameSubject', reason: '  ' }],
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/照合の理由がありません: cross-check-no-reason/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/照合の理由がありません: cross-check-no-reason/);
   });
 
   it('照合の種類が決められた値でない場合は拒否する', () => {
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-unknown', claimIds: ['claim-neighbor', 'claim-report'], kind: 'true', reason: '時刻が合う' }],
     };
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/crossChecks\.0\.kind/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/crossChecks\.0\.kind/);
   });
 });
 
 describe('parseCase（仮説）', () => {
   /** サンプルの「管理人が失踪に関わっている」仮説を、一部の項目だけ差し替えたケースを作ります。 */
-  function 管理人の仮説を差し替えたケース(変更: Record<string, unknown>) {
-    const [管理人の仮説, ...他の仮説] = sampleFictionalCase.hypotheses;
-    return { ...sampleFictionalCase, hypotheses: [{ ...管理人の仮説, ...変更 }, ...他の仮説] };
+  function buildCaseWithReplacedCaretakerHypothesis(change: Record<string, unknown>) {
+    const [caretakerHypothesis, ...otherHypothesis] = sampleFictionalCase.hypotheses;
+    return { ...sampleFictionalCase, hypotheses: [{ ...caretakerHypothesis, ...change }, ...otherHypothesis] };
   }
 
   it('仮説を保持して受け付ける', () => {
@@ -711,69 +711,69 @@ describe('parseCase（仮説）', () => {
   });
 
   it('仮説を持たない頃に保存したデータは、仮説を空として受け付ける', () => {
-    const { hypotheses: _仮説, ...仮説の無いケース } = sampleFictionalCase;
+    const { hypotheses: _hypotheses, ...caseWithoutHypotheses } = sampleFictionalCase;
 
-    expect(parseCase(toJsonData(仮説の無いケース)).hypotheses).toEqual([]);
+    expect(parseCase(toJsonData(caseWithoutHypotheses)).hypotheses).toEqual([]);
   });
 
   it('仮説が存在しない証言・人物を参照している場合は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({
       opposingClaimIds: ['claim-gone'],
       targets: [{ personId: 'person-gone', claimIds: { motive: [], opportunity: ['claim-lost'], means: [] } }],
     });
 
-    const 読み込み = () => parseCase(toJsonData(ケース));
-    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-gone/);
-    expect(読み込み).toThrow(/存在しない人物を参照しています: person-gone/);
-    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-lost/);
+    const loadCase = () => parseCase(toJsonData(caseData));
+    expect(loadCase).toThrow(/存在しない証言を参照しています: claim-gone/);
+    expect(loadCase).toThrow(/存在しない人物を参照しています: person-gone/);
+    expect(loadCase).toThrow(/存在しない証言を参照しています: claim-lost/);
   });
 
   it('見出しが空白だけの仮説は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({ title: '  ' });
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ title: '  ' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/仮説の見出しがありません: hypothesis-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/仮説の見出しがありません: hypothesis-caretaker/);
   });
 
   it('否定された仮説に否定の理由が無い場合は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({ status: 'rejected', rejectionReason: ' ' });
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ status: 'rejected', rejectionReason: ' ' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/否定された仮説に否定の理由がありません: hypothesis-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/否定された仮説に否定の理由がありません: hypothesis-caretaker/);
   });
 
   it('否定されていない仮説に否定の理由がある場合は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({ status: 'likely', rejectionReason: '記録と合わない' });
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ status: 'likely', rejectionReason: '記録と合わない' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/否定されていない仮説に否定の理由は指定できません: hypothesis-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/否定されていない仮説に否定の理由は指定できません: hypothesis-caretaker/);
   });
 
   it('同じ証言を、支える証言と反する証言の両方にひもづけた仮説は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({ opposingClaimIds: ['claim-user-guess'] });
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ opposingClaimIds: ['claim-user-guess'] });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(
+    expect(() => parseCase(toJsonData(caseData))).toThrow(
       /同じ証言を、仮説を支える証言と反する証言の両方にひもづけることはできません: hypothesis-caretaker/
     );
   });
 
   it('同じ人物を2回以上対象にした仮説は拒否する', () => {
-    const 対象 = { personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: [] } };
-    const ケース = 管理人の仮説を差し替えたケース({ targets: [対象, 対象] });
+    const target = { personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: [] } };
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ targets: [target, target] });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/同じ人物を仮説の対象に2回以上含めることはできません: hypothesis-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/同じ人物を仮説の対象に2回以上含めることはできません: hypothesis-caretaker/);
   });
 
   it('仮説の状態が決められた値でない場合は拒否する', () => {
-    const ケース = 管理人の仮説を差し替えたケース({ status: 'true' });
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ status: 'true' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/hypotheses\.0\.status/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/hypotheses\.0\.status/);
   });
 });
 
 describe('parseCase（未了事項）', () => {
   /** サンプルの「管理人への再聴取」の未了事項を、一部の項目だけ差し替えたケースを作ります。 */
-  function 管理人への再聴取を差し替えたケース(変更: Record<string, unknown>) {
+  function buildCaseWithReplacedReinterview(change: Record<string, unknown>) {
     return {
       ...sampleFictionalCase,
-      tasks: sampleFictionalCase.tasks.map((task) => (task.id === 'task-caretaker' ? { ...task, ...変更 } : task)),
+      tasks: sampleFictionalCase.tasks.map((task) => (task.id === 'task-caretaker' ? { ...task, ...change } : task)),
     };
   }
 
@@ -783,52 +783,52 @@ describe('parseCase（未了事項）', () => {
   });
 
   it('未了事項を持たない頃に保存したデータは、未了事項を空として受け付ける', () => {
-    const { tasks: _未了事項, ...未了事項の無いケース } = sampleFictionalCase;
+    const { tasks: _tasks, ...caseWithoutTasks } = sampleFictionalCase;
 
-    expect(parseCase(toJsonData(未了事項の無いケース)).tasks).toEqual([]);
+    expect(parseCase(toJsonData(caseWithoutTasks)).tasks).toEqual([]);
   });
 
   it('未了事項が存在しない証言・人物・場所を参照している場合は拒否する', () => {
-    const ケース = 管理人への再聴取を差し替えたケース({
+    const caseData = buildCaseWithReplacedReinterview({
       claimIds: ['claim-gone'],
       personIds: ['person-gone'],
       placeIds: ['place-gone'],
     });
 
-    const 読み込み = () => parseCase(toJsonData(ケース));
-    expect(読み込み).toThrow(/存在しない証言を参照しています: claim-gone/);
-    expect(読み込み).toThrow(/存在しない人物を参照しています: person-gone/);
-    expect(読み込み).toThrow(/存在しない場所を参照しています: place-gone/);
+    const loadCase = () => parseCase(toJsonData(caseData));
+    expect(loadCase).toThrow(/存在しない証言を参照しています: claim-gone/);
+    expect(loadCase).toThrow(/存在しない人物を参照しています: person-gone/);
+    expect(loadCase).toThrow(/存在しない場所を参照しています: place-gone/);
   });
 
   it('内容が空白だけの未了事項は拒否する', () => {
-    const ケース = 管理人への再聴取を差し替えたケース({ content: '  ' });
+    const caseData = buildCaseWithReplacedReinterview({ content: '  ' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/未了事項の内容がありません: task-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/未了事項の内容がありません: task-caretaker/);
   });
 
   it('同じ証言を2回以上ひもづけた未了事項は拒否する', () => {
-    const ケース = 管理人への再聴取を差し替えたケース({ claimIds: ['claim-caretaker', 'claim-caretaker'] });
+    const caseData = buildCaseWithReplacedReinterview({ claimIds: ['claim-caretaker', 'claim-caretaker'] });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/未了事項に同じ証言・人物・場所を2回以上ひもづけることはできません: task-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/未了事項に同じ証言・人物・場所を2回以上ひもづけることはできません: task-caretaker/);
   });
 
   it('期限が年月日（YYYY-MM-DD）の形でない未了事項は拒否する', () => {
-    const ケース = 管理人への再聴取を差し替えたケース({ due: '8月18日' });
+    const caseData = buildCaseWithReplacedReinterview({ due: '8月18日' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/tasks\.1\.due/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/tasks\.1\.due/);
   });
 
   it('存在しない状態の未了事項は拒否する', () => {
-    const ケース = 管理人への再聴取を差し替えたケース({ status: 'pending' });
+    const caseData = buildCaseWithReplacedReinterview({ status: 'pending' });
 
-    expect(() => parseCase(toJsonData(ケース))).toThrow(/tasks\.1\.status/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/tasks\.1\.status/);
   });
 });
 
 describe('parseCase（人物の識別子）', () => {
   /** 別荘の持ち主に、識別子を持たせたケースを作ります。 */
-  function 持ち主に識別子を持たせたケース(identifiers: unknown) {
+  function buildCaseWithOwnerIdentifier(identifiers: unknown) {
     return {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) => (person.id === 'person-owner' ? { ...person, identifiers } : person)),
@@ -836,19 +836,19 @@ describe('parseCase（人物の識別子）', () => {
   }
 
   it('人物の識別子（種類と値の組）を保持して受け付ける', () => {
-    const ケース = 持ち主に識別子を持たせたケース([
+    const caseData = buildCaseWithOwnerIdentifier([
       { type: '電話番号', value: '090-1234-5678' },
       { type: '車両ナンバー', value: '品川 300 あ 12-34' },
     ]);
 
-    expect(parseCase(toJsonData(ケース))).toEqual(ケース);
+    expect(parseCase(toJsonData(caseData))).toEqual(caseData);
   });
 
   it('種類または値が空白だけの識別子は拒否する', () => {
-    expect(() => parseCase(toJsonData(持ち主に識別子を持たせたケース([{ type: '電話番号', value: ' ' }])))).toThrow(
+    expect(() => parseCase(toJsonData(buildCaseWithOwnerIdentifier([{ type: '電話番号', value: ' ' }])))).toThrow(
       /識別子の種類と値を入力してください: 別荘の持ち主/
     );
-    expect(() => parseCase(toJsonData(持ち主に識別子を持たせたケース([{ type: '', value: '090' }])))).toThrow(
+    expect(() => parseCase(toJsonData(buildCaseWithOwnerIdentifier([{ type: '', value: '090' }])))).toThrow(
       /識別子の種類と値を入力してください: 別荘の持ち主/
     );
   });

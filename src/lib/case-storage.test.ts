@@ -18,9 +18,9 @@ import {
 } from './case-storage';
 
 /** 更新日時の比較が安定するよう、保存のたびに進む時計を用意します。 */
-function 時計を固定する(開始: string): void {
+function freezeClock(start: string): void {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date(開始));
+  vi.setSystemTime(new Date(start));
 }
 
 beforeEach(() => {
@@ -29,11 +29,11 @@ beforeEach(() => {
 
 describe('createEmptyCase', () => {
   it('毎回異なるIDの、空のケースを作る', () => {
-    const 一件目 = createEmptyCase();
-    const 二件目 = createEmptyCase();
+    const firstItem = createEmptyCase();
+    const secondItem = createEmptyCase();
 
-    expect(一件目.id).not.toBe(二件目.id);
-    expect(一件目.claims).toEqual([]);
+    expect(firstItem.id).not.toBe(secondItem.id);
+    expect(firstItem.claims).toEqual([]);
   });
 
   it('ケース名を指定できる', () => {
@@ -49,12 +49,12 @@ describe('saveCase と loadCase', () => {
   });
 
   it('ケースごとに別のキーへ保存する', () => {
-    const 別のケース = createEmptyCase('別のケース');
+    const otherCase = createEmptyCase('別のケース');
     saveCase(sampleFictionalCase);
-    saveCase(別のケース);
+    saveCase(otherCase);
 
     expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).not.toBeNull();
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${別のケース.id}`)).not.toBeNull();
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${otherCase.id}`)).not.toBeNull();
   });
 
   it('保存されていないIDを読み出すとエラーにする', () => {
@@ -75,7 +75,7 @@ describe('listCaseSummaries', () => {
   });
 
   it('ケース名・証言の件数・更新日時を返す', () => {
-    時計を固定する('2026-09-21T10:00:00.000Z');
+    freezeClock('2026-09-21T10:00:00.000Z');
     saveCase(sampleFictionalCase);
 
     expect(listCaseSummaries()).toEqual([
@@ -89,22 +89,22 @@ describe('listCaseSummaries', () => {
   });
 
   it('更新日時の新しいケースから順に並べる', () => {
-    時計を固定する('2026-09-21T10:00:00.000Z');
-    const 古いケース = createEmptyCase('古いケース');
-    saveCase(古いケース);
+    freezeClock('2026-09-21T10:00:00.000Z');
+    const olderCase = createEmptyCase('古いケース');
+    saveCase(olderCase);
     vi.setSystemTime(new Date('2026-09-21T11:00:00.000Z'));
-    const 新しいケース = createEmptyCase('新しいケース');
-    saveCase(新しいケース);
+    const newerCase = createEmptyCase('新しいケース');
+    saveCase(newerCase);
 
     expect(listCaseSummaries().map((summary) => summary.name)).toEqual(['新しいケース', '古いケース']);
   });
 
   it('同じケースを保存し直しても、一覧には1件だけ載せる', () => {
-    時計を固定する('2026-09-21T10:00:00.000Z');
+    freezeClock('2026-09-21T10:00:00.000Z');
     saveCase(sampleFictionalCase);
     vi.setSystemTime(new Date('2026-09-21T12:00:00.000Z'));
-    const 改名したケース: Case = { ...sampleFictionalCase, name: '改名したケース' };
-    saveCase(改名したケース);
+    const renamedCase: Case = { ...sampleFictionalCase, name: '改名したケース' };
+    saveCase(renamedCase);
 
     expect(listCaseSummaries()).toEqual([
       {
@@ -134,13 +134,13 @@ describe('deleteCase', () => {
   });
 
   it('他のケースは残す', () => {
-    const 残るケース = createEmptyCase('残るケース');
+    const remainingCase = createEmptyCase('残るケース');
     saveCase(sampleFictionalCase);
-    saveCase(残るケース);
+    saveCase(remainingCase);
 
     deleteCase(sampleFictionalCase.id);
 
-    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([残るケース.id]);
+    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([remainingCase.id]);
   });
 });
 
@@ -155,12 +155,12 @@ describe('migrateLegacyCase', () => {
   });
 
   it('移行しても、元のデータは消さない', () => {
-    const 旧データ = JSON.stringify({ state: { currentCase: sampleFictionalCase } });
-    localStorage.setItem(LEGACY_STORAGE_KEY, 旧データ);
+    const legacyData = JSON.stringify({ state: { currentCase: sampleFictionalCase } });
+    localStorage.setItem(LEGACY_STORAGE_KEY, legacyData);
 
     migrateLegacyCase();
 
-    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBe(旧データ);
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBe(legacyData);
   });
 
   it('移行済みの場合は、二重に移行しない', () => {

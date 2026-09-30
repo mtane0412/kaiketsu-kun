@@ -20,15 +20,15 @@ import {
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Claim } from './types';
 
-const 隣家の住人: DraftMention = { kind: 'person', id: 'person-neighbor', label: '隣家の住人' };
-const 管理人: DraftMention = { kind: 'person', id: 'person-caretaker', label: '管理人' };
-const 持ち主: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
-const 別荘: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
-const 夜7時 = dateMentionOf('1998-08-12T19:00');
+const neighbor: DraftMention = { kind: 'person', id: 'person-neighbor', label: '隣家の住人' };
+const caretaker: DraftMention = { kind: 'person', id: 'person-caretaker', label: '管理人' };
+const owner: DraftMention = { kind: 'person', id: 'person-owner', label: '別荘の持ち主' };
+const villa: DraftMention = { kind: 'place', id: 'place-villa', label: '湖畔の別荘' };
+const at7pm = dateMentionOf('1998-08-12T19:00');
 
 describe('parseContent', () => {
   it('本文を、文字列とメンションの並びに分解する', () => {
-    const content = `庭に${formatMention(持ち主)}の姿が見えた。`;
+    const content = `庭に${formatMention(owner)}の姿が見えた。`;
 
     expect(parseContent(content)).toEqual([
       { type: 'text', text: '庭に' },
@@ -44,15 +44,15 @@ describe('parseContent', () => {
 
 describe('contentToPlainText', () => {
   it('メンションを「@現在の名前」に置き換える（改名後は保存時の表示名ではなく現在の名前を使う）', () => {
-    const 改名前の本文 = '庭に@[持ち主](person:person-owner)の姿が見えた。';
+    const textBeforeRename = '庭に@[持ち主](person:person-owner)の姿が見えた。';
 
-    expect(contentToPlainText(改名前の本文, sampleFictionalCase)).toBe('庭に@別荘の持ち主の姿が見えた。');
+    expect(contentToPlainText(textBeforeRename, sampleFictionalCase)).toBe('庭に@別荘の持ち主の姿が見えた。');
   });
 });
 
 describe('deriveClaimLinks', () => {
   it('本文のメンションから、場所・言及している人物を導出する（発言者と経由は本文から導出しない）', () => {
-    const content = `夜9時ごろ、${formatMention(別荘)}の庭に${formatMention(持ち主)}の姿が見えた。`;
+    const content = `夜9時ごろ、${formatMention(villa)}の庭に${formatMention(owner)}の姿が見えた。`;
 
     expect(deriveClaimLinks(content)).toEqual({
       placeId: 'place-villa',
@@ -62,14 +62,14 @@ describe('deriveClaimLinks', () => {
 
   it('本文の先頭に「@人物:」と書いても発言者として扱わず、言及している人物に含める', () => {
     // 発言者は入力欄の「発言者」で選ぶため、本文の書き方で発言者が決まることはない
-    const content = `${formatMention(隣家の住人)}: 新聞が残っていた。`;
+    const content = `${formatMention(neighbor)}: 新聞が残っていた。`;
 
     expect(deriveClaimLinks(content)).toEqual({ mentionedPersonIds: ['person-neighbor'] });
   });
 
   it('同じ種類のメンションが複数ある場合は最初のものを採用し、人物の重複は1件にまとめる', () => {
-    const 駅: DraftMention = { kind: 'place', id: 'place-station', label: '駅' };
-    const content = `${formatMention(持ち主)}は${formatMention(別荘)}から${formatMention(駅)}へ向かった。${formatMention(持ち主)}は戻らなかった。`;
+    const station: DraftMention = { kind: 'place', id: 'place-station', label: '駅' };
+    const content = `${formatMention(owner)}は${formatMention(villa)}から${formatMention(station)}へ向かった。${formatMention(owner)}は戻らなかった。`;
 
     const links = deriveClaimLinks(content);
 
@@ -80,27 +80,27 @@ describe('deriveClaimLinks', () => {
 
 describe('日時のメンション', () => {
   it('時刻参照から、日本語の表示名を持つ日時のメンションを作る', () => {
-    expect(夜7時).toEqual({ kind: 'date', id: '1998-08-12T19:00', label: '1998年8月12日 19:00' });
+    expect(at7pm).toEqual({ kind: 'date', id: '1998-08-12T19:00', label: '1998年8月12日 19:00' });
   });
 
   it('本文の最初の日時のメンションから、証言が述べる日時を導出する', () => {
-    const 夜9時 = dateMentionOf('1998-08-12T21:00');
-    const content = `${formatMention(夜7時)}に見回りをしたが、${formatMention(夜9時)}には戻らなかった。`;
+    const at9pm = dateMentionOf('1998-08-12T21:00');
+    const content = `${formatMention(at7pm)}に見回りをしたが、${formatMention(at9pm)}には戻らなかった。`;
 
     expect(deriveClaimLinks(content).when).toBe('1998-08-12T19:00');
   });
 
   it('日時のメンションが無い本文からは、日時を導出しない', () => {
-    const content = `庭に${formatMention(持ち主)}の姿が見えた。`;
+    const content = `庭に${formatMention(owner)}の姿が見えた。`;
 
     expect(deriveClaimLinks(content)).not.toHaveProperty('when');
   });
 
   it('日時のメンションの表示名は、保存済みの表示名ではなく時刻参照から組み立て直す', () => {
     // 前提: 以前の版の表示名「1998-08-12T19:00」がトークンに残っている
-    const 古い表示名の本文 = '@[1998-08-12T19:00](date:1998-08-12T19:00)に見回りをした。';
+    const textWithOldLabel = '@[1998-08-12T19:00](date:1998-08-12T19:00)に見回りをした。';
 
-    expect(resolveContent(古い表示名の本文, sampleFictionalCase)[0]).toEqual({
+    expect(resolveContent(textWithOldLabel, sampleFictionalCase)[0]).toEqual({
       type: 'mention',
       kind: 'date',
       id: '1998-08-12T19:00',
@@ -109,7 +109,7 @@ describe('日時のメンション', () => {
   });
 
   it('日時の欄に入力していた頃の証言は、日時を本文の末尾のメンションとして補う（編集で日時を失わないため）', () => {
-    const 日時の欄に入力した証言: Claim = {
+    const claimWithDateTimeInput: Claim = {
       id: 'claim-legacy-when',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
       viaPersonIds: [],
@@ -118,7 +118,7 @@ describe('日時のメンション', () => {
       when: '1998-08-12T19:00',
     };
 
-    const draft = claimToDraft(日時の欄に入力した証言, sampleFictionalCase);
+    const draft = claimToDraft(claimWithDateTimeInput, sampleFictionalCase);
 
     expect(draft.text).toBe('見回りをしたとき、別荘は真っ暗だった。 @1998年8月12日 19:00');
     expect(deriveClaimLinks(draftToContent(draft)).when).toBe('1998-08-12T19:00');
@@ -127,15 +127,15 @@ describe('日時のメンション', () => {
 
 describe('stripLegacySpeakerPrefix', () => {
   it('発言者を本文の先頭に「@人物:」と書いていた頃の本文から、発言者の記法を取り除く', () => {
-    const content = `${formatMention(隣家の住人)}: 庭に${formatMention(持ち主)}の姿が見えた。`;
+    const content = `${formatMention(neighbor)}: 庭に${formatMention(owner)}の姿が見えた。`;
 
     expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(
-      `庭に${formatMention(持ち主)}の姿が見えた。`
+      `庭に${formatMention(owner)}の姿が見えた。`
     );
   });
 
   it('複数の発言者を空白や読点で並べた記法と、全角のコロンも取り除く', () => {
-    const content = `${formatMention(隣家の住人)}、${formatMention(管理人)}：新聞が残っていた。`;
+    const content = `${formatMention(neighbor)}、${formatMention(caretaker)}：新聞が残っていた。`;
 
     expect(
       stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] })
@@ -143,14 +143,14 @@ describe('stripLegacySpeakerPrefix', () => {
   });
 
   it('先頭の人物が項目の発言者に含まれない場合は、本文を変えない（発言者の記法ではなく文章とみなす）', () => {
-    const content = `${formatMention(持ち主)}: この人物についてのメモ。`;
+    const content = `${formatMention(owner)}: この人物についてのメモ。`;
 
     expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(content);
     expect(stripLegacySpeakerPrefix(content, { kind: 'user' })).toBe(content);
   });
 
   it('先頭の人物の直後がコロンでない本文は変えない', () => {
-    const content = `${formatMention(隣家の住人)}は時刻を勘違いしているのではないか。`;
+    const content = `${formatMention(neighbor)}は時刻を勘違いしているのではないか。`;
 
     expect(stripLegacySpeakerPrefix(content, { kind: 'person', personIds: ['person-neighbor'] })).toBe(content);
   });
@@ -160,17 +160,17 @@ describe('draftToContent', () => {
   it('入力欄の「@表示名」を、登録済みのメンションに限ってトークンに変換する', () => {
     const text = '@隣家の住人: 庭に@別荘の持ち主の姿が見えた。連絡先は info@example.co.jp';
 
-    expect(draftToContent({ text, mentions: [隣家の住人, 持ち主] })).toBe(
-      `${formatMention(隣家の住人)}: 庭に${formatMention(持ち主)}の姿が見えた。連絡先は info@example.co.jp`
+    expect(draftToContent({ text, mentions: [neighbor, owner] })).toBe(
+      `${formatMention(neighbor)}: 庭に${formatMention(owner)}の姿が見えた。連絡先は info@example.co.jp`
     );
   });
 
   it('表示名が前方一致で重なる場合は、長い表示名を優先する', () => {
-    const 山田: DraftMention = { kind: 'person', id: 'person-yamada', label: '山田' };
-    const 山田花子: DraftMention = { kind: 'person', id: 'person-yamada-hanako', label: '山田花子' };
+    const yamada: DraftMention = { kind: 'person', id: 'person-yamada', label: '山田' };
+    const yamadaHanako: DraftMention = { kind: 'person', id: 'person-yamada-hanako', label: '山田花子' };
 
-    expect(draftToContent({ text: '@山田花子が来た。', mentions: [山田, 山田花子] })).toBe(
-      `${formatMention(山田花子)}が来た。`
+    expect(draftToContent({ text: '@山田花子が来た。', mentions: [yamada, yamadaHanako] })).toBe(
+      `${formatMention(yamadaHanako)}が来た。`
     );
   });
 });
@@ -179,10 +179,10 @@ describe('parseDraft', () => {
   it('下書きを、文字列と登録済みのメンションの並びに分解する（入力欄の色づけと一括削除に使う）', () => {
     const text = '@隣家の住人: 庭に@別荘の持ち主の姿が見えた。連絡先は info@example.co.jp';
 
-    expect(parseDraft({ text, mentions: [隣家の住人, 持ち主] })).toEqual([
-      { type: 'mention', ...隣家の住人 },
+    expect(parseDraft({ text, mentions: [neighbor, owner] })).toEqual([
+      { type: 'mention', ...neighbor },
       { type: 'text', text: ': 庭に' },
-      { type: 'mention', ...持ち主 },
+      { type: 'mention', ...owner },
       { type: 'text', text: 'の姿が見えた。連絡先は info@example.co.jp' },
     ]);
   });
@@ -208,7 +208,7 @@ describe('claimToDraft', () => {
 
   it('メンション導入前の証言は、項目にだけ保存されていた参照を本文の末尾に補う（編集で参照を失わないため）', () => {
     // 発言者と経由は入力欄の「発言者」で扱うため、本文には補わない
-    const 旧形式の証言: Claim = {
+    const legacyClaim: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
       viaPersonIds: ['person-newspaper'],
@@ -217,14 +217,14 @@ describe('claimToDraft', () => {
       placeId: 'place-villa',
     };
 
-    const draft = claimToDraft(旧形式の証言, sampleFictionalCase);
+    const draft = claimToDraft(legacyClaim, sampleFictionalCase);
 
     expect(draft.text).toBe(
       '庭に持ち主の姿が見えた。 @別荘の持ち主 @湖畔の別荘'
     );
     expect(deriveClaimLinks(draftToContent(draft))).toEqual({
-      placeId: 旧形式の証言.placeId,
-      mentionedPersonIds: 旧形式の証言.mentionedPersonIds,
+      placeId: legacyClaim.placeId,
+      mentionedPersonIds: legacyClaim.mentionedPersonIds,
     });
   });
 });
@@ -232,13 +232,13 @@ describe('claimToDraft', () => {
 describe('contentToDraft', () => {
   it('メンションを含む文章（エンティティのメモなど）を、現在の名前の下書きに変換する', () => {
     // 前提: トークンに控えた表示名「管理人さん」は古く、エンティティの現在の名前は「管理人」である
-    const メモ = '@[管理人さん](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。';
+    const note = '@[管理人さん](person:person-caretaker)を雇い、@[湖畔の別荘](place:place-villa)の手入れを任せていた。';
 
-    const draft = contentToDraft(メモ, sampleFictionalCase);
+    const draft = contentToDraft(note, sampleFictionalCase);
 
     expect(draft).toEqual({
       text: '@管理人を雇い、@湖畔の別荘の手入れを任せていた。',
-      mentions: [管理人, 別荘],
+      mentions: [caretaker, villa],
     });
   });
 
@@ -364,22 +364,22 @@ describe('findMentionQuery', () => {
 describe('resolveContent', () => {
   it('メンションに、エンティティの現在の名前と画像を載せる', () => {
     // 前提: 別荘の持ち主には画像を登録してあり、湖畔の別荘には画像が無い
-    const 持ち主の画像 = 'data:image/jpeg;base64,AAAA';
-    const ケース = {
+    const ownerImage = 'data:image/jpeg;base64,AAAA';
+    const caseData = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
-        person.id === 'person-owner' ? { ...person, imageDataUrl: 持ち主の画像 } : person
+        person.id === 'person-owner' ? { ...person, imageDataUrl: ownerImage } : person
       ),
     };
 
-    const segments = resolveContent(`${formatMention(持ち主)}が${formatMention(別荘)}にいた。`, ケース);
+    const segments = resolveContent(`${formatMention(owner)}が${formatMention(villa)}にいた。`, caseData);
 
     expect(segments[0]).toEqual({
       type: 'mention',
       kind: 'person',
       id: 'person-owner',
       label: '別荘の持ち主',
-      imageDataUrl: 持ち主の画像,
+      imageDataUrl: ownerImage,
       iconText: '別',
     });
     expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
@@ -387,14 +387,14 @@ describe('resolveContent', () => {
 
   it('人物のメンションには、アイコンの文字を載せる（場所のメンションには載せない）', () => {
     // 前提: 別荘の持ち主にはアイコンの文字「主」を指定してあり、画像は無い
-    const ケース = {
+    const caseData = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner' ? { ...person, iconText: '主' } : person
       ),
     };
 
-    const segments = resolveContent(`${formatMention(持ち主)}が${formatMention(別荘)}にいた。`, ケース);
+    const segments = resolveContent(`${formatMention(owner)}が${formatMention(villa)}にいた。`, caseData);
 
     expect(segments[0]).toEqual({ type: 'mention', kind: 'person', id: 'person-owner', label: '別荘の持ち主', iconText: '主' });
     expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
