@@ -20,12 +20,12 @@ import type { Case } from './types';
 describe('buildTimeline', () => {
   it('証言を、ケースの並び順（timelineOrder）のとおりに並べる', () => {
     // 前提: ボード上の位置は日時ではなく並び順で決まる。並び順に載っていない証言（架空日報の記述・ユーザーの推測）は末尾に登録順で並ぶ
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       timelineOrder: ['claim:claim-neighbor', 'claim:claim-caretaker', 'claim:claim-police-camera'],
     };
 
-    const items = buildTimeline(ケース).items;
+    const items = buildTimeline(caseData).items;
 
     expect(items.map((item) => item.view.claim.id)).toEqual([
       'claim-neighbor',
@@ -38,33 +38,33 @@ describe('buildTimeline', () => {
   });
 
   it('証言の参照先（発言者・経由・場所・言及している人物）を解決する', () => {
-    const 防犯カメラの記録 = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-police-camera')?.view;
-    const 隣家の証言 = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
+    const securityCameraRecord = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-police-camera')?.view;
+    const neighborClaim = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
 
-    expect(防犯カメラの記録?.speakerLabel).toBe('県道の防犯カメラ');
-    expect(防犯カメラの記録?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
-    expect(隣家の証言?.place?.name).toBe('湖畔の別荘');
-    expect(隣家の証言?.mentionedPersons.map((person) => person.name)).toEqual(['別荘の持ち主']);
+    expect(securityCameraRecord?.speakerLabel).toBe('県道の防犯カメラ');
+    expect(securityCameraRecord?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
+    expect(neighborClaim?.place?.name).toBe('湖畔の別荘');
+    expect(neighborClaim?.mentionedPersons.map((person) => person.name)).toEqual(['別荘の持ち主']);
   });
 
   it('証言が存在しない場所を参照している場合はエラーにする', () => {
-    const 壊れたケース: Case = {
+    const brokenCase: Case = {
       ...sampleFictionalCase,
       claims: [{ ...sampleFictionalCase.claims[0]!, placeId: 'place-missing' }],
     };
 
-    expect(() => buildTimeline(壊れたケース)).toThrow('場所が見つかりません: place-missing');
+    expect(() => buildTimeline(brokenCase)).toThrow('場所が見つかりません: place-missing');
   });
 });
 
 describe('claimLabelOf', () => {
   it('見出しの無い証言の名前には、本文の日時のメンションを含めない（日時は時系列の並びで分かるため）', () => {
     // 前提: 隣家の住人の証言は、本文の先頭に日時のメンション（1998年8月12日 21:00）を持つ
-    const 隣家の証言 = buildTimeline(sampleFictionalCase).items.find(
+    const neighborClaim = buildTimeline(sampleFictionalCase).items.find(
       (item) => item.view.claim.id === 'claim-neighbor'
     )!;
 
-    expect(claimLabelOf(隣家の証言.view)).toBe('ごろ、@湖畔の別荘の明かりがついていて、…');
+    expect(claimLabelOf(neighborClaim.view)).toBe('ごろ、@湖畔の別荘の明かりがついていて、…');
   });
 });
 
@@ -84,9 +84,9 @@ describe('groupClaimsBySpeaker', () => {
   it('経由した人物は発言者ではないため、その人物のグループには入れない', () => {
     // 前提: サンプルでは、防犯カメラの記録を県警が発表し、架空日報が報じている（発言者: 防犯カメラ、経由: 県警 → 架空日報）
     const groups = groupClaimsBySpeaker(sampleFictionalCase);
-    const 防犯カメラ = groups.find((group) => group.label === '県道の防犯カメラ');
+    const securityCamera = groups.find((group) => group.label === '県道の防犯カメラ');
 
-    expect(防犯カメラ?.claims.map((item) => item.claim.id)).toEqual(['claim-police-camera']);
+    expect(securityCamera?.claims.map((item) => item.claim.id)).toEqual(['claim-police-camera']);
     expect(groups.find((group) => group.label === '県警')).toBeUndefined();
     // 地の文の記述だけが、架空日報のグループに入る
     expect(groups.find((group) => group.label === '架空日報 朝刊')?.claims.map((item) => item.claim.id)).toEqual([
@@ -96,7 +96,7 @@ describe('groupClaimsBySpeaker', () => {
 
   it('同じ発言者の証言を、時系列ボードの並び順で並べる', () => {
     // 前提: 管理人の2件目の証言を、ケースの並び順では管理人の1件目より前に置いている
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       claims: [
         ...sampleFictionalCase.claims,
@@ -111,14 +111,14 @@ describe('groupClaimsBySpeaker', () => {
       timelineOrder: ['claim:claim-caretaker-acquaintance', ...sampleFictionalCase.timelineOrder],
     };
 
-    const 管理人 = groupClaimsBySpeaker(ケース).find((group) => group.label === '管理人');
+    const caretaker = groupClaimsBySpeaker(caseData).find((group) => group.label === '管理人');
 
-    expect(管理人?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-acquaintance', 'claim-caretaker']);
+    expect(caretaker?.claims.map((item) => item.claim.id)).toEqual(['claim-caretaker-acquaintance', 'claim-caretaker']);
   });
 
   it('複数の人物が述べた証言は、それぞれの人物のグループに入れ、発言者名を全員分つなげて示す', () => {
     // 前提: 1つの記事が、隣家の住人と管理人の2人が同じことを述べたと伝えている
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       claims: [
         ...sampleFictionalCase.claims,
@@ -132,19 +132,19 @@ describe('groupClaimsBySpeaker', () => {
       ],
     };
 
-    const groups = groupClaimsBySpeaker(ケース);
-    const 隣家の住人 = groups.find((group) => group.label === '隣家の住人');
-    const 管理人 = groups.find((group) => group.label === '管理人');
+    const groups = groupClaimsBySpeaker(caseData);
+    const neighbor = groups.find((group) => group.label === '隣家の住人');
+    const caretaker = groups.find((group) => group.label === '管理人');
 
-    expect(隣家の住人?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
-    expect(管理人?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
-    expect(管理人?.claims.find((item) => item.claim.id === 'claim-two-speakers')?.speakerLabel).toBe('隣家の住人、管理人');
+    expect(neighbor?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
+    expect(caretaker?.claims.map((item) => item.claim.id)).toContain('claim-two-speakers');
+    expect(caretaker?.claims.find((item) => item.claim.id === 'claim-two-speakers')?.speakerLabel).toBe('隣家の住人、管理人');
   });
 
   it('証言に、経由した人物を伝えた順に添える', () => {
-    const 防犯カメラ = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
+    const securityCamera = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
 
-    expect(防犯カメラ?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
+    expect(securityCamera?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
   });
 });
 
@@ -157,9 +157,9 @@ describe('buildPersonLanes', () => {
   });
 
   it('人物の列の並び順（personLaneOrder）を保存していれば、そのとおりに列を並べる', () => {
-    const ケース: Case = { ...sampleFictionalCase, personLaneOrder: ['person-newspaper', 'person-caretaker'] };
+    const caseData: Case = { ...sampleFictionalCase, personLaneOrder: ['person-newspaper', 'person-caretaker'] };
 
-    const { lanes } = buildPersonLanes(ケース);
+    const { lanes } = buildPersonLanes(caseData);
 
     expect(lanes.map((lane) => lane.label)).toEqual(['架空日報 朝刊', '管理人', '別荘の持ち主', '隣家の住人', '県道の防犯カメラ']);
   });
@@ -167,9 +167,9 @@ describe('buildPersonLanes', () => {
   it('証言を時系列ボードの並び順で行にし、各列には、その人物が発言したか言及されたかを示す', () => {
     // 前提: サンプルの並びは、管理人（夜7時）→ 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測
     const { lanes, rows } = buildPersonLanes(sampleFictionalCase);
-    const 役割の表 = rows.map((row) => [row.view.claim.id, ...lanes.map((lane) => row.roles[lane.personId] ?? '-')]);
+    const roleTable = rows.map((row) => [row.view.claim.id, ...lanes.map((lane) => row.roles[lane.personId] ?? '-')]);
 
-    expect(役割の表).toEqual([
+    expect(roleTable).toEqual([
       ['claim-caretaker', 'mentioned', '-', 'speaker', '-', '-'],
       ['claim-police-camera', 'mentioned', '-', '-', 'speaker', '-'],
       ['claim-neighbor', 'mentioned', 'speaker', '-', '-', '-'],
@@ -179,7 +179,7 @@ describe('buildPersonLanes', () => {
   });
 
   it('発言者が本文で自分自身に言及していても、その人物の列では発言として扱う', () => {
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       claims: [
         {
@@ -193,7 +193,7 @@ describe('buildPersonLanes', () => {
       timelineOrder: [],
     };
 
-    const { rows } = buildPersonLanes(ケース);
+    const { rows } = buildPersonLanes(caseData);
 
     expect(rows[0]?.roles['person-neighbor']).toBe('speaker');
   });
@@ -216,7 +216,7 @@ describe('buildPersonLanes', () => {
   });
 
   it('どの人物も登場しない証言（人物に言及しないユーザーの推測）は行にしない', () => {
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       claims: [
         {
@@ -230,36 +230,36 @@ describe('buildPersonLanes', () => {
       timelineOrder: [],
     };
 
-    expect(buildPersonLanes(ケース)).toEqual({ lanes: [], rows: [] });
+    expect(buildPersonLanes(caseData)).toEqual({ lanes: [], rows: [] });
   });
 });
 
 describe('人物の画像', () => {
-  const 住人の画像 = 'data:image/jpeg;base64,AAAA';
-  const ケース: Case = {
+  const residentImage = 'data:image/jpeg;base64,AAAA';
+  const caseData: Case = {
     ...sampleFictionalCase,
     persons: sampleFictionalCase.persons.map((person) =>
-      person.id === 'person-neighbor' ? { ...person, imageDataUrl: 住人の画像 } : person
+      person.id === 'person-neighbor' ? { ...person, imageDataUrl: residentImage } : person
     ),
   };
 
   it('証言のビューに、発言者の人物を載せる（カードに発言者の画像を表示するため）', () => {
-    const 住人の証言 = buildTimeline(ケース).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
-    const 推測 = buildTimeline(ケース).items.find((item) => item.view.claim.id === 'claim-user-guess')?.view;
+    const residentClaim = buildTimeline(caseData).items.find((item) => item.view.claim.id === 'claim-neighbor')?.view;
+    const guess = buildTimeline(caseData).items.find((item) => item.view.claim.id === 'claim-user-guess')?.view;
 
-    expect(住人の証言?.speakerPersons.map((person) => person.imageDataUrl)).toEqual([住人の画像]);
-    expect(推測?.speakerPersons).toEqual([]);
+    expect(residentClaim?.speakerPersons.map((person) => person.imageDataUrl)).toEqual([residentImage]);
+    expect(guess?.speakerPersons).toEqual([]);
   });
 
   it('証言者別ビューのグループに、その人物の画像を載せる', () => {
-    const groups = groupClaimsBySpeaker(ケース);
+    const groups = groupClaimsBySpeaker(caseData);
 
-    expect(groups.find((group) => group.key === 'person:person-neighbor')?.imageDataUrl).toBe(住人の画像);
+    expect(groups.find((group) => group.key === 'person:person-neighbor')?.imageDataUrl).toBe(residentImage);
     expect(groups.find((group) => group.key === 'user')?.imageDataUrl).toBeUndefined();
   });
 
   it('証言者別ビューのグループに、その人物のアイコンの文字を載せる（ユーザーの推測には載せない）', () => {
-    const groups = groupClaimsBySpeaker(ケース);
+    const groups = groupClaimsBySpeaker(caseData);
 
     expect(groups.find((group) => group.key === 'person:person-neighbor')?.iconText).toBe('隣');
     expect(groups.find((group) => group.key === 'user')?.iconText).toBeUndefined();
@@ -268,7 +268,7 @@ describe('人物の画像', () => {
 
 describe('findRelatedEntities', () => {
   /** 持ち主のメモが管理人と別荘に触れ、隣家の住人のメモが持ち主に触れているケースです。 */
-  const メモで関連付けたケース: Case = {
+  const caseLinkedByNote: Case = {
     ...sampleFictionalCase,
     persons: sampleFictionalCase.persons.map((person) => {
       if (person.id === 'person-owner') {
@@ -285,7 +285,7 @@ describe('findRelatedEntities', () => {
   };
 
   it('メモで言及しているエンティティと、メモで言及されているエンティティを、人物・場所の登録順に返す', () => {
-    const related = findRelatedEntities(メモで関連付けたケース, 'person', 'person-owner');
+    const related = findRelatedEntities(caseLinkedByNote, 'person', 'person-owner');
 
     expect(related).toEqual([
       { kind: 'person', id: 'person-neighbor', name: '隣家の住人', iconText: '隣', mentions: false, mentionedBy: true },
@@ -296,7 +296,7 @@ describe('findRelatedEntities', () => {
 
   it('メモを持たないエンティティも、他のエンティティのメモで言及されていれば関連として返す', () => {
     // 前提: 別荘（場所）にはメモが無いが、持ち主のメモが別荘に触れている
-    const related = findRelatedEntities(メモで関連付けたケース, 'place', 'place-villa');
+    const related = findRelatedEntities(caseLinkedByNote, 'place', 'place-villa');
 
     expect(related).toEqual([
       { kind: 'person', id: 'person-owner', name: '別荘の持ち主', iconText: '別', mentions: false, mentionedBy: true },
@@ -304,53 +304,53 @@ describe('findRelatedEntities', () => {
   });
 
   it('互いのメモで言及し合っているエンティティは、1件にまとめる', () => {
-    const ケース: Case = {
-      ...メモで関連付けたケース,
-      persons: メモで関連付けたケース.persons.map((person) =>
+    const caseData: Case = {
+      ...caseLinkedByNote,
+      persons: caseLinkedByNote.persons.map((person) =>
         person.id === 'person-caretaker' ? { ...person, note: '@[別荘の持ち主](person:person-owner)に雇われていた。' } : person
       ),
     };
 
-    const 管理人との関連 = findRelatedEntities(ケース, 'person', 'person-owner').find((item) => item.id === 'person-caretaker');
+    const relationToCaretaker = findRelatedEntities(caseData, 'person', 'person-owner').find((item) => item.id === 'person-caretaker');
 
-    expect(管理人との関連).toMatchObject({ mentions: true, mentionedBy: true });
+    expect(relationToCaretaker).toMatchObject({ mentions: true, mentionedBy: true });
   });
 
   it('画像が登録されているエンティティには、画像を載せる', () => {
-    const 画像 = 'data:image/png;base64,AAAA';
-    const ケース: Case = { ...メモで関連付けたケース, places: [{ id: 'place-villa', name: '湖畔の別荘', imageDataUrl: 画像 }] };
+    const image = 'data:image/png;base64,AAAA';
+    const caseData: Case = { ...caseLinkedByNote, places: [{ id: 'place-villa', name: '湖畔の別荘', imageDataUrl: image }] };
 
-    const 別荘との関連 = findRelatedEntities(ケース, 'person', 'person-owner').find((item) => item.id === 'place-villa');
+    const relationToVilla = findRelatedEntities(caseData, 'person', 'person-owner').find((item) => item.id === 'place-villa');
 
-    expect(別荘との関連?.imageDataUrl).toBe(画像);
+    expect(relationToVilla?.imageDataUrl).toBe(image);
   });
 
   it('関連する人物にはアイコンの文字を載せ、関連する場所には載せない', () => {
-    const 関連 = findRelatedEntities(メモで関連付けたケース, 'person', 'person-owner');
+    const relatedToOwner = findRelatedEntities(caseLinkedByNote, 'person', 'person-owner');
 
-    expect(関連.find((item) => item.id === 'person-caretaker')?.iconText).toBe('管');
-    expect(関連.find((item) => item.id === 'place-villa')?.iconText).toBeUndefined();
+    expect(relatedToOwner.find((item) => item.id === 'person-caretaker')?.iconText).toBe('管');
+    expect(relatedToOwner.find((item) => item.id === 'place-villa')?.iconText).toBeUndefined();
   });
 
   it('自分自身へのメンションは、関連に含めない', () => {
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner' ? { ...person, note: '@[別荘の持ち主](person:person-owner)は本人である。' } : person
       ),
     };
 
-    expect(findRelatedEntities(ケース, 'person', 'person-owner')).toEqual([]);
+    expect(findRelatedEntities(caseData, 'person', 'person-owner')).toEqual([]);
   });
 
   it('どのメモにも現れないエンティティは、関連が無い', () => {
-    expect(findRelatedEntities(メモで関連付けたケース, 'person', 'person-police')).toEqual([]);
+    expect(findRelatedEntities(caseLinkedByNote, 'person', 'person-police')).toEqual([]);
   });
 });
 
 describe('buildMapTrail', () => {
   /** 湖畔の別荘に座標を登録し、座標の無い場所（県道の交差点）で述べられた証言を加えたケースです。 */
-  const 座標を登録したケース: Case = {
+  const caseWithCoordinates: Case = {
     ...sampleFictionalCase,
     places: [
       { id: 'place-villa', name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 },
@@ -363,7 +363,7 @@ describe('buildMapTrail', () => {
 
   it('座標のある場所で述べられた証言を、時系列の並び順のとおりに、1から始まる番号を付けて並べる', () => {
     // 前提: 並び順は 管理人 → 防犯カメラ → 隣家 → 架空日報 → 推測。このうち座標のある場所を述べるのは管理人と隣家の証言だけ
-    const trail = buildMapTrail(座標を登録したケース);
+    const trail = buildMapTrail(caseWithCoordinates);
 
     expect(trail.stops.map((stop) => [stop.order, stop.view.claim.id])).toEqual([
       [1, 'claim-caretaker'],
@@ -374,7 +374,7 @@ describe('buildMapTrail', () => {
   });
 
   it('地図に表示できない証言を、理由（場所が無い・場所に座標が無い）と共に、時系列の並び順のとおりに返す', () => {
-    const trail = buildMapTrail(座標を登録したケース);
+    const trail = buildMapTrail(caseWithCoordinates);
 
     expect(trail.unmapped.map((item) => [item.view.claim.id, item.reason])).toEqual([
       ['claim-police-camera', 'no-coordinates'],
@@ -384,9 +384,9 @@ describe('buildMapTrail', () => {
   });
 
   it('緯度と経度の片方しか無い場所は、座標が無い場所として扱う', () => {
-    const 緯度だけのケース: Case = { ...sampleFictionalCase, places: [{ id: 'place-villa', name: '湖畔の別荘', latitude: 35.5 }] };
+    const caseWithLatitudeOnly: Case = { ...sampleFictionalCase, places: [{ id: 'place-villa', name: '湖畔の別荘', latitude: 35.5 }] };
 
-    const trail = buildMapTrail(緯度だけのケース);
+    const trail = buildMapTrail(caseWithLatitudeOnly);
 
     expect(trail.stops).toEqual([]);
     expect(trail.unmapped.filter((item) => item.reason === 'no-coordinates').map((item) => item.view.claim.id)).toEqual([
@@ -398,7 +398,7 @@ describe('buildMapTrail', () => {
 
 describe('groupStopsByPlace', () => {
   it('同じ場所の証言を1つのピンにまとめ、ピンを最初に登場する順に並べる', () => {
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       places: [
         { id: 'place-villa', name: '湖畔の別荘', latitude: 35.5, longitude: 138.75 },
@@ -409,7 +409,7 @@ describe('groupStopsByPlace', () => {
       ),
     };
 
-    const pins = groupStopsByPlace(buildMapTrail(ケース).stops);
+    const pins = groupStopsByPlace(buildMapTrail(caseData).stops);
 
     // 並び順は 管理人（別荘）→ 防犯カメラ（交差点）→ 隣家（別荘）
     expect(pins.map((pin) => [pin.place.name, pin.orders])).toEqual([
@@ -492,7 +492,7 @@ describe('buildPersonDetail', () => {
 
   it('メモのメンションでつながった、関連するエンティティを返す', () => {
     // 前提: 隣家の住人のメモから、湖畔の別荘に言及しているケースを用意する
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-neighbor'
@@ -500,7 +500,7 @@ describe('buildPersonDetail', () => {
           : person
       ),
     };
-    const detail = buildPersonDetail(ケース, 'person-neighbor');
+    const detail = buildPersonDetail(caseData, 'person-neighbor');
 
     expect(detail?.relatedEntities.map((related) => related.name)).toEqual(['湖畔の別荘']);
   });
@@ -523,12 +523,12 @@ describe('buildPlaceDetail', () => {
 
   it('その場所を述べている証言が1件も無い場合は、まとまりを作らない', () => {
     // 前提: どの証言も述べていない「県道の交差点」を登録する
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       places: [...sampleFictionalCase.places, { id: 'place-crossing', name: '県道の交差点' }],
     };
 
-    expect(buildPlaceDetail(ケース, 'place-crossing')?.claimGroups).toEqual([]);
+    expect(buildPlaceDetail(caseData, 'place-crossing')?.claimGroups).toEqual([]);
   });
 
   it('ケースに無い場所のIDを渡すと undefined を返す（URLの直接入力で、削除済みの場所を開いた場合）', () => {

@@ -20,7 +20,7 @@ beforeEach(() => {
  * 図（SVG）に、画面上の大きさを与えます。
  * jsdom は要素の大きさを持たないため、これが無いとマウスの位置を図の座標へ直せず、拡大縮小やドラッグを確かめられません。
  */
-function 図に大きさを与える() {
+function giveDiagramSize() {
   vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
     left: 0,
     top: 0,
@@ -38,15 +38,15 @@ describe('GraphView', () => {
   it('人物のノードを、その人物の詳細ページへのリンクとして描く', () => {
     render(<GraphView target={sampleFictionalCase} />);
 
-    const 管理人 = screen.getByRole('link', { name: '人物: 管理人' });
-    expect(管理人).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/persons/person-caretaker?tab=graph`);
+    const caretaker = screen.getByRole('link', { name: '人物: 管理人' });
+    expect(caretaker).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/persons/person-caretaker?tab=graph`);
   });
 
   it('証言のノードを、その証言の詳細ページへのリンクとして描く', () => {
     render(<GraphView target={sampleFictionalCase} />);
 
-    const 管理人の証言 = screen.getByRole('link', { name: /^証言: .*見回りをしたとき/ });
-    expect(管理人の証言).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/claims/claim-caretaker?tab=graph`);
+    const caretakerClaim = screen.getByRole('link', { name: /^証言: .*見回りをしたとき/ });
+    expect(caretakerClaim).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/claims/claim-caretaker?tab=graph`);
   });
 
   it('ユーザーの推測のノードは、開く先の詳細が無いためリンクにしない', () => {
@@ -59,10 +59,10 @@ describe('GraphView', () => {
   it('エッジの種類の読み方を、凡例で示す', () => {
     render(<GraphView target={sampleFictionalCase} />);
 
-    const 凡例 = screen.getByRole('list', { name: '線の見方' });
-    expect(within(凡例).getByText('発言')).toBeInTheDocument();
-    expect(within(凡例).getByText('経由')).toBeInTheDocument();
-    expect(within(凡例).getByText('言及')).toBeInTheDocument();
+    const legend = screen.getByRole('list', { name: '線の見方' });
+    expect(within(legend).getByText('発言')).toBeInTheDocument();
+    expect(within(legend).getByText('経由')).toBeInTheDocument();
+    expect(within(legend).getByText('言及')).toBeInTheDocument();
   });
 
   it('人物ではない種別のノードは、読み上げの名前に種別を付ける', () => {
@@ -74,27 +74,27 @@ describe('GraphView', () => {
 
   it('画像を登録した人物ではない種別のノードは、画像の上に種別の色の縁取りを描く', () => {
     // 前提: 防犯カメラに画像を登録すると、丸の塗り（種別の色）は画像に覆われて見えなくなる
-    const ケース: Case = {
+    const caseData: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-road-camera' ? { ...person, imageDataUrl: 'data:image/jpeg;base64,AAAA' } : person
       ),
     };
-    render(<GraphView target={ケース} />);
+    render(<GraphView target={caseData} />);
 
-    const 防犯カメラ = screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' });
-    expect(防犯カメラ.querySelector('[data-person-kind-outline="record"]')).not.toBeNull();
+    const securityCamera = screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' });
+    expect(securityCamera.querySelector('[data-person-kind-outline="record"]')).not.toBeNull();
     // 画像の無い人物のノードは、丸の塗りで種別が分かるため、縁取りを描かない
-    const 県警 = screen.getByRole('link', { name: '組織: 県警' });
-    expect(県警.querySelector('[data-person-kind-outline]')).toBeNull();
+    const prefecturalPolice = screen.getByRole('link', { name: '組織: 県警' });
+    expect(prefecturalPolice.querySelector('[data-person-kind-outline]')).toBeNull();
   });
 
   it('人物の種別のチェックを外すと、その種別のノードを描かない', async () => {
     const user = userEvent.setup();
     render(<GraphView target={sampleFictionalCase} />);
 
-    const 種別 = screen.getByRole('group', { name: '表示する人物の種別' });
-    await user.click(within(種別).getByRole('checkbox', { name: '記録・媒体' }));
+    const kindFilter = screen.getByRole('group', { name: '表示する人物の種別' });
+    await user.click(within(kindFilter).getByRole('checkbox', { name: '記録・媒体' }));
 
     expect(screen.queryByRole('link', { name: '記録・媒体: 県道の防犯カメラ' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '記録・媒体: 架空日報 朝刊' })).not.toBeInTheDocument();
@@ -103,9 +103,9 @@ describe('GraphView', () => {
   });
 
   it('人物も証言も登録されていないケースでは、書き足しを促す案内を出す', () => {
-    const 空のケース: Case = { ...sampleFictionalCase, persons: [], places: [], claims: [], relationships: [], timelineOrder: [] };
+    const emptyCase: Case = { ...sampleFictionalCase, persons: [], places: [], claims: [], relationships: [], timelineOrder: [] };
 
-    render(<GraphView target={空のケース} />);
+    render(<GraphView target={emptyCase} />);
 
     expect(screen.getByText(/人物も証言もまだ登録されていません/)).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '人物と証言のつながり' })).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('GraphView', () => {
 
 describe('GraphView（人物どうしの関係）', () => {
   /** 片方向で根拠のある関係と、双方向で根拠の無い関係を1件ずつ持つケースです。 */
-  const 関係を2件持つケース: Case = {
+  const caseWithTwoRelationships: Case = {
     ...sampleFictionalCase,
     relationships: [
       {
@@ -147,56 +147,56 @@ describe('GraphView（人物どうしの関係）', () => {
    * 図に描かれた、指定した種類の線を返します。線は読み上げの対象にしないため、種類の属性から取り出します。
    * 証言から導いた線は直線（line）、関係の線は弧（path）で描くため、要素の名前では絞り込みません。
    */
-  function 線を取り出す(container: HTMLElement, kind: string): SVGElement[] {
+  function getLine(container: HTMLElement, kind: string): SVGElement[] {
     return Array.from(container.querySelectorAll<SVGElement>(`[data-edge-kind="${kind}"]`));
   }
 
   /** 弧（2次ベジェ曲線）の経路から、ふくらみ具合を決める制御点の座標を読み取ります。 */
-  function 制御点を読む(線: SVGElement): { x: number; y: number } {
-    const 経路 = 線.getAttribute('d') ?? '';
-    const 一致 = /Q\s+(-?[\d.]+)\s+(-?[\d.]+)/.exec(経路);
-    if (!一致) throw new Error(`弧の経路を読み取れませんでした: ${経路}`);
-    return { x: Number(一致[1]), y: Number(一致[2]) };
+  function readControlPoint(line: SVGElement): { x: number; y: number } {
+    const path = line.getAttribute('d') ?? '';
+    const match = /Q\s+(-?[\d.]+)\s+(-?[\d.]+)/.exec(path);
+    if (!match) throw new Error(`弧の経路を読み取れませんでした: ${path}`);
+    return { x: Number(match[1]), y: Number(match[2]) };
   }
 
   it('登録された関係を、人物と人物を結ぶ線として描く', () => {
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
-    expect(線を取り出す(container, 'relates')).toHaveLength(2);
+    expect(getLine(container, 'relates')).toHaveLength(2);
   });
 
   it('片方向の関係には矢印を付け、双方向の関係には付けない', () => {
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
-    const [雇用主, 面識がある] = 線を取り出す(container, 'relates');
-    expect(雇用主?.getAttribute('marker-end')).toMatch(/^url\(#/);
-    expect(面識がある?.getAttribute('marker-end')).toBeNull();
+    const [employer, acquainted] = getLine(container, 'relates');
+    expect(employer?.getAttribute('marker-end')).toMatch(/^url\(#/);
+    expect(acquainted?.getAttribute('marker-end')).toBeNull();
   });
 
   it('根拠の証言が登録されていない関係を、根拠のある関係とは違う線で描く', () => {
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
-    const [雇用主, 面識がある] = 線を取り出す(container, 'relates');
-    expect(雇用主?.getAttribute('stroke-dasharray')).toBeNull();
-    expect(面識がある?.getAttribute('stroke-dasharray')).not.toBeNull();
+    const [employer, acquainted] = getLine(container, 'relates');
+    expect(employer?.getAttribute('stroke-dasharray')).toBeNull();
+    expect(acquainted?.getAttribute('stroke-dasharray')).not.toBeNull();
   });
 
   it('同じ2人の間に複数の関係があっても、線が重ならないよう、関係は弧で描く', () => {
     // 前提: サンプルのケースは、別荘の持ち主と管理人の間に「雇用主」と「金銭トラブル？」の2件の関係を持つ
     const { container } = render(<GraphView target={sampleFictionalCase} />);
 
-    const 関係の線 = 線を取り出す(container, 'relates');
-    expect(関係の線).toHaveLength(2);
-    expect(関係の線.every((線) => 線.tagName === 'path')).toBe(true);
+    const relationshipLine = getLine(container, 'relates');
+    expect(relationshipLine).toHaveLength(2);
+    expect(relationshipLine.every((line) => line.tagName === 'path')).toBe(true);
 
     // 弧のふくらみ具合は制御点（2次ベジェ曲線の Q の座標）で決まるため、2本の制御点が十分に離れていることを確かめる
-    const [制御点1, 制御点2] = 関係の線.map((線) => 制御点を読む(線));
-    const 制御点の距離 = Math.hypot(制御点1!.x - 制御点2!.x, 制御点1!.y - 制御点2!.y);
-    expect(制御点の距離).toBeGreaterThan(40);
+    const [controlPoint1, controlPoint2] = relationshipLine.map((line) => readControlPoint(line));
+    const controlPointDistance = Math.hypot(controlPoint1!.x - controlPoint2!.x, controlPoint1!.y - controlPoint2!.y);
+    expect(controlPointDistance).toBeGreaterThan(40);
   });
 
   /** 人物2人と、その間の関係1件だけを持つケースを作ります。線の形を、他の線に邪魔されずに確かめるために使います。 */
-  function 関係を1件だけ持つケース(directed: boolean): Case {
+  function buildCaseWithOneRelationship(directed: boolean): Case {
     return {
       ...sampleFictionalCase,
       persons: [
@@ -219,144 +219,144 @@ describe('GraphView（人物どうしの関係）', () => {
   }
 
   /** 弧（2次ベジェ曲線）の経路から、終点の座標を読み取ります。 */
-  function 終点を読む(線: SVGElement): { x: number; y: number } {
-    const 経路 = 線.getAttribute('d') ?? '';
-    const 一致 = /Q\s+-?[\d.]+\s+-?[\d.]+\s+(-?[\d.]+)\s+(-?[\d.]+)/.exec(経路);
-    if (!一致) throw new Error(`弧の経路を読み取れませんでした: ${経路}`);
-    return { x: Number(一致[1]), y: Number(一致[2]) };
+  function readEndpoint(line: SVGElement): { x: number; y: number } {
+    const path = line.getAttribute('d') ?? '';
+    const match = /Q\s+-?[\d.]+\s+-?[\d.]+\s+(-?[\d.]+)\s+(-?[\d.]+)/.exec(path);
+    if (!match) throw new Error(`弧の経路を読み取れませんでした: ${path}`);
+    return { x: Number(match[1]), y: Number(match[2]) };
   }
 
   /** 線の終点から、いちばん近いノードの中心までの距離を返します。 */
-  function 終点とノードの距離(container: HTMLElement, 線: SVGElement): number {
-    const 終点 = 終点を読む(線);
-    const 距離 = Array.from(container.querySelectorAll<SVGCircleElement>('circle')).map((circle) =>
-      Math.hypot(Number(circle.getAttribute('cx')) - 終点.x, Number(circle.getAttribute('cy')) - 終点.y)
+  function measureEndpointToNodeDistance(container: HTMLElement, line: SVGElement): number {
+    const endpoint = readEndpoint(line);
+    const distance = Array.from(container.querySelectorAll<SVGCircleElement>('circle')).map((circle) =>
+      Math.hypot(Number(circle.getAttribute('cx')) - endpoint.x, Number(circle.getAttribute('cy')) - endpoint.y)
     );
-    return Math.min(...距離);
+    return Math.min(...distance);
   }
 
   it('矢印を付けない双方向の関係は、線をノードの縁まで届かせる', () => {
     // 前提: 人物のノードの半径は26px。矢印のぶんの余白は、矢印を付ける線にだけ空ける
-    const { container } = render(<GraphView target={関係を1件だけ持つケース(false)} />);
+    const { container } = render(<GraphView target={buildCaseWithOneRelationship(false)} />);
 
-    const [関係の線] = 線を取り出す(container, 'relates');
-    expect(終点とノードの距離(container, 関係の線!)).toBeCloseTo(26, 5);
+    const [relationshipLine] = getLine(container, 'relates');
+    expect(measureEndpointToNodeDistance(container, relationshipLine!)).toBeCloseTo(26, 5);
   });
 
   it('矢印を付ける片方向の関係は、矢印の先端がノードの縁に触れる位置で線を止める', () => {
-    const { container } = render(<GraphView target={関係を1件だけ持つケース(true)} />);
+    const { container } = render(<GraphView target={buildCaseWithOneRelationship(true)} />);
 
-    const [関係の線] = 線を取り出す(container, 'relates');
-    expect(終点とノードの距離(container, 関係の線!)).toBeCloseTo(30, 5);
+    const [relationshipLine] = getLine(container, 'relates');
+    expect(measureEndpointToNodeDistance(container, relationshipLine!)).toBeCloseTo(30, 5);
   });
 
   it('関係の線に、関係の名前と根拠の有無を、読み上げとマウスの重ねで伝える名前を付ける', () => {
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
-    const [雇用主, 面識がある] = 線を取り出す(container, 'relates');
-    expect(雇用主?.querySelector('title')?.textContent).toBe('雇用主');
-    expect(面識がある?.querySelector('title')?.textContent).toBe('面識がある（根拠未登録）');
+    const [employer, acquainted] = getLine(container, 'relates');
+    expect(employer?.querySelector('title')?.textContent).toBe('雇用主');
+    expect(acquainted?.querySelector('title')?.textContent).toBe('面識がある（根拠未登録）');
   });
 
   it('関係の線の読み方を、凡例で示す', () => {
-    render(<GraphView target={関係を2件持つケース} />);
+    render(<GraphView target={caseWithTwoRelationships} />);
 
-    const 凡例 = screen.getByRole('list', { name: '線の見方' });
-    expect(within(凡例).getByText('関係')).toBeInTheDocument();
-    expect(within(凡例).getByText('関係（根拠未登録）')).toBeInTheDocument();
+    const legend = screen.getByRole('list', { name: '線の見方' });
+    expect(within(legend).getByText('関係')).toBeInTheDocument();
+    expect(within(legend).getByText('関係（根拠未登録）')).toBeInTheDocument();
   });
 
   it('「関係を表示」を外すと、関係の線と、その凡例を消す', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
     await user.click(screen.getByRole('checkbox', { name: '関係を表示' }));
 
-    expect(線を取り出す(container, 'relates')).toHaveLength(0);
+    expect(getLine(container, 'relates')).toHaveLength(0);
     // 証言から導いた線は、関係を消しても残る
-    expect(線を取り出す(container, 'speaks').length).toBeGreaterThan(0);
+    expect(getLine(container, 'speaks').length).toBeGreaterThan(0);
     expect(within(screen.getByRole('list', { name: '線の見方' })).queryByText('関係')).not.toBeInTheDocument();
   });
 
   it('時点を指定すると、その時点で成り立たない関係の線を消す', async () => {
     const user = userEvent.setup();
-    const 期間を持つケース: Case = {
-      ...関係を2件持つケース,
+    const caseWithPeriods: Case = {
+      ...caseWithTwoRelationships,
       relationships: [
         // 前提: 雇用主は期間を持たず、面識は1998年5月で途絶えている
-        関係を2件持つケース.relationships[0]!,
-        { ...関係を2件持つケース.relationships[1]!, until: '1998-05' },
+        caseWithTwoRelationships.relationships[0]!,
+        { ...caseWithTwoRelationships.relationships[1]!, until: '1998-05' },
       ],
     };
-    const { container } = render(<GraphView target={期間を持つケース} />);
+    const { container } = render(<GraphView target={caseWithPeriods} />);
 
     await user.type(screen.getByLabelText('時点'), '1998年8月12日');
 
-    const 残った線 = 線を取り出す(container, 'relates');
-    expect(残った線).toHaveLength(1);
-    expect(残った線[0]?.textContent).toBe('雇用主');
+    const remainingLines = getLine(container, 'relates');
+    expect(remainingLines).toHaveLength(1);
+    expect(remainingLines[0]?.textContent).toBe('雇用主');
   });
 
   it('時点を消すと、すべての関係の線を描き直す', async () => {
     const user = userEvent.setup();
-    const 期間を持つケース: Case = {
-      ...関係を2件持つケース,
-      relationships: [関係を2件持つケース.relationships[0]!, { ...関係を2件持つケース.relationships[1]!, until: '1998-05' }],
+    const caseWithPeriods: Case = {
+      ...caseWithTwoRelationships,
+      relationships: [caseWithTwoRelationships.relationships[0]!, { ...caseWithTwoRelationships.relationships[1]!, until: '1998-05' }],
     };
-    const { container } = render(<GraphView target={期間を持つケース} />);
+    const { container } = render(<GraphView target={caseWithPeriods} />);
 
     await user.type(screen.getByLabelText('時点'), '1998-08-12');
     await user.clear(screen.getByLabelText('時点'));
 
-    expect(線を取り出す(container, 'relates')).toHaveLength(2);
+    expect(getLine(container, 'relates')).toHaveLength(2);
   });
 
   it('解釈できない時点を入力すると、その旨を示し、関係の線は絞り込まない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
 
     await user.type(screen.getByLabelText('時点'), '事件の日');
 
     expect(screen.getByText(/時点を解釈できません/)).toBeInTheDocument();
-    expect(線を取り出す(container, 'relates')).toHaveLength(2);
+    expect(getLine(container, 'relates')).toHaveLength(2);
   });
 
   it('関係を消しても、ノードの配置は変えない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={関係を2件持つケース} />);
-    const 配置を読む = () =>
+    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+    const readLayout = () =>
       Array.from(container.querySelectorAll<SVGCircleElement>('circle')).map((circle) => circle.getAttribute('cx'));
 
-    const 消す前の配置 = 配置を読む();
+    const layoutBeforeRemoval = readLayout();
     await user.click(screen.getByRole('checkbox', { name: '関係を表示' }));
 
-    expect(配置を読む()).toEqual(消す前の配置);
+    expect(readLayout()).toEqual(layoutBeforeRemoval);
   });
 });
 
 describe('GraphView（拡大縮小と移動）', () => {
   /** 図（SVG）を返します。 */
-  function 図を取り出す(): SVGElement {
+  function getDiagram(): SVGElement {
     return screen.getByRole('group', { name: '人物と証言のつながり' }) as unknown as SVGElement;
   }
 
   /** 図の表示範囲（viewBox属性）を読みます。 */
-  function 表示範囲を読む(): { x: number; y: number; width: number; height: number } {
-    const [x, y, width, height] = (図を取り出す().getAttribute('viewBox') ?? '').split(' ').map(Number);
+  function readViewBox(): { x: number; y: number; width: number; height: number } {
+    const [x, y, width, height] = (getDiagram().getAttribute('viewBox') ?? '').split(' ').map(Number);
     return { x: x!, y: y!, width: width!, height: height! };
   }
 
   /** 図のノード（丸）の中心のx座標を、ノードのIDごとに読みます。 */
-  function ノードの位置を読む(container: HTMLElement): Record<string, string> {
-    const 位置: Record<string, string> = {};
-    container.querySelectorAll<SVGElement>('[data-node-id]').forEach((ノード) => {
-      位置[ノード.getAttribute('data-node-id')!] = ノード.querySelector('circle')?.getAttribute('cx') ?? '';
+  function readNodePosition(container: HTMLElement): Record<string, string> {
+    const position: Record<string, string> = {};
+    container.querySelectorAll<SVGElement>('[data-node-id]').forEach((node) => {
+      position[node.getAttribute('data-node-id')!] = node.querySelector('circle')?.getAttribute('cx') ?? '';
     });
-    return 位置;
+    return position;
   }
 
   beforeEach(() => {
-    図に大きさを与える();
+    giveDiagramSize();
   });
 
   afterEach(() => {
@@ -366,31 +366,31 @@ describe('GraphView（拡大縮小と移動）', () => {
   it('「拡大」を押すと、表示範囲が狭くなる', async () => {
     const user = userEvent.setup();
     render(<GraphView target={sampleFictionalCase} />);
-    const 拡大前 = 表示範囲を読む();
+    const beforeZoomIn = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
 
-    expect(表示範囲を読む().width).toBeLessThan(拡大前.width);
+    expect(readViewBox().width).toBeLessThan(beforeZoomIn.width);
   });
 
   it('「縮小」を押すと、表示範囲が広くなる', async () => {
     const user = userEvent.setup();
     render(<GraphView target={sampleFictionalCase} />);
-    const 縮小前 = 表示範囲を読む();
+    const beforeZoomOut = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '縮小' }));
 
-    expect(表示範囲を読む().width).toBeGreaterThan(縮小前.width);
+    expect(readViewBox().width).toBeGreaterThan(beforeZoomOut.width);
   });
 
   it('拡大しても、ノードの配置は計算し直さない', async () => {
     const user = userEvent.setup();
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const 拡大前の位置 = ノードの位置を読む(container);
+    const positionBeforeZoom = readNodePosition(container);
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
 
-    expect(ノードの位置を読む(container)).toEqual(拡大前の位置);
+    expect(readNodePosition(container)).toEqual(positionBeforeZoom);
   });
 
   it('いまの倍率を数字で示す', async () => {
@@ -406,69 +406,69 @@ describe('GraphView（拡大縮小と移動）', () => {
   it('「表示を戻す」を押すと、図の全体が収まる表示範囲に戻す', async () => {
     const user = userEvent.setup();
     render(<GraphView target={sampleFictionalCase} />);
-    const もとの表示範囲 = 表示範囲を読む();
+    const originalViewBox = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
     await user.click(screen.getByRole('button', { name: '表示を戻す' }));
 
-    expect(表示範囲を読む()).toEqual(もとの表示範囲);
+    expect(readViewBox()).toEqual(originalViewBox);
   });
 
   it('マウスホイールを上に回すと拡大する', () => {
     render(<GraphView target={sampleFictionalCase} />);
-    const 拡大前 = 表示範囲を読む();
+    const beforeZoomIn = readViewBox();
 
-    fireEvent.wheel(図を取り出す(), { deltaY: -100, clientX: 300, clientY: 150 });
+    fireEvent.wheel(getDiagram(), { deltaY: -100, clientX: 300, clientY: 150 });
 
-    expect(表示範囲を読む().width).toBeLessThan(拡大前.width);
+    expect(readViewBox().width).toBeLessThan(beforeZoomIn.width);
   });
 
   it('マウスホイールを下に回すと縮小する', () => {
     render(<GraphView target={sampleFictionalCase} />);
-    const 縮小前 = 表示範囲を読む();
+    const beforeZoomOut = readViewBox();
 
-    fireEvent.wheel(図を取り出す(), { deltaY: 100, clientX: 300, clientY: 150 });
+    fireEvent.wheel(getDiagram(), { deltaY: 100, clientX: 300, clientY: 150 });
 
-    expect(表示範囲を読む().width).toBeGreaterThan(縮小前.width);
+    expect(readViewBox().width).toBeGreaterThan(beforeZoomOut.width);
   });
 
   it('図の背景をドラッグすると、表示範囲が動く', () => {
     render(<GraphView target={sampleFictionalCase} />);
-    const 移動前 = 表示範囲を読む();
+    const beforeMove = readViewBox();
 
-    fireEvent.pointerDown(図を取り出す(), { clientX: 300, clientY: 150, button: 0, pointerId: 1 });
+    fireEvent.pointerDown(getDiagram(), { clientX: 300, clientY: 150, button: 0, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 360, clientY: 150, pointerId: 1 });
     fireEvent.pointerUp(window, { clientX: 360, clientY: 150, pointerId: 1 });
 
     // 図を右へ引っ張ったため、見えている窓は左（xが小さい方）へ動く
-    expect(表示範囲を読む().x).toBeLessThan(移動前.x);
-    expect(表示範囲を読む().width).toBeCloseTo(移動前.width, 5);
+    expect(readViewBox().x).toBeLessThan(beforeMove.x);
+    expect(readViewBox().width).toBeCloseTo(beforeMove.width, 5);
   });
 });
 
 describe('GraphView（ノードを手で動かす）', () => {
   /** 指定したノードの要素を返します。 */
-  function ノードを取り出す(container: HTMLElement, nodeId: string): SVGElement {
-    const ノード = container.querySelector<SVGElement>(`[data-node-id="${nodeId}"]`);
-    if (!ノード) throw new Error(`ノードが見つかりません: ${nodeId}`);
-    return ノード;
+  function getNode(container: HTMLElement, nodeId: string): SVGElement {
+    const node = container.querySelector<SVGElement>(`[data-node-id="${nodeId}"]`);
+    if (!node) throw new Error(`ノードが見つかりません: ${nodeId}`);
+    return node;
   }
 
   /** ノードの丸の中心の座標を読みます。 */
-  function 丸の中心を読む(container: HTMLElement, nodeId: string): { x: number; y: number } {
-    const 丸 = ノードを取り出す(container, nodeId).querySelector('circle');
-    return { x: Number(丸?.getAttribute('cx')), y: Number(丸?.getAttribute('cy')) };
+  function readCircleCenter(container: HTMLElement, nodeId: string): { x: number; y: number } {
+    const nodeCircle = getNode(container, nodeId).querySelector('circle');
+    return { x: Number(nodeCircle?.getAttribute('cx')), y: Number(nodeCircle?.getAttribute('cy')) };
   }
 
   /** ノードを、画面の座標で指定した量だけドラッグします。 */
-  function ドラッグする(ノード: SVGElement, 移動量: { x: number; y: number }) {
-    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
-    fireEvent.pointerMove(window, { clientX: 100 + 移動量.x, clientY: 100 + 移動量.y, pointerId: 1 });
-    fireEvent.pointerUp(window, { clientX: 100 + 移動量.x, clientY: 100 + 移動量.y, pointerId: 1 });
+  function drag(node: SVGElement, movement: { x: number; y: number }) {
+    fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 100 + movement.x, clientY: 100 + movement.y, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 100 + movement.x, clientY: 100 + movement.y, pointerId: 1 });
   }
 
   beforeEach(() => {
-    図に大きさを与える();
+    giveDiagramSize();
   });
 
   afterEach(() => {
@@ -477,22 +477,22 @@ describe('GraphView（ノードを手で動かす）', () => {
 
   it('ノードをドラッグすると、そのノードが動く', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+    const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
-    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+    drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
 
-    const 動かした後 = 丸の中心を読む(container, 'person:person-caretaker');
-    expect(動かした後.x).toBeGreaterThan(動かす前.x);
-    expect(動かした後.y).toBeGreaterThan(動かす前.y);
+    const afterDrag = readCircleCenter(container, 'person:person-caretaker');
+    expect(afterDrag.x).toBeGreaterThan(beforeDrag.x);
+    expect(afterDrag.y).toBeGreaterThan(beforeDrag.y);
   });
 
   it('ノードをドラッグしても、他のノードは動かさない', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const 動かす前 = 丸の中心を読む(container, 'person:person-owner');
+    const beforeDrag = readCircleCenter(container, 'person:person-owner');
 
-    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+    drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
 
-    expect(丸の中心を読む(container, 'person:person-owner')).toEqual(動かす前);
+    expect(readCircleCenter(container, 'person:person-owner')).toEqual(beforeDrag);
   });
 
   /**
@@ -502,88 +502,88 @@ describe('GraphView（ノードを手で動かす）', () => {
    * そのため、その外側にある body でクリックを受け取り、そこまで伝わった時点で既定の動作が
    * 止められているかを確かめます。
    */
-  function クリックの既定の動作が止まるか(ノード: SVGElement, 初期化 = {}): boolean {
-    let 止まった = false;
-    const 記録する = (event: Event) => {
-      止まった = event.defaultPrevented;
+  function isClickDefaultPrevented(node: SVGElement, init = {}): boolean {
+    let prevented = false;
+    const record = (event: Event) => {
+      prevented = event.defaultPrevented;
     };
-    document.body.addEventListener('click', 記録する);
-    fireEvent.click(ノード, 初期化);
-    document.body.removeEventListener('click', 記録する);
-    return 止まった;
+    document.body.addEventListener('click', record);
+    fireEvent.click(node, init);
+    document.body.removeEventListener('click', record);
+    return prevented;
   }
 
   it('ノードをドラッグしたときは、そのノードの詳細ページを開かない', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+    const node = getNode(container, 'person:person-caretaker');
 
-    ドラッグする(ノード, { x: 60, y: 30 });
+    drag(node, { x: 60, y: 30 });
 
     // マウスで押したときのクリックは detail が 1 以上になる（キーボードで開いた場合は 0）
-    expect(クリックの既定の動作が止まるか(ノード, { detail: 1 })).toBe(true);
+    expect(isClickDefaultPrevented(node, { detail: 1 })).toBe(true);
   });
 
   it('動かさずに押した場合は、詳細ページへのリンクをそのまま働かせる', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+    const node = getNode(container, 'person:person-caretaker');
 
-    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
     fireEvent.pointerUp(window, { clientX: 100, clientY: 100, pointerId: 1 });
 
-    expect(クリックの既定の動作が止まるか(ノード, { detail: 1 })).toBe(false);
+    expect(isClickDefaultPrevented(node, { detail: 1 })).toBe(false);
   });
 
   it('ドラッグの後でも、キーボードで開いたリンクは打ち消さない', () => {
     // 前提: キーボード（Enter・Space）で押したときのクリックは、マウスの押し下げを伴わないため detail が 0 になる
     const { container } = render(<GraphView target={sampleFictionalCase} />);
 
-    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+    drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
 
-    const 別のノード = ノードを取り出す(container, 'person:person-owner');
-    expect(クリックの既定の動作が止まるか(別のノード, { detail: 0 })).toBe(false);
+    const otherNode = getNode(container, 'person:person-owner');
+    expect(isClickDefaultPrevented(otherNode, { detail: 0 })).toBe(false);
   });
 
   it('2本目の指で触れても、1本目の指のドラッグを乱さない', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const ノード = ノードを取り出す(container, 'person:person-caretaker');
+    const node = getNode(container, 'person:person-caretaker');
 
-    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
-    const 掴んだ直後の位置 = 丸の中心を読む(container, 'person:person-caretaker');
+    fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    const positionRightAfterGrab = readCircleCenter(container, 'person:person-caretaker');
     // 2本目の指の動きは、1本目の指のドラッグには関係しないため、ノードを動かさない
     fireEvent.pointerMove(window, { clientX: 400, clientY: 400, pointerId: 2 });
 
-    expect(丸の中心を読む(container, 'person:person-caretaker')).toEqual(掴んだ直後の位置);
+    expect(readCircleCenter(container, 'person:person-caretaker')).toEqual(positionRightAfterGrab);
   });
 
   it('2本目の指を離しても、1本目の指のドラッグは続く', () => {
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const ノード = ノードを取り出す(container, 'person:person-caretaker');
-    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+    const node = getNode(container, 'person:person-caretaker');
+    const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
-    fireEvent.pointerDown(ノード, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
     fireEvent.pointerUp(window, { clientX: 100, clientY: 100, pointerId: 2 });
     fireEvent.pointerMove(window, { clientX: 160, clientY: 130, pointerId: 1 });
 
-    expect(丸の中心を読む(container, 'person:person-caretaker').x).toBeGreaterThan(動かす前.x);
+    expect(readCircleCenter(container, 'person:person-caretaker').x).toBeGreaterThan(beforeDrag.x);
   });
 
   it('「表示を戻す」を押すと、手で動かしたノードももとの位置に戻す', async () => {
     const user = userEvent.setup();
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const 動かす前 = 丸の中心を読む(container, 'person:person-caretaker');
+    const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
-    ドラッグする(ノードを取り出す(container, 'person:person-caretaker'), { x: 60, y: 30 });
+    drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
     await user.click(screen.getByRole('button', { name: '表示を戻す' }));
 
-    expect(丸の中心を読む(container, 'person:person-caretaker')).toEqual(動かす前);
+    expect(readCircleCenter(container, 'person:person-caretaker')).toEqual(beforeDrag);
   });
 });
 
 describe('GraphView（つながりの強調）', () => {
   /** 薄く描かれている要素のIDを集めます。 */
-  function 薄いノードのID(container: HTMLElement): string[] {
+  function getDimmedNodeIds(container: HTMLElement): string[] {
     return Array.from(container.querySelectorAll<SVGElement>('[data-node-id][data-dimmed="true"]')).map(
-      (ノード) => ノード.getAttribute('data-node-id')!
+      (node) => node.getAttribute('data-node-id')!
     );
   }
 
@@ -594,8 +594,8 @@ describe('GraphView（つながりの強調）', () => {
     await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
 
     // 前提: 管理人は自分の証言とだけ線でつながっており、無関係な人物は薄くなる
-    expect(薄いノードのID(container)).not.toContain('person:person-caretaker');
-    expect(薄いノードのID(container)).toContain('person:person-neighbor');
+    expect(getDimmedNodeIds(container)).not.toContain('person:person-caretaker');
+    expect(getDimmedNodeIds(container)).toContain('person:person-neighbor');
   });
 
   it('マウスを重ねたノードにつながる線は、薄くしない', async () => {
@@ -604,19 +604,19 @@ describe('GraphView（つながりの強調）', () => {
 
     await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
 
-    const 管理人の発言の線 = container.querySelector('[data-edge-kind="speaks"][data-dimmed="false"]');
-    expect(管理人の発言の線).not.toBeNull();
+    const caretakerStatementLine = container.querySelector('[data-edge-kind="speaks"][data-dimmed="false"]');
+    expect(caretakerStatementLine).not.toBeNull();
   });
 
   it('マウスを離すと、薄い表示を元に戻す', async () => {
     const user = userEvent.setup();
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const ノード = container.querySelector<SVGElement>('[data-node-id="person:person-caretaker"]')!;
+    const node = container.querySelector<SVGElement>('[data-node-id="person:person-caretaker"]')!;
 
-    await user.hover(ノード);
-    await user.unhover(ノード);
+    await user.hover(node);
+    await user.unhover(node);
 
-    expect(薄いノードのID(container)).toHaveLength(0);
+    expect(getDimmedNodeIds(container)).toHaveLength(0);
   });
 });
 
@@ -645,10 +645,10 @@ describe('GraphView（表示するものの絞り込み）', () => {
   it('絞り込んでも、残ったノードの位置は変えない', async () => {
     const user = userEvent.setup();
     const { container } = render(<GraphView target={sampleFictionalCase} />);
-    const 絞り込む前 = container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx');
+    const beforeFilter = container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx');
 
     await user.click(screen.getByRole('checkbox', { name: '証言を表示' }));
 
-    expect(container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx')).toBe(絞り込む前);
+    expect(container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx')).toBe(beforeFilter);
   });
 });

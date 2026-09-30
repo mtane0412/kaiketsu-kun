@@ -18,7 +18,7 @@ function Board({ isVisible, tab }: { isVisible: boolean; tab: TabKey }) {
 }
 
 /** ページを指定した位置までスクロールしたことにします。 */
-function スクロールする(y: number) {
+function scroll(y: number) {
   Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
   fireEvent.scroll(window);
 }
@@ -27,7 +27,7 @@ const scrollTo = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal('scrollTo', scrollTo);
-  スクロールする(0);
+  scroll(0);
   scrollTo.mockClear();
 });
 
@@ -38,11 +38,11 @@ afterEach(() => {
 describe('useBoardScrollRestoration', () => {
   it('詳細を開いて閉じると、詳細を開く前のボードのスクロール位置に戻す', () => {
     const { rerender } = render(<Board isVisible tab="timeline" />);
-    スクロールする(1200);
+    scroll(1200);
 
     rerender(<Board isVisible={false} tab="timeline" />);
     // 詳細を開くと、ボードが隠れてページが短くなるため、スクロール位置が変わる
-    スクロールする(0);
+    scroll(0);
     rerender(<Board isVisible tab="timeline" />);
 
     expect(scrollTo).toHaveBeenLastCalledWith(0, 1200);
@@ -50,7 +50,7 @@ describe('useBoardScrollRestoration', () => {
 
   it('詳細を閉じて別の表示に戻った場合は、元の表示のスクロール位置を持ち込まない', () => {
     const { rerender } = render(<Board isVisible tab="timeline" />);
-    スクロールする(1200);
+    scroll(1200);
 
     rerender(<Board isVisible={false} tab="timeline" />);
     rerender(<Board isVisible tab="speaker" />);
@@ -60,12 +60,12 @@ describe('useBoardScrollRestoration', () => {
 
   it('表示を切り替えたあと、スクロールせずに詳細を開いて閉じても、切り替えたときの位置に戻す', () => {
     const { rerender } = render(<Board isVisible tab="timeline" />);
-    スクロールする(1200);
+    scroll(1200);
 
     // 表示を切り替えても、スクロールのイベントは起きない
     rerender(<Board isVisible tab="speaker" />);
     rerender(<Board isVisible={false} tab="speaker" />);
-    スクロールする(0);
+    scroll(0);
     rerender(<Board isVisible tab="speaker" />);
 
     expect(scrollTo).toHaveBeenLastCalledWith(0, 1200);
@@ -73,7 +73,7 @@ describe('useBoardScrollRestoration', () => {
 
   it('ボードを表示したまま表示を切り替えただけでは、スクロール位置を動かさない', () => {
     const { rerender } = render(<Board isVisible tab="timeline" />);
-    スクロールする(1200);
+    scroll(1200);
 
     rerender(<Board isVisible tab="speaker" />);
 

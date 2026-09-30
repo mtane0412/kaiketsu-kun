@@ -26,9 +26,9 @@ function renderBoard(detail?: ReactNode) {
 }
 
 /** サイドバーの「表示の切り替え」から、指定した表示へのリンクを押します。 */
-async function 表示を切り替える(user: ReturnType<typeof userEvent.setup>, name: string) {
-  const 表示 = await screen.findByRole('list', { name: '表示の切り替え' });
-  await user.click(within(表示).getByRole('link', { name }));
+async function switchView(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const viewSwitch = await screen.findByRole('list', { name: '表示の切り替え' });
+  await user.click(within(viewSwitch).getByRole('link', { name }));
 }
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ describe('CaseBoard', () => {
     expect(await screen.findByRole('list', { name: '時系列' })).toBeInTheDocument();
     expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/明かりがついていて/)).toBeInTheDocument();
 
-    await 表示を切り替える(user, '証言者別');
+    await switchView(user, '証言者別');
     expect(screen.getByRole('region', { name: '隣家の住人' })).toBeInTheDocument();
   });
 
@@ -66,7 +66,7 @@ describe('CaseBoard', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await 表示を切り替える(user, '人物の動き');
+    await switchView(user, '人物の動き');
 
     expect(await screen.findByRole('table', { name: '人物の動き' })).toBeInTheDocument();
   });
@@ -75,10 +75,10 @@ describe('CaseBoard', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await 表示を切り替える(user, 'グラフ');
+    await switchView(user, 'グラフ');
 
-    const 図 = screen.getByRole('group', { name: '人物と証言のつながり' });
-    expect(within(図).getByRole('link', { name: '人物: 管理人' })).toHaveAttribute(
+    const diagram = screen.getByRole('group', { name: '人物と証言のつながり' });
+    expect(within(diagram).getByRole('link', { name: '人物: 管理人' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-caretaker?tab=graph'
     );
@@ -88,11 +88,11 @@ describe('CaseBoard', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await 表示を切り替える(user, '地図');
+    await switchView(user, '地図');
 
     // 前提: サンプルのケースの場所には座標が無いため、湖畔の別荘に言及する証言（2件）は「地図に表示できない証言」に並ぶ
-    const 一覧 = screen.getByRole('region', { name: '地図に表示できない証言' });
-    expect(within(一覧).getAllByRole('link', { name: '@湖畔の別荘' })[0]!).toHaveAttribute(
+    const list = screen.getByRole('region', { name: '地図に表示できない証言' });
+    expect(within(list).getAllByRole('link', { name: '@湖畔の別荘' })[0]!).toHaveAttribute(
       'href',
       '/cases/case-lakeside/places/place-villa?tab=map'
     );
@@ -101,8 +101,8 @@ describe('CaseBoard', () => {
   it('ボード上のメンションは、その人物・場所の詳細ページへのリンクになる（オーバーレイでは開かない）', async () => {
     renderBoard();
 
-    const 隣家の証言 = (await screen.findByText(/明かりがついていて/)).closest('li')!;
-    expect(within(隣家の証言).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute(
+    const neighborClaim = (await screen.findByText(/明かりがついていて/)).closest('li')!;
+    expect(within(neighborClaim).getByRole('link', { name: '@湖畔の別荘' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/places/place-villa'
     );
@@ -113,21 +113,21 @@ describe('CaseBoard', () => {
   it('証言のカードは、その証言の詳細ページへのリンクになる（編集の導線は詳細ページに一本化している）', async () => {
     renderBoard();
 
-    const 隣家の証言 = (await screen.findByText(/明かりがついていて/)).closest('li')!;
-    expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute(
+    const neighborClaim = (await screen.findByText(/明かりがついていて/)).closest('li')!;
+    expect(within(neighborClaim).getByRole('link', { name: /を開く$/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-neighbor'
     );
-    expect(within(隣家の証言).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
+    expect(within(neighborClaim).queryByRole('button', { name: 'この証言を編集' })).not.toBeInTheDocument();
   });
 
   it('地図の表示の証言のカードは、戻り先の表示を引き継いだURLへのリンクになる', async () => {
     resetMockNavigation('/cases/case-lakeside?tab=map');
     renderBoard();
 
-    const 一覧 = await screen.findByRole('region', { name: '地図に表示できない証言' });
-    const 隣家の証言 = within(一覧).getByText(/明かりがついていて/).closest('li')!;
-    expect(within(隣家の証言).getByRole('link', { name: /を開く$/ })).toHaveAttribute(
+    const list = await screen.findByRole('region', { name: '地図に表示できない証言' });
+    const neighborClaim = within(list).getByText(/明かりがついていて/).closest('li')!;
+    expect(within(neighborClaim).getByRole('link', { name: /を開く$/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-neighbor?tab=map'
     );
@@ -137,10 +137,10 @@ describe('CaseBoard', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await 表示を切り替える(user, '未了事項');
+    await switchView(user, '未了事項');
 
-    const 一覧 = await screen.findByRole('list', { name: '未完了の未了事項の一覧' });
-    expect(within(一覧).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
+    const list = await screen.findByRole('list', { name: '未完了の未了事項の一覧' });
+    expect(within(list).getByRole('link', { name: /防犯カメラの映像/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/tasks/task-camera?tab=tasks'
     );
@@ -150,10 +150,10 @@ describe('CaseBoard', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await 表示を切り替える(user, '仮説');
+    await switchView(user, '仮説');
 
-    const 一覧 = await screen.findByRole('list', { name: '仮説の一覧' });
-    expect(within(一覧).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
+    const list = await screen.findByRole('list', { name: '仮説の一覧' });
+    expect(within(list).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses'
     );
@@ -164,8 +164,8 @@ describe('CaseBoard', () => {
       resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
       renderBoard(<p>隣家の住人の証言の詳細</p>);
 
-      const 詳細 = await screen.findByRole('region', { name: '証言の詳細' });
-      expect(within(詳細).getByText('隣家の住人の証言の詳細')).toBeInTheDocument();
+      const detailRegion = await screen.findByRole('region', { name: '証言の詳細' });
+      expect(within(detailRegion).getByText('隣家の住人の証言の詳細')).toBeInTheDocument();
       // 検証: 1カラムのため、詳細を開いている間はボードを画面から隠す
       expect(screen.queryByRole('list', { name: '時系列' })).not.toBeInTheDocument();
     });
@@ -176,8 +176,8 @@ describe('CaseBoard', () => {
 
       await screen.findByRole('region', { name: '証言の詳細' });
       // 検証: 読み上げから外れる（hidden）だけで、要素そのものは残っている
-      const 時系列 = screen.getByRole('list', { name: '時系列', hidden: true });
-      expect(時系列).toBeInTheDocument();
+      const timeline = screen.getByRole('list', { name: '時系列', hidden: true });
+      expect(timeline).toBeInTheDocument();
     });
 
     it('証言を開いていないURLでは、詳細の枠を表示せず、ボードを表示する', async () => {
@@ -199,24 +199,24 @@ describe('CaseBoard', () => {
       resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
       renderBoard(<p>隣家の住人の詳細</p>);
 
-      const 詳細 = await screen.findByRole('region', { name: '人物の詳細' });
-      expect(within(詳細).getByText('隣家の住人の詳細')).toBeInTheDocument();
+      const detailRegion = await screen.findByRole('region', { name: '人物の詳細' });
+      expect(within(detailRegion).getByText('隣家の住人の詳細')).toBeInTheDocument();
     });
 
     it('場所の詳細ページのURLでは、場所の詳細だけを表示する', async () => {
       resetMockNavigation('/cases/case-lakeside/places/place-villa');
       renderBoard(<p>湖畔の別荘の詳細</p>);
 
-      const 詳細 = await screen.findByRole('region', { name: '場所の詳細' });
-      expect(within(詳細).getByText('湖畔の別荘の詳細')).toBeInTheDocument();
+      const detailRegion = await screen.findByRole('region', { name: '場所の詳細' });
+      expect(within(detailRegion).getByText('湖畔の別荘の詳細')).toBeInTheDocument();
     });
 
     it('人物を新しく登録するURLでも、登録の枠だけを表示する', async () => {
       resetMockNavigation('/cases/case-lakeside/persons/new');
       renderBoard(<p>人物の登録フォーム</p>);
 
-      const 登録 = await screen.findByRole('region', { name: '人物の登録' });
-      expect(within(登録).getByText('人物の登録フォーム')).toBeInTheDocument();
+      const registerButton = await screen.findByRole('region', { name: '人物の登録' });
+      expect(within(registerButton).getByText('人物の登録フォーム')).toBeInTheDocument();
     });
 
     it('場所を新しく登録するURLでも、登録の枠だけを表示する', async () => {
@@ -230,16 +230,16 @@ describe('CaseBoard', () => {
       resetMockNavigation('/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses');
       renderBoard(<p>管理人の仮説の詳細</p>);
 
-      const 詳細 = await screen.findByRole('region', { name: '仮説の詳細' });
-      expect(within(詳細).getByText('管理人の仮説の詳細')).toBeInTheDocument();
+      const detailRegion = await screen.findByRole('region', { name: '仮説の詳細' });
+      expect(within(detailRegion).getByText('管理人の仮説の詳細')).toBeInTheDocument();
     });
 
     it('未了事項の詳細ページのURLでは、未了事項の詳細だけを表示する', async () => {
       resetMockNavigation('/cases/case-lakeside/tasks/task-camera?tab=tasks');
       renderBoard(<p>防犯カメラの確認の詳細</p>);
 
-      const 詳細 = await screen.findByRole('region', { name: '未了事項の詳細' });
-      expect(within(詳細).getByText('防犯カメラの確認の詳細')).toBeInTheDocument();
+      const detailRegion = await screen.findByRole('region', { name: '未了事項の詳細' });
+      expect(within(detailRegion).getByText('防犯カメラの確認の詳細')).toBeInTheDocument();
     });
 
     it('未了事項を新しく登録するURLでも、登録の枠だけを表示する', async () => {
@@ -261,13 +261,13 @@ describe('CaseBoard', () => {
       resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
       renderBoard(<p>隣家の住人の証言の詳細</p>);
 
-      const 表示 = await screen.findByRole('list', { name: '表示の切り替え' });
-      expect(within(表示).getByRole('link', { name: '証言者別' })).toHaveAttribute(
+      const viewSwitch = await screen.findByRole('list', { name: '表示の切り替え' });
+      expect(within(viewSwitch).getByRole('link', { name: '証言者別' })).toHaveAttribute(
         'href',
         '/cases/case-lakeside?tab=speaker'
       );
 
-      await 表示を切り替える(user, '証言者別');
+      await switchView(user, '証言者別');
       expect(screen.queryByRole('region', { name: '証言の詳細' })).not.toBeInTheDocument();
     });
   });

@@ -13,9 +13,9 @@ import { DateTimePicker } from './DateTimePicker';
 
 /** 表示する年月を、指定の年月に切り替えます。 */
 async function showMonth(user: UserEvent, year: number, month: number) {
-  const 年の欄 = screen.getByLabelText('年');
-  await user.clear(年の欄);
-  await user.type(年の欄, String(year));
+  const yearField = screen.getByLabelText('年');
+  await user.clear(yearField);
+  await user.type(yearField, String(year));
   await user.selectOptions(screen.getByLabelText('月'), String(month));
 }
 

@@ -11,13 +11,13 @@ import {
 import type { Case, Claim, TimeRef } from './types';
 
 /** ユーザーの推測としての証言を作ります。 */
-function 証言(id: string, when?: TimeRef): Claim {
+function makeClaim(id: string, when?: TimeRef): Claim {
   const claim: Claim = { id, speaker: { kind: 'user' }, viaPersonIds: [], content: `${id}の内容`, mentionedPersonIds: [] };
   if (when) claim.when = when;
   return claim;
 }
 
-function ケース(parts: Partial<Case>): Case {
+function makeCase(parts: Partial<Case>): Case {
   return {
     id: 'case-lakeside',
     name: '湖畔の別荘の失踪',
@@ -35,15 +35,15 @@ function ケース(parts: Partial<Case>): Case {
   };
 }
 
-const 八月十日: TimeRef = '1998-08-10';
-const 八月十二日: TimeRef = '1998-08-12';
-const 八月十五日: TimeRef = '1998-08-15';
-const 八月中: TimeRef = '1998-08';
+const august10: TimeRef = '1998-08-10';
+const august12: TimeRef = '1998-08-12';
+const august15: TimeRef = '1998-08-15';
+const duringAugust: TimeRef = '1998-08';
 
 describe('resolveTimelineOrder', () => {
   it('保存した並び順のとおりに、証言を並べる', () => {
-    const target = ケース({
-      claims: [証言('claim-arrival'), 証言('claim-last-seen'), 証言('claim-search')],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival'), makeClaim('claim-last-seen'), makeClaim('claim-search')],
       timelineOrder: ['claim:claim-search', 'claim:claim-last-seen', 'claim:claim-arrival'],
     });
 
@@ -52,8 +52,8 @@ describe('resolveTimelineOrder', () => {
 
   it('並び順に載っていない証言は、末尾に登録順で並べる', () => {
     // 前提: 「ボードに書き足す」で位置を決めずに書いた証言は、並び順に載せずに保存される
-    const target = ケース({
-      claims: [証言('claim-arrival'), 証言('claim-search'), 証言('claim-memo')],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival'), makeClaim('claim-search'), makeClaim('claim-memo')],
       timelineOrder: ['claim:claim-search'],
     });
 
@@ -61,8 +61,8 @@ describe('resolveTimelineOrder', () => {
   });
 
   it('削除された証言は、並び順から除く', () => {
-    const target = ケース({
-      claims: [証言('claim-search')],
+    const target = makeCase({
+      claims: [makeClaim('claim-search')],
       timelineOrder: ['claim:claim-deleted', 'claim:claim-search'],
     });
 
@@ -73,11 +73,11 @@ describe('resolveTimelineOrder', () => {
 describe('allowedIndexRange', () => {
   it('区間表記の日時も、区間の重なりで動かせる範囲を決める', () => {
     // 前提: 19:10〜19:40 の証言は、19:30 の証言とは重なり、19:50 の証言より完全に前
-    const target = ケース({
+    const target = makeCase({
       claims: [
-        証言('claim-seen-at-lake', '2026-09-28T19:30'),
-        証言('claim-heard-scream', '2026-09-28T19:50'),
-        証言('claim-walking', '2026-09-28T19:10/19:40'),
+        makeClaim('claim-seen-at-lake', '2026-09-28T19:30'),
+        makeClaim('claim-heard-scream', '2026-09-28T19:50'),
+        makeClaim('claim-walking', '2026-09-28T19:10/19:40'),
       ],
       timelineOrder: ['claim:claim-seen-at-lake', 'claim:claim-heard-scream', 'claim:claim-walking'],
     });
@@ -86,8 +86,8 @@ describe('allowedIndexRange', () => {
   });
 
   it('日時を持たない項目は、どこへでも動かせる', () => {
-    const target = ケース({
-      claims: [証言('claim-arrival', 八月十日), 証言('claim-memo'), 証言('claim-search', 八月十五日)],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-memo'), makeClaim('claim-search', august15)],
     });
 
     expect(allowedIndexRange(target, 'claim:claim-memo')).toEqual({ min: 0, max: 2 });
@@ -95,8 +95,8 @@ describe('allowedIndexRange', () => {
 
   it('日時を持つ項目は、自分より完全に前の項目の後ろ、完全に後の項目の前にだけ動かせる', () => {
     // 前提: 並びは 8月10日 → メモ（日時なし）→ 8月12日 → 8月15日
-    const target = ケース({
-      claims: [証言('claim-arrival', 八月十日), 証言('claim-memo'), 証言('claim-last-seen', 八月十二日), 証言('claim-search', 八月十五日)],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-memo'), makeClaim('claim-last-seen', august12), makeClaim('claim-search', august15)],
     });
 
     // 8月12日の証言は、8月10日より後ろ（1番目以降）、8月15日より前（2番目以前）にだけ置ける。
@@ -106,8 +106,8 @@ describe('allowedIndexRange', () => {
 
   it('日時の区間が重なる項目同士は、どちらの順でも並べられる', () => {
     // 前提: 「1998年8月」は 8月10日 と 8月15日 のどちらとも区間が重なる
-    const target = ケース({
-      claims: [証言('claim-arrival', 八月十日), 証言('claim-summer', 八月中), 証言('claim-search', 八月十五日)],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-summer', duringAugust), makeClaim('claim-search', august15)],
     });
 
     expect(allowedIndexRange(target, 'claim:claim-summer')).toEqual({ min: 0, max: 2 });
@@ -116,7 +116,7 @@ describe('allowedIndexRange', () => {
 
 describe('moveTimelineItem', () => {
   it('項目を指定した位置へ動かした並び順を返す', () => {
-    const target = ケース({ claims: [証言('claim-arrival'), 証言('claim-memo'), 証言('claim-search')] });
+    const target = makeCase({ claims: [makeClaim('claim-arrival'), makeClaim('claim-memo'), makeClaim('claim-search')] });
 
     expect(moveTimelineItem(target, 'claim:claim-search', 0)).toEqual([
       'claim:claim-search',
@@ -126,13 +126,13 @@ describe('moveTimelineItem', () => {
   });
 
   it('日時と矛盾する位置へ動かそうとすると、例外を投げる', () => {
-    const target = ケース({ claims: [証言('claim-arrival', 八月十日), 証言('claim-search', 八月十五日)] });
+    const target = makeCase({ claims: [makeClaim('claim-arrival', august10), makeClaim('claim-search', august15)] });
 
     expect(() => moveTimelineItem(target, 'claim:claim-search', 0)).toThrow('日時と矛盾するため');
   });
 
   it('ボードに無い項目を動かそうとすると、例外を投げる', () => {
-    const target = ケース({ claims: [証言('claim-arrival')] });
+    const target = makeCase({ claims: [makeClaim('claim-arrival')] });
 
     expect(() => moveTimelineItem(target, 'claim:claim-unknown', 0)).toThrow('ボードに項目が見つかりません');
   });
@@ -141,8 +141,8 @@ describe('moveTimelineItem', () => {
 describe('settleTimelineItems', () => {
   it('現在の位置が日時と矛盾する項目を、最も近い矛盾しない位置へ動かす', () => {
     // 前提: 末尾に書き足したメモに、後から「8月12日」の日時を入力した
-    const target = ケース({
-      claims: [証言('claim-arrival', 八月十日), 証言('claim-search', 八月十五日), 証言('claim-last-seen', 八月十二日)],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-search', august15), makeClaim('claim-last-seen', august12)],
     });
 
     expect(settleTimelineItems(target, ['claim:claim-last-seen'])).toEqual([
@@ -153,15 +153,15 @@ describe('settleTimelineItems', () => {
   });
 
   it('現在の位置が日時と矛盾しない項目は、動かさない', () => {
-    const target = ケース({
-      claims: [証言('claim-arrival', 八月十日), 証言('claim-memo'), 証言('claim-summer', 八月中), 証言('claim-search', 八月十五日)],
+    const target = makeCase({
+      claims: [makeClaim('claim-arrival', august10), makeClaim('claim-memo'), makeClaim('claim-summer', duringAugust), makeClaim('claim-search', august15)],
     });
 
     expect(settleTimelineItems(target, ['claim:claim-summer'])).toEqual(resolveTimelineOrder(target));
   });
 
   it('ボードの項目ではないキー（削除された証言など）は無視する', () => {
-    const target = ケース({ claims: [証言('claim-arrival', 八月十日)] });
+    const target = makeCase({ claims: [makeClaim('claim-arrival', august10)] });
 
     expect(settleTimelineItems(target, ['claim:claim-unknown'])).toEqual(['claim:claim-arrival']);
   });

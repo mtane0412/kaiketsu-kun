@@ -24,9 +24,9 @@ async function typeAndChoose(user: UserEvent, text: string, optionName: string |
 
 /** 開いている日時のピッカーで、年月を切り替えて日を選びます（「決定」は押しません）。 */
 async function chooseDate(user: UserEvent, year: number, month: number, day: number) {
-  const 年の欄 = screen.getByLabelText('年');
-  await user.clear(年の欄);
-  await user.type(年の欄, String(year));
+  const yearField = screen.getByLabelText('年');
+  await user.clear(yearField);
+  await user.type(yearField, String(year));
   await user.selectOptions(screen.getByLabelText('月'), String(month));
   await user.click(screen.getByRole('button', { name: `${year}年${month}月${day}日` }));
 }
@@ -43,15 +43,15 @@ async function openSpeakerPanel(user: UserEvent) {
  */
 async function chooseSpeakers(user: UserEvent, personNames: string[]) {
   await openSpeakerPanel(user);
-  const 発言者欄 = screen.getByRole('group', { name: '発言者' });
-  for (const name of personNames) await user.click(within(発言者欄).getByRole('checkbox', { name }));
+  const speakerField = screen.getByRole('group', { name: '発言者' });
+  for (const name of personNames) await user.click(within(speakerField).getByRole('checkbox', { name }));
 }
 
 /** 「発言者」のパネルの「経由」欄で、登録済みの人物を、伝えた順に選びます。 */
 async function chooseVia(user: UserEvent, personNames: string[]) {
   await openSpeakerPanel(user);
-  const 経由欄 = screen.getByRole('group', { name: '経由' });
-  for (const name of personNames) await user.click(within(経由欄).getByRole('checkbox', { name }));
+  const viaField = screen.getByRole('group', { name: '経由' });
+  for (const name of personNames) await user.click(within(viaField).getByRole('checkbox', { name }));
 }
 
 /** 最後に保存された証言を返します。 */
@@ -89,14 +89,14 @@ describe('ClaimForm', () => {
   it('書き終えた文章の途中に「@」を差し込むと、後ろに続く登録済みの名前で候補を絞り、名前を重複させずに確定する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
-    const 内容欄 = screen.getByLabelText('内容');
+    const contentField = screen.getByLabelText('内容');
 
-    await user.type(内容欄, '別荘の持ち主が郵便受けを見ていた。');
+    await user.type(contentField, '別荘の持ち主が郵便受けを見ていた。');
     // 先頭にカーソルを移して「@」だけを打つ（名前は打ち直さない）
-    await user.type(内容欄, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
+    await user.type(contentField, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
     await user.click(screen.getByRole('option', { name: '人物 別荘の持ち主' }));
 
-    expect(内容欄).toHaveValue('@別荘の持ち主が郵便受けを見ていた。');
+    expect(contentField).toHaveValue('@別荘の持ち主が郵便受けを見ていた。');
 
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
@@ -109,10 +109,10 @@ describe('ClaimForm', () => {
   it('文章の途中に「@」を差し込むと、後ろに続く語に一致する候補だけに絞り込む', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
-    const 内容欄 = screen.getByLabelText('内容');
+    const contentField = screen.getByLabelText('内容');
 
-    await user.type(内容欄, '別荘に明かりがついていた。');
-    await user.type(内容欄, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
+    await user.type(contentField, '別荘に明かりがついていた。');
+    await user.type(contentField, '@', { initialSelectionStart: 0, initialSelectionEnd: 0 });
 
     // 検証: 「別荘」を含む候補だけを示し、含まない人物は示さない
     expect(screen.getByRole('option', { name: '人物 別荘の持ち主' })).toBeInTheDocument();
@@ -154,10 +154,10 @@ describe('ClaimForm', () => {
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const { places, persons } = openedCase();
-    const 湖畔駅 = places.find((place) => place.name === '湖畔駅');
-    const 郵便配達員 = persons.find((person) => person.name === '郵便配達員');
-    expect(湖畔駅).toBeDefined();
-    expect(lastSavedClaim()).toMatchObject({ placeId: 湖畔駅?.id, mentionedPersonIds: [郵便配達員?.id] });
+    const lakesideStation = places.find((place) => place.name === '湖畔駅');
+    const mailCarrier = persons.find((person) => person.name === '郵便配達員');
+    expect(lakesideStation).toBeDefined();
+    expect(lastSavedClaim()).toMatchObject({ placeId: lakesideStation?.id, mentionedPersonIds: [mailCarrier?.id] });
   });
 
   it('メンションの種類に「ソース」は無い（新聞や書籍も人物として登録する）', async () => {
@@ -346,8 +346,8 @@ describe('ClaimForm', () => {
 
   it('既存の証言を編集すると、同じIDのまま置き換える', async () => {
     const user = userEvent.setup();
-    const 隣家の証言 = sampleFictionalCase.claims[1]!;
-    render(<ClaimForm initial={隣家の証言} onDone={vi.fn()} />);
+    const neighborClaim = sampleFictionalCase.claims[1]!;
+    render(<ClaimForm initial={neighborClaim} onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), ' 門は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
@@ -355,9 +355,9 @@ describe('ClaimForm', () => {
     // 検証: 入力欄を廃止した「資料内の位置」（locator）を含め、触れていない項目は変わらない
     const { claims } = openedCase();
     expect(claims).toHaveLength(sampleFictionalCase.claims.length);
-    expect(claims.find((claim) => claim.id === 隣家の証言.id)).toEqual({
-      ...隣家の証言,
-      content: `${隣家の証言.content} 門は開いていた。`,
+    expect(claims.find((claim) => claim.id === neighborClaim.id)).toEqual({
+      ...neighborClaim,
+      content: `${neighborClaim.content} 門は開いていた。`,
     });
   });
 
@@ -390,15 +390,15 @@ describe('ClaimForm', () => {
   it('既存の証言を編集するときは、保存済みの見出しを示し、消すと見出しの項目を取り除く', async () => {
     // 前提: 隣家の住人の証言に見出しが付いている
     const user = userEvent.setup();
-    const 見出し付きの証言 = { ...sampleFictionalCase.claims[1]!, title: '夜9時に持ち主を庭で見た' };
-    render(<ClaimForm initial={見出し付きの証言} onDone={vi.fn()} />);
+    const claimWithHeading = { ...sampleFictionalCase.claims[1]!, title: '夜9時に持ち主を庭で見た' };
+    render(<ClaimForm initial={claimWithHeading} onDone={vi.fn()} />);
 
     expect(screen.getByLabelText('見出し（任意）')).toHaveValue('夜9時に持ち主を庭で見た');
     await user.clear(screen.getByLabelText('見出し（任意）'));
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 保存後 = openedCase().claims.find((claim) => claim.id === 見出し付きの証言.id);
-    expect(保存後).not.toHaveProperty('title');
+    const afterSave = openedCase().claims.find((claim) => claim.id === claimWithHeading.id);
+    expect(afterSave).not.toHaveProperty('title');
   });
 
   it('資料内の位置（ページなど）の入力欄を持たない', () => {
@@ -475,9 +475,9 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 郵便配達員 = openedCase().persons.find((person) => person.name === '郵便配達員');
-    expect(郵便配達員).toBeDefined();
-    expect(lastSavedClaim()?.speaker).toEqual({ kind: 'person', personIds: [郵便配達員?.id] });
+    const mailCarrier = openedCase().persons.find((person) => person.name === '郵便配達員');
+    expect(mailCarrier).toBeDefined();
+    expect(lastSavedClaim()?.speaker).toEqual({ kind: 'person', personIds: [mailCarrier?.id] });
   });
 
   it('未登録の媒体は「経由」の「人物を追加」から新規作成できる', async () => {
@@ -489,9 +489,9 @@ describe('ClaimForm の発言者と経由の選択', () => {
     await user.type(screen.getByLabelText('経由に人物を追加'), '週刊架空{Enter}');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 週刊架空 = openedCase().persons.find((person) => person.name === '週刊架空');
-    expect(週刊架空).toBeDefined();
-    expect(lastSavedClaim()?.viaPersonIds).toEqual([週刊架空?.id]);
+    const fictionalWeekly = openedCase().persons.find((person) => person.name === '週刊架空');
+    expect(fictionalWeekly).toBeDefined();
+    expect(lastSavedClaim()?.viaPersonIds).toEqual([fictionalWeekly?.id]);
   });
 
   it('「人物を追加」に登録済みの人物の名前を入力した場合は、新規作成せずにその人物を選ぶ', async () => {
@@ -501,9 +501,9 @@ describe('ClaimForm の発言者と経由の選択', () => {
     await openSpeakerPanel(user);
     await user.type(screen.getByLabelText('発言者に人物を追加'), '管理人{Enter}');
 
-    const 発言者欄 = screen.getByRole('group', { name: '発言者' });
-    expect(within(発言者欄).getByRole('checkbox', { name: '管理人' })).toBeChecked();
-    expect(within(発言者欄).getAllByRole('checkbox', { name: '管理人' })).toHaveLength(1);
+    const speakerField = screen.getByRole('group', { name: '発言者' });
+    expect(within(speakerField).getByRole('checkbox', { name: '管理人' })).toBeChecked();
+    expect(within(speakerField).getAllByRole('checkbox', { name: '管理人' })).toHaveLength(1);
   });
 
   it('「人物を追加」でのEnterキーは人物の追加だけを行い、証言を保存しない（日本語入力の変換確定では追加もしない）', async () => {
@@ -513,13 +513,13 @@ describe('ClaimForm の発言者と経由の選択', () => {
     await user.type(screen.getByLabelText('内容'), '配達の時刻を調べたい。');
     await openSpeakerPanel(user);
     await user.type(screen.getByLabelText('発言者に人物を追加'), '郵便配達員');
-    const 発言者欄 = screen.getByRole('group', { name: '発言者' });
+    const speakerField = screen.getByRole('group', { name: '発言者' });
 
     fireEvent.keyDown(screen.getByLabelText('発言者に人物を追加'), { key: 'Enter', isComposing: true });
-    expect(within(発言者欄).queryByRole('checkbox', { name: '郵便配達員' })).not.toBeInTheDocument();
+    expect(within(speakerField).queryByRole('checkbox', { name: '郵便配達員' })).not.toBeInTheDocument();
 
     await user.keyboard('{Enter}');
-    expect(within(発言者欄).getByRole('checkbox', { name: '郵便配達員' })).toBeChecked();
+    expect(within(speakerField).getByRole('checkbox', { name: '郵便配達員' })).toBeChecked();
     expect(onDone).not.toHaveBeenCalled();
   });
 
@@ -553,16 +553,16 @@ describe('ClaimForm の発言者と経由の選択', () => {
   it('既存の証言を編集するときは、保存済みの発言者と経由を示し、あとから変えられる', async () => {
     // 前提: 隣家の証言は、発言者が「隣家の住人」、経由が「架空日報 朝刊」
     const user = userEvent.setup();
-    const 隣家の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-neighbor')!;
-    render(<ClaimForm initial={隣家の証言} onDone={vi.fn()} />);
+    const neighborClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-neighbor')!;
+    render(<ClaimForm initial={neighborClaim} onDone={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: '発言者: 隣家の住人（架空日報 朝刊 による）' })).toBeInTheDocument();
 
     await chooseSpeakers(user, ['管理人']);
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 保存後 = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
-    expect(保存後).toEqual({ ...隣家の証言, speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] } });
+    const afterSave = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
+    expect(afterSave).toEqual({ ...neighborClaim, speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] } });
   });
 
   it('Escapeキーで「発言者を選ぶ」を閉じる', async () => {
@@ -588,16 +588,16 @@ describe('ClaimForm の発言者と経由の選択', () => {
      * 注意: テスト環境（jsdom）には visualViewport が無いため、これを呼ばないテストは window.innerHeight から計算します。
      */
     function setVisualViewport(offsetTop: number, height: number) {
-      const 表示領域 = Object.assign(new EventTarget(), { offsetTop, height });
-      Object.defineProperty(window, 'visualViewport', { value: 表示領域, configurable: true });
-      return 表示領域;
+      const viewport = Object.assign(new EventTarget(), { offsetTop, height });
+      Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+      return viewport;
     }
 
     /** 「発言者」のボタンが、画面（高さ768px）の中で指定の位置にあるものとして、パネルを開きます。 */
     async function openSpeakerPanelAt(user: UserEvent, top: number, bottom: number) {
-      const ボタン = screen.getByRole('button', { name: /^発言者/ });
-      vi.spyOn(ボタン, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, top, 100, bottom - top));
-      await user.click(ボタン);
+      const button = screen.getByRole('button', { name: /^発言者/ });
+      vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, top, 100, bottom - top));
+      await user.click(button);
       return screen.getByRole('group', { name: '発言者を選ぶ' });
     }
 
@@ -605,69 +605,69 @@ describe('ClaimForm の発言者と経由の選択', () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);
 
-      const パネル = await openSpeakerPanelAt(user, 500, 528);
+      const panel = await openSpeakerPanelAt(user, 500, 528);
 
       // ボタンの上端（500px）から、ボタンとの間隔（4px）と画面の端との余白（8px）を引いた高さ
-      expect(パネル).toHaveClass('bottom-full');
-      expect(パネル.style.maxHeight).toBe('488px');
+      expect(panel).toHaveClass('bottom-full');
+      expect(panel.style.maxHeight).toBe('488px');
     });
 
     it('画面の上の方で下向きに開く場合、パネルが画面の下端からはみ出さない高さに収める', async () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);
 
-      const パネル = await openSpeakerPanelAt(user, 100, 128);
+      const panel = await openSpeakerPanelAt(user, 100, 128);
 
       // 画面の高さ（768px）からボタンの下端（128px）・間隔（4px）・余白（8px）を引いた高さ
-      expect(パネル).not.toHaveClass('bottom-full');
-      expect(パネル.style.maxHeight).toBe('628px');
+      expect(panel).not.toHaveClass('bottom-full');
+      expect(panel.style.maxHeight).toBe('628px');
     });
 
     it('開いたまま画面の高さが変わった場合（スマートフォンでキーボードが出た場合など）、向きと高さを決め直す', async () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);
-      const パネル = await openSpeakerPanelAt(user, 100, 128);
+      const panel = await openSpeakerPanelAt(user, 100, 128);
 
       // 画面の高さが 768px から 200px に縮むと、下の空き（72px）より上の空き（100px）が広くなる
       vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(200);
       fireEvent(window, new Event('resize'));
 
-      expect(パネル).toHaveClass('bottom-full');
-      expect(パネル.style.maxHeight).toBe('88px');
+      expect(panel).toHaveClass('bottom-full');
+      expect(panel.style.maxHeight).toBe('88px');
     });
 
     it('キーボードが表示領域だけを縮めた場合も、表示領域の下端に収まる高さに決め直す', async () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);
-      const 表示領域 = setVisualViewport(0, 768);
-      const パネル = await openSpeakerPanelAt(user, 100, 128);
+      const viewport = setVisualViewport(0, 768);
+      const panel = await openSpeakerPanelAt(user, 100, 128);
 
       // window の高さ（768px）は変わらず、表示領域の高さだけが 300px に縮む
-      Object.assign(表示領域, { height: 300 });
+      Object.assign(viewport, { height: 300 });
       act(() => {
-        表示領域.dispatchEvent(new Event('resize'));
+        viewport.dispatchEvent(new Event('resize'));
       });
 
       // 表示領域の下端（300px）からボタンの下端（128px）・間隔（4px）・余白（8px）を引いた高さ
-      expect(パネル).not.toHaveClass('bottom-full');
-      expect(パネル.style.maxHeight).toBe('160px');
+      expect(panel).not.toHaveClass('bottom-full');
+      expect(panel.style.maxHeight).toBe('160px');
     });
 
     it('表示領域がページの中でずれた場合（キーボードの表示中にスクロールした場合など）、ずれた位置から決め直す', async () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={vi.fn()} />);
-      const 表示領域 = setVisualViewport(0, 300);
-      const パネル = await openSpeakerPanelAt(user, 150, 178);
+      const viewport = setVisualViewport(0, 300);
+      const panel = await openSpeakerPanelAt(user, 150, 178);
 
       // 表示領域が 100px 下へずれると、表示領域の上端は 100px、下端は 400px になる
-      Object.assign(表示領域, { offsetTop: 100 });
+      Object.assign(viewport, { offsetTop: 100 });
       act(() => {
-        表示領域.dispatchEvent(new Event('scroll'));
+        viewport.dispatchEvent(new Event('scroll'));
       });
 
       // 上の空き（50px）より下の空き（222px）が広いため下向きに開き、222px から間隔と余白を引いた高さ
-      expect(パネル).not.toHaveClass('bottom-full');
-      expect(パネル.style.maxHeight).toBe('210px');
+      expect(panel).not.toHaveClass('bottom-full');
+      expect(panel.style.maxHeight).toBe('210px');
     });
   });
 
@@ -743,8 +743,8 @@ describe('ClaimForm のキーボード操作', () => {
     await user.type(screen.getByLabelText('内容'), '@郵便配達員{ArrowDown}{Enter}が何かを見たのではないか。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    const 郵便配達員 = openedCase().persons.find((person) => person.name === '郵便配達員');
-    expect(lastSavedClaim()?.mentionedPersonIds).toEqual([郵便配達員?.id]);
+    const mailCarrier = openedCase().persons.find((person) => person.name === '郵便配達員');
+    expect(lastSavedClaim()?.mentionedPersonIds).toEqual([mailCarrier?.id]);
   });
 
   it('Escapeキーで候補を閉じ、入力した文字は残す', async () => {
@@ -806,16 +806,16 @@ describe('ClaimForm のキーボード操作', () => {
     it('本文だけを編集しても、入力済みの日時・ソース内の位置を保持する', async () => {
       // 前提: 管理人の証言は、本文に日時のメンション（1998-08-12T19:00）と、位置「第3章 112ページ」を持つ
       const user = userEvent.setup();
-      const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
-      render(<ClaimForm compact initial={管理人の証言} onDone={vi.fn()} />);
+      const caretakerClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
+      render(<ClaimForm compact initial={caretakerClaim} onDone={vi.fn()} />);
 
       await user.type(screen.getByLabelText('内容'), ' 玄関は施錠されていた。');
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-      const 保存後 = openedCase().claims.find((claim) => claim.id === 'claim-caretaker');
-      expect(保存後?.content).toContain('玄関は施錠されていた。');
-      expect(保存後).toMatchObject({
-        when: 管理人の証言.when,
+      const afterSave = openedCase().claims.find((claim) => claim.id === 'claim-caretaker');
+      expect(afterSave?.content).toContain('玄関は施錠されていた。');
+      expect(afterSave).toMatchObject({
+        when: caretakerClaim.when,
         locator: '第3章 112ページ',
       });
     });
@@ -882,43 +882,43 @@ describe('ClaimForm のキーボード操作', () => {
 
 describe('ClaimForm（聴取）', () => {
   /** 管理人が、書籍の著者の取材に応じた機会です。 */
-  const 書籍の取材 = {
+  const bookInterview = {
     id: 'interview-caretaker-book',
     subjectPersonId: 'person-caretaker',
     interviewerPersonId: 'person-book',
     at: '2018-05',
   };
-  const 管理人の証言 = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
+  const caretakerClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
 
   beforeEach(() => {
     // 前提: 管理人の書籍の取材が、聴取として登録されている
-    openTestCase({ ...sampleFictionalCase, interviews: [書籍の取材] });
+    openTestCase({ ...sampleFictionalCase, interviews: [bookInterview] });
   });
 
   it('聴取を選ぶと、証言をその聴取にひもづけて保存する', async () => {
     const user = userEvent.setup();
-    render(<ClaimForm initial={管理人の証言} onDone={vi.fn()} />);
+    render(<ClaimForm initial={caretakerClaim} onDone={vi.fn()} />);
 
     await user.selectOptions(screen.getByLabelText('聴取（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(openedCase().claims.find((claim) => claim.id === 管理人の証言.id)?.interviewId).toBe(書籍の取材.id);
+    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.interviewId).toBe(bookInterview.id);
   });
 
   it('聴取を「聴取なし」に戻すと、聴取の項目を持たない証言として保存する', async () => {
     const user = userEvent.setup();
-    const ひもづけ済みの証言 = { ...管理人の証言, interviewId: 書籍の取材.id };
+    const linkedClaim = { ...caretakerClaim, interviewId: bookInterview.id };
     openTestCase({
       ...sampleFictionalCase,
-      interviews: [書籍の取材],
-      claims: sampleFictionalCase.claims.map((claim) => (claim.id === 管理人の証言.id ? ひもづけ済みの証言 : claim)),
+      interviews: [bookInterview],
+      claims: sampleFictionalCase.claims.map((claim) => (claim.id === caretakerClaim.id ? linkedClaim : claim)),
     });
-    render(<ClaimForm initial={ひもづけ済みの証言} onDone={vi.fn()} />);
+    render(<ClaimForm initial={linkedClaim} onDone={vi.fn()} />);
 
     await user.selectOptions(screen.getByLabelText('聴取（任意）'), '聴取なし');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(openedCase().claims.find((claim) => claim.id === 管理人の証言.id)).not.toHaveProperty('interviewId');
+    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)).not.toHaveProperty('interviewId');
   });
 
   it('発言者も経由も選んでいない状態で聴取を選ぶと、聴取の相手を発言者にする', async () => {
@@ -932,7 +932,7 @@ describe('ClaimForm（聴取）', () => {
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      interviewId: 書籍の取材.id,
+      interviewId: bookInterview.id,
     });
   });
 
@@ -951,15 +951,15 @@ describe('ClaimForm（聴取）', () => {
 
   it('聴取を指定して開くと、聴取と、聴取の相手を発言者に選んだ状態で始まる（同じ聴取の証言を書き足すため）', async () => {
     const user = userEvent.setup();
-    render(<ClaimForm defaults={{ interviewId: 書籍の取材.id }} onDone={vi.fn()} compact />);
+    render(<ClaimForm defaults={{ interviewId: bookInterview.id }} onDone={vi.fn()} compact />);
 
-    expect(screen.getByLabelText('聴取（任意）')).toHaveValue(書籍の取材.id);
+    expect(screen.getByLabelText('聴取（任意）')).toHaveValue(bookInterview.id);
     await user.type(screen.getByLabelText('内容'), '持ち主の車は無かった。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      interviewId: 書籍の取材.id,
+      interviewId: bookInterview.id,
     });
   });
 
@@ -973,33 +973,33 @@ describe('ClaimForm（聴取）', () => {
 describe('ClaimForm（証言とあわせて保存する要素）', () => {
   it('保存した証言のIDを使った要素を、証言と同じ1回の保存で書き込む', async () => {
     const user = userEvent.setup();
-    const 完了 = vi.fn();
+    const completeButton = vi.fn();
     // 前提: 「当夜の湖畔の天気を調べる」の未了事項に、書き足した証言をひもづける
-    const 天気の確認 = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
+    const weatherCheck = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
     render(
       <ClaimForm
         compact
-        onDone={完了}
-        withEntries={(claimId) => [{ key: 'tasks', entity: { ...天気の確認, claimIds: [claimId] } }]}
+        onDone={completeButton}
+        withEntries={(claimId) => [{ key: 'tasks', entity: { ...weatherCheck, claimIds: [claimId] } }]}
       />
     );
 
     await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    const 書き足した証言 = openedCase().claims.at(-1)!;
-    expect(openedCase().tasks.find((task) => task.id === 'task-weather')?.claimIds).toEqual([書き足した証言.id]);
-    expect(完了).toHaveBeenCalledWith(書き足した証言.id);
+    const appendedClaim = openedCase().claims.at(-1)!;
+    expect(openedCase().tasks.find((task) => task.id === 'task-weather')?.claimIds).toEqual([appendedClaim.id]);
+    expect(completeButton).toHaveBeenCalledWith(appendedClaim.id);
   });
 
   it('あわせて保存する要素が求められない場合は、証言も保存せず、理由を示す', async () => {
     const user = userEvent.setup();
-    const 完了 = vi.fn();
-    const 証言の件数 = openedCase().claims.length;
+    const completeButton = vi.fn();
+    const claimCount = openedCase().claims.length;
     render(
       <ClaimForm
         compact
-        onDone={完了}
+        onDone={completeButton}
         withEntries={() => {
           throw new Error('未了事項が見つかりません: task-gone');
         }}
@@ -1009,28 +1009,28 @@ describe('ClaimForm（証言とあわせて保存する要素）', () => {
     await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    expect(openedCase().claims).toHaveLength(証言の件数);
+    expect(openedCase().claims).toHaveLength(claimCount);
     expect(screen.getByText('未了事項が見つかりません: task-gone')).toBeInTheDocument();
-    expect(完了).not.toHaveBeenCalled();
+    expect(completeButton).not.toHaveBeenCalled();
   });
 
   it('あわせて保存する要素が規則に違反する場合は、証言も保存しない', async () => {
     const user = userEvent.setup();
-    const 証言の件数 = openedCase().claims.length;
-    const 天気の確認 = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
+    const claimCount = openedCase().claims.length;
+    const weatherCheck = sampleFictionalCase.tasks.find((task) => task.id === 'task-weather')!;
     render(
       <ClaimForm
         compact
         onDone={vi.fn()}
         // 存在しない人物をひもづけた未了事項は、参照の整合性の検証で拒否される
-        withEntries={() => [{ key: 'tasks', entity: { ...天気の確認, personIds: ['person-gone'] } }]}
+        withEntries={() => [{ key: 'tasks', entity: { ...weatherCheck, personIds: ['person-gone'] } }]}
       />
     );
 
     await user.type(screen.getByLabelText('内容'), '当夜は晴れで、月明かりがあった。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
-    expect(openedCase().claims).toHaveLength(証言の件数);
+    expect(openedCase().claims).toHaveLength(claimCount);
     expect(screen.getByText(/存在しない人物を参照しています: person-gone/)).toBeInTheDocument();
   });
 });

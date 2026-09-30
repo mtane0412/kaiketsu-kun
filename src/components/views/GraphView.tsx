@@ -372,7 +372,7 @@ export function GraphView({ target }: GraphViewProps) {
    * ドラッグを始めます。図の座標と画面の座標の比を、この時点で求めて持ち回ります。
    * 注意: 図に大きさが無い間（描画前など）は比を求められないため、ドラッグを始めません。
    */
-  const beginDrag = (event: ReactPointerEvent, 掴んだもの: { kind: 'pan' } | { kind: 'node'; nodeId: string; origin: Point }) => {
+  const beginDrag = (event: ReactPointerEvent, grabbed: { kind: 'pan' } | { kind: 'node'; nodeId: string; origin: Point }) => {
     // 別の指ですでにドラッグしている間は、その計算を引き継がせない
     if (event.button !== 0 || drag !== null) return;
     const svg = svgRef.current;
@@ -387,9 +387,9 @@ export function GraphView({ target }: GraphViewProps) {
     const startClient = { x: event.clientX, y: event.clientY };
     const pointerId = event.pointerId;
     setDrag(
-      掴んだもの.kind === 'pan'
+      grabbed.kind === 'pan'
         ? { kind: 'pan', pointerId, startClient, unitsPerPixel, viewBox: currentViewBox }
-        : { kind: 'node', pointerId, startClient, unitsPerPixel, nodeId: 掴んだもの.nodeId, origin: 掴んだもの.origin }
+        : { kind: 'node', pointerId, startClient, unitsPerPixel, nodeId: grabbed.nodeId, origin: grabbed.origin }
     );
   };
 

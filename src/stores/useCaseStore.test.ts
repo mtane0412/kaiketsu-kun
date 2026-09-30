@@ -7,7 +7,7 @@ import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { CASE_KEY_PREFIX, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
 import { useCaseStore } from './useCaseStore';
 
-const 新しい証言: Claim = {
+const newClaim: Claim = {
   id: 'claim-postman',
   speaker: { kind: 'person', personIds: ['person-neighbor'] },
   viaPersonIds: ['person-newspaper'],
@@ -16,7 +16,7 @@ const 新しい証言: Claim = {
 };
 
 /** 開いているケースを返します。開いていない場合はテストを失敗させます。 */
-function 開いているケース(): Case {
+function getOpenCase(): Case {
   const { currentCase } = useCaseStore.getState();
   if (currentCase === null) throw new Error('ケースが開かれていません');
   return currentCase;
@@ -30,7 +30,7 @@ beforeEach(() => {
 
 describe('openCase', () => {
   it('保存済みのケースを開く', () => {
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
     expect(useCaseStore.getState().loadError).toBeNull();
   });
 
@@ -53,37 +53,37 @@ describe('openCase', () => {
 
 describe('createCase', () => {
   it('空のケースを作って保存し、そのIDを返す', () => {
-    const 新しいケースのId = useCaseStore.getState().createCase('湖畔の別荘の事件');
+    const newCaseId = useCaseStore.getState().createCase('湖畔の別荘の事件');
 
-    expect(loadCase(新しいケースのId).name).toBe('湖畔の別荘の事件');
-    expect(listCaseSummaries().map((summary) => summary.id)).toContain(新しいケースのId);
+    expect(loadCase(newCaseId).name).toBe('湖畔の別荘の事件');
+    expect(listCaseSummaries().map((summary) => summary.id)).toContain(newCaseId);
   });
 
   it('作っただけでは、開いているケースを切り替えない', () => {
     useCaseStore.getState().createCase('湖畔の別荘の事件');
 
-    expect(開いているケース().id).toBe(sampleFictionalCase.id);
+    expect(getOpenCase().id).toBe(sampleFictionalCase.id);
   });
 });
 
 describe('importCase', () => {
   it('読み込んだケースを、新しいケースとして保存する', () => {
-    const 読み込んだケース: Case = { ...sampleFictionalCase, id: 'case-imported', name: '受け取ったケース' };
+    const loadedCase: Case = { ...sampleFictionalCase, id: 'case-imported', name: '受け取ったケース' };
 
-    const ケースのId = useCaseStore.getState().importCase(読み込んだケース);
+    const caseId = useCaseStore.getState().importCase(loadedCase);
 
-    expect(ケースのId).toBe('case-imported');
+    expect(caseId).toBe('case-imported');
     expect(loadCase('case-imported').name).toBe('受け取ったケース');
   });
 
   it('保存済みのケースとIDが重なる場合は、新しいIDを振って追加し、元のケースを上書きしない', () => {
-    const 同じIDのケース: Case = { ...sampleFictionalCase, name: '別の人から受け取ったケース' };
+    const sameIdCase: Case = { ...sampleFictionalCase, name: '別の人から受け取ったケース' };
 
-    const ケースのId = useCaseStore.getState().importCase(同じIDのケース);
+    const caseId = useCaseStore.getState().importCase(sameIdCase);
 
-    expect(ケースのId).not.toBe(sampleFictionalCase.id);
+    expect(caseId).not.toBe(sampleFictionalCase.id);
     expect(loadCase(sampleFictionalCase.id).name).toBe(sampleFictionalCase.name);
-    expect(loadCase(ケースのId).name).toBe('別の人から受け取ったケース');
+    expect(loadCase(caseId).name).toBe('別の人から受け取ったケース');
   });
 
   it('検証に失敗するデータは受け付けず、ケースを追加しない', () => {
@@ -108,11 +108,11 @@ describe('deleteCase', () => {
   });
 
   it('開いていないケースを消しても、開いているケースはそのままにする', () => {
-    const 別のケースのId = useCaseStore.getState().createCase('別のケース');
+    const otherCaseId = useCaseStore.getState().createCase('別のケース');
 
-    useCaseStore.getState().deleteCase(別のケースのId);
+    useCaseStore.getState().deleteCase(otherCaseId);
 
-    expect(開いているケース().id).toBe(sampleFictionalCase.id);
+    expect(getOpenCase().id).toBe(sampleFictionalCase.id);
   });
 });
 
@@ -132,61 +132,61 @@ describe('ケースの一覧', () => {
 
 describe('upsert', () => {
   it('新しいIDの証言を追加する', () => {
-    useCaseStore.getState().upsert('claims', 新しい証言);
+    useCaseStore.getState().upsert('claims', newClaim);
 
-    expect(開いているケース().claims).toHaveLength(sampleFictionalCase.claims.length + 1);
+    expect(getOpenCase().claims).toHaveLength(sampleFictionalCase.claims.length + 1);
   });
 
   it('既存のIDの証言は、追加せずに置き換える', () => {
     useCaseStore.getState().upsert('claims', { ...sampleFictionalCase.claims[1]!, locator: '社会面 3段目' });
 
-    const claims = 開いているケース().claims;
+    const claims = getOpenCase().claims;
     expect(claims).toHaveLength(sampleFictionalCase.claims.length);
     expect(claims.find((claim) => claim.id === 'claim-neighbor')?.locator).toBe('社会面 3段目');
   });
 
   it('存在しない人物を参照する証言はエラーにし、ケースを変更しない', () => {
-    const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
+    const invalidClaim: Claim = { ...newClaim, mentionedPersonIds: ['person-unknown'] };
 
-    expect(() => useCaseStore.getState().upsert('claims', 不正な証言)).toThrow(
+    expect(() => useCaseStore.getState().upsert('claims', invalidClaim)).toThrow(
       '存在しない人物を参照しています: person-unknown'
     );
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 
   it('ケースを開いていない場合はエラーにする', () => {
     useCaseStore.getState().closeCase();
 
-    expect(() => useCaseStore.getState().upsert('claims', 新しい証言)).toThrow('ケースが開かれていません');
+    expect(() => useCaseStore.getState().upsert('claims', newClaim)).toThrow('ケースが開かれていません');
   });
 });
 
 describe('upsertMany', () => {
   it('新しい人物と、その人物に言及する証言を、1回の検証でまとめて追加する', () => {
-    const 郵便配達員: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
-    const 配達員への言及: Claim = { ...新しい証言, mentionedPersonIds: ['person-postman'] };
+    const mailCarrier: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
+    const mentionOfCarrier: Claim = { ...newClaim, mentionedPersonIds: ['person-postman'] };
 
     useCaseStore.getState().upsertMany([
-      { key: 'persons', entity: 郵便配達員 },
-      { key: 'claims', entity: 配達員への言及 },
+      { key: 'persons', entity: mailCarrier },
+      { key: 'claims', entity: mentionOfCarrier },
     ]);
 
-    const { persons, claims } = 開いているケース();
-    expect(persons).toContainEqual(郵便配達員);
-    expect(claims).toContainEqual(配達員への言及);
+    const { persons, claims } = getOpenCase();
+    expect(persons).toContainEqual(mailCarrier);
+    expect(claims).toContainEqual(mentionOfCarrier);
   });
 
   it('1件でも規則に違反する場合は、どの要素も追加しない', () => {
-    const 郵便配達員: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
-    const 不正な証言: Claim = { ...新しい証言, mentionedPersonIds: ['person-unknown'] };
+    const mailCarrier: Person = { id: 'person-postman', name: '郵便配達員', kind: 'individual' };
+    const invalidClaim: Claim = { ...newClaim, mentionedPersonIds: ['person-unknown'] };
 
     expect(() =>
       useCaseStore.getState().upsertMany([
-        { key: 'persons', entity: 郵便配達員 },
-        { key: 'claims', entity: 不正な証言 },
+        { key: 'persons', entity: mailCarrier },
+        { key: 'claims', entity: invalidClaim },
       ])
     ).toThrow('存在しない人物を参照しています: person-unknown');
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 });
 
@@ -194,7 +194,7 @@ describe('remove', () => {
   it('どこからも参照されていない証言を削除する', () => {
     useCaseStore.getState().remove('claims', 'claim-report');
 
-    const ids = 開いているケース().claims.map((claim) => claim.id);
+    const ids = getOpenCase().claims.map((claim) => claim.id);
     expect(ids).not.toContain('claim-report');
   });
 
@@ -203,14 +203,14 @@ describe('remove', () => {
     expect(() => useCaseStore.getState().remove('persons', 'person-book')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 
   it('証言から参照されている人物は削除できず、ケースを変更しない', () => {
     expect(() => useCaseStore.getState().remove('persons', 'person-owner')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 });
 
@@ -223,7 +223,7 @@ describe('照合', () => {
       reason: 'どちらも12日夜の持ち主の様子を述べている。',
     });
 
-    expect(開いているケース().crossChecks.map((crossCheck) => crossCheck.id)).toContain('cross-check-report-neighbor');
+    expect(getOpenCase().crossChecks.map((crossCheck) => crossCheck.id)).toContain('cross-check-report-neighbor');
   });
 
   it('理由が空の照合は登録できず、ケースを変更しない', () => {
@@ -235,22 +235,22 @@ describe('照合', () => {
         reason: '',
       })
     ).toThrow('照合の理由がありません');
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 
   it('照合を削除しても、照合した証言は残る', () => {
     useCaseStore.getState().remove('crossChecks', 'cross-check-camera-neighbor');
 
-    const ケース = 開いているケース();
-    expect(ケース.crossChecks.map((crossCheck) => crossCheck.id)).not.toContain('cross-check-camera-neighbor');
-    expect(ケース.claims.map((claim) => claim.id)).toEqual(expect.arrayContaining(['claim-police-camera', 'claim-neighbor']));
+    const caseData = getOpenCase();
+    expect(caseData.crossChecks.map((crossCheck) => crossCheck.id)).not.toContain('cross-check-camera-neighbor');
+    expect(caseData.claims.map((claim) => claim.id)).toEqual(expect.arrayContaining(['claim-police-camera', 'claim-neighbor']));
   });
 
   it('証言を削除すると、その証言を含む照合もあわせて削除する', () => {
     // 前提: 隣家の住人の証言は、防犯カメラの証言（裏付ける）と管理人の証言（食い違う）の2件の照合に含まれる
     useCaseStore.getState().remove('claims', 'claim-neighbor');
 
-    expect(開いているケース().crossChecks).toEqual([]);
+    expect(getOpenCase().crossChecks).toEqual([]);
   });
 
   it('関係の根拠として参照されている証言は、照合があっても削除できず、照合も残す', () => {
@@ -258,7 +258,7 @@ describe('照合', () => {
     expect(() => useCaseStore.getState().remove('claims', 'claim-caretaker')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(開いているケース()).toEqual(sampleFictionalCase);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 });
 
@@ -267,31 +267,31 @@ describe('仮説', () => {
     // 前提: 防犯カメラの証言は「持ち主は19時より前に別荘を離れた」仮説に反する証言としてひもづいている
     useCaseStore.getState().remove('claims', 'claim-police-camera');
 
-    const 仮説 = 開いているケース().hypotheses.find((hypothesis) => hypothesis.id === 'hypothesis-left-early');
-    expect(仮説?.opposingClaimIds).toEqual(['claim-neighbor']);
+    const leftEarlyHypothesis = getOpenCase().hypotheses.find((hypothesis) => hypothesis.id === 'hypothesis-left-early');
+    expect(leftEarlyHypothesis?.opposingClaimIds).toEqual(['claim-neighbor']);
   });
 
   it('対象の人物の観点にひもづけた証言を削除すると、観点からひもづけを外し、対象の人物は残す', () => {
     // 前提: 報道の証言を、管理人の仮説の「手段」にひもづけておく（報道の証言は他のデータから参照されていない）
-    const [管理人の仮説] = 開いているケース().hypotheses;
+    const [caretakerHypothesis] = getOpenCase().hypotheses;
     useCaseStore.getState().upsert('hypotheses', {
-      ...管理人の仮説!,
+      ...caretakerHypothesis!,
       targets: [{ personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: ['claim-report'] } }],
     });
 
     useCaseStore.getState().remove('claims', 'claim-report');
 
-    expect(開いているケース().hypotheses[0]?.targets).toEqual([
+    expect(getOpenCase().hypotheses[0]?.targets).toEqual([
       { personId: 'person-caretaker', claimIds: { motive: [], opportunity: [], means: [] } },
     ]);
   });
 
   it('仮説の対象になっている人物は削除できない', () => {
-    const 仮説だけが参照する人物: Person = { id: 'person-suspect', name: '謎の来訪者', kind: 'individual' };
-    useCaseStore.getState().upsert('persons', 仮説だけが参照する人物);
-    const [管理人の仮説] = 開いているケース().hypotheses;
+    const personReferencedOnlyByHypothesis: Person = { id: 'person-suspect', name: '謎の来訪者', kind: 'individual' };
+    useCaseStore.getState().upsert('persons', personReferencedOnlyByHypothesis);
+    const [caretakerHypothesis] = getOpenCase().hypotheses;
     useCaseStore.getState().upsert('hypotheses', {
-      ...管理人の仮説!,
+      ...caretakerHypothesis!,
       targets: [{ personId: 'person-suspect', claimIds: { motive: [], opportunity: [], means: [] } }],
     });
 
@@ -304,33 +304,33 @@ describe('未了事項', () => {
     // 前提: 「防犯カメラの映像の確認」の未了事項は、防犯カメラの証言と県道の防犯カメラをひもづけている
     useCaseStore.getState().remove('claims', 'claim-police-camera');
 
-    const 未了事項 = 開いているケース().tasks.find((task) => task.id === 'task-camera');
-    expect(未了事項).toMatchObject({ claimIds: [], personIds: ['person-road-camera'] });
+    const cameraTask = getOpenCase().tasks.find((task) => task.id === 'task-camera');
+    expect(cameraTask).toMatchObject({ claimIds: [], personIds: ['person-road-camera'] });
   });
 
   it('人物を削除すると、未了事項からその人物のひもづけを外す', () => {
     // 前提: 駅員は、「防犯カメラの映像の確認」の未了事項だけが参照する人物とする
-    const 未了事項だけが参照する人物: Person = { id: 'person-station-staff', name: '駅員', kind: 'individual' };
-    useCaseStore.getState().upsert('persons', 未了事項だけが参照する人物);
-    const 防犯カメラの確認 = 開いているケース().tasks.find((task) => task.id === 'task-camera')!;
-    useCaseStore.getState().upsert('tasks', { ...防犯カメラの確認, personIds: ['person-station-staff'] });
+    const personReferencedOnlyByTask: Person = { id: 'person-station-staff', name: '駅員', kind: 'individual' };
+    useCaseStore.getState().upsert('persons', personReferencedOnlyByTask);
+    const securityCameraCheck = getOpenCase().tasks.find((task) => task.id === 'task-camera')!;
+    useCaseStore.getState().upsert('tasks', { ...securityCameraCheck, personIds: ['person-station-staff'] });
 
     useCaseStore.getState().remove('persons', 'person-station-staff');
 
-    expect(開いているケース().persons.some((person) => person.id === 'person-station-staff')).toBe(false);
-    expect(開いているケース().tasks.find((task) => task.id === 'task-camera')?.personIds).toEqual([]);
+    expect(getOpenCase().persons.some((person) => person.id === 'person-station-staff')).toBe(false);
+    expect(getOpenCase().tasks.find((task) => task.id === 'task-camera')?.personIds).toEqual([]);
   });
 
   it('場所を削除できなかった場合は、未了事項のひもづけも外さない', () => {
     // 前提: 湖畔の別荘は、証言の場所として参照されているため削除できない
     expect(() => useCaseStore.getState().remove('places', 'place-villa')).toThrow('他のデータから参照されているため削除できません');
 
-    expect(開いているケース().tasks.find((task) => task.id === 'task-weather')?.placeIds).toEqual(['place-villa']);
+    expect(getOpenCase().tasks.find((task) => task.id === 'task-weather')?.placeIds).toEqual(['place-villa']);
   });
 });
 
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
-const 書籍の取材: Interview = {
+const bookInterview: Interview = {
   id: 'interview-caretaker-book',
   subjectPersonId: 'person-caretaker',
   interviewerPersonId: 'person-book',
@@ -339,42 +339,42 @@ const 書籍の取材: Interview = {
 
 describe('聴取', () => {
   it('聴取を登録し、証言をその聴取にひもづけられる', () => {
-    useCaseStore.getState().upsert('interviews', 書籍の取材);
-    const 管理人の証言 = 開いているケース().claims.find((claim) => claim.id === 'claim-caretaker');
-    if (!管理人の証言) throw new Error('前提の証言がありません');
+    useCaseStore.getState().upsert('interviews', bookInterview);
+    const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
+    if (!caretakerClaim) throw new Error('前提の証言がありません');
 
-    useCaseStore.getState().upsert('claims', { ...管理人の証言, interviewId: 書籍の取材.id });
+    useCaseStore.getState().upsert('claims', { ...caretakerClaim, interviewId: bookInterview.id });
 
-    expect(開いているケース().interviews).toEqual([書籍の取材]);
-    expect(開いているケース().claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(書籍の取材.id);
+    expect(getOpenCase().interviews).toEqual([bookInterview]);
+    expect(getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(bookInterview.id);
   });
 
   it('聴取の相手が発言者にも経由にも含まれない証言は、ひもづけられず、ケースを変更しない', () => {
-    useCaseStore.getState().upsert('interviews', 書籍の取材);
-    const ひもづける前 = 開いているケース();
-    const 隣家の住人の証言 = ひもづける前.claims.find((claim) => claim.id === 'claim-neighbor');
-    if (!隣家の住人の証言) throw new Error('前提の証言がありません');
+    useCaseStore.getState().upsert('interviews', bookInterview);
+    const beforeLink = getOpenCase();
+    const neighborResidentClaim = beforeLink.claims.find((claim) => claim.id === 'claim-neighbor');
+    if (!neighborResidentClaim) throw new Error('前提の証言がありません');
 
-    expect(() => useCaseStore.getState().upsert('claims', { ...隣家の住人の証言, interviewId: 書籍の取材.id })).toThrow(
+    expect(() => useCaseStore.getState().upsert('claims', { ...neighborResidentClaim, interviewId: bookInterview.id })).toThrow(
       '聴取の相手が、証言の発言者にも経由にも含まれていません'
     );
-    expect(開いているケース()).toEqual(ひもづける前);
+    expect(getOpenCase()).toEqual(beforeLink);
   });
 
   it('証言がひもづいている聴取は削除できず、証言がひもづいていない聴取は削除できる', () => {
     useCaseStore.getState().upsertMany([
-      { key: 'interviews', entity: 書籍の取材 },
+      { key: 'interviews', entity: bookInterview },
       { key: 'interviews', entity: { id: 'interview-empty', subjectPersonId: 'person-neighbor' } },
     ]);
-    const 管理人の証言 = 開いているケース().claims.find((claim) => claim.id === 'claim-caretaker');
-    if (!管理人の証言) throw new Error('前提の証言がありません');
-    useCaseStore.getState().upsert('claims', { ...管理人の証言, interviewId: 書籍の取材.id });
+    const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
+    if (!caretakerClaim) throw new Error('前提の証言がありません');
+    useCaseStore.getState().upsert('claims', { ...caretakerClaim, interviewId: bookInterview.id });
 
-    expect(() => useCaseStore.getState().remove('interviews', 書籍の取材.id)).toThrow(
+    expect(() => useCaseStore.getState().remove('interviews', bookInterview.id)).toThrow(
       '他のデータから参照されているため削除できません'
     );
     useCaseStore.getState().remove('interviews', 'interview-empty');
-    expect(開いているケース().interviews.map((interview) => interview.id)).toEqual([書籍の取材.id]);
+    expect(getOpenCase().interviews.map((interview) => interview.id)).toEqual([bookInterview.id]);
   });
 });
 
@@ -388,34 +388,34 @@ describe('remove（メモのメンション）', () => {
         entity: { id: 'person-caretaker', name: '管理人', kind: 'individual', note: '@[湖畔駅](place:place-station)の近くに住んでいる。' },
       },
     ]);
-    const 削除前のケース = 開いているケース();
+    const caseBeforeDeletion = getOpenCase();
 
     expect(() => useCaseStore.getState().remove('places', 'place-station')).toThrow(
       '他のデータから参照されているため削除できません'
     );
-    expect(開いているケース()).toEqual(削除前のケース);
+    expect(getOpenCase()).toEqual(caseBeforeDeletion);
   });
 });
 
 describe('ブラウザへの保存', () => {
   it('ケースを変更すると、そのケースのキーへ保存する', () => {
-    useCaseStore.getState().upsert('claims', 新しい証言);
+    useCaseStore.getState().upsert('claims', newClaim);
 
     expect(loadCase(sampleFictionalCase.id).claims.map((claim) => claim.id)).toContain('claim-postman');
   });
 
   it('開いていないケースは書き換えない', () => {
-    const 別のケースのId = useCaseStore.getState().createCase('別のケース');
+    const otherCaseId = useCaseStore.getState().createCase('別のケース');
 
-    useCaseStore.getState().upsert('claims', 新しい証言);
+    useCaseStore.getState().upsert('claims', newClaim);
 
-    expect(loadCase(別のケースのId).claims).toEqual([]);
+    expect(loadCase(otherCaseId).claims).toEqual([]);
   });
 });
 
 describe('時系列ボードの並び順', () => {
   /** 警察の捜索（8月15日）についての証言です。 */
-  const 捜索の推測: Claim = {
+  const searchGuess: Claim = {
     id: 'claim-police-search',
     speaker: { kind: 'user' },
     viaPersonIds: [],
@@ -428,7 +428,7 @@ describe('時系列ボードの並び順', () => {
     // 前提: サンプルの並びは、管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測（日時なし）
     useCaseStore.getState().moveTimelineItem('claim:claim-user-guess', 0);
 
-    expect(開いているケース().timelineOrder).toEqual([
+    expect(getOpenCase().timelineOrder).toEqual([
       'claim:claim-user-guess',
       'claim:claim-caretaker',
       'claim:claim-police-camera',
@@ -439,21 +439,21 @@ describe('時系列ボードの並び順', () => {
 
   it('日時と矛盾する位置へは動かせず、ケースを変更しない', () => {
     // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている
-    useCaseStore.getState().upsert('claims', 捜索の推測);
-    const 変更前 = 開いているケース();
+    useCaseStore.getState().upsert('claims', searchGuess);
+    const beforeChange = getOpenCase();
 
     expect(() => useCaseStore.getState().moveTimelineItem('claim:claim-police-search', 0)).toThrow('日時と矛盾するため');
-    expect(開いているケース()).toBe(変更前);
+    expect(getOpenCase()).toBe(beforeChange);
   });
 
   it('証言に日時を入力して現在の位置と矛盾した場合は、最も近い矛盾しない位置へ動かす', () => {
     // 前提: 並びは サンプルの証言（8月12日）→ ユーザーの推測（日時なし）→ 捜索の推測（8月15日）
-    useCaseStore.getState().upsert('claims', 捜索の推測);
+    useCaseStore.getState().upsert('claims', searchGuess);
 
     // 末尾の捜索の推測の日時を、サンプルの証言より前の「8月10日」に直す
-    useCaseStore.getState().upsert('claims', { ...捜索の推測, when: '1998-08-10' });
+    useCaseStore.getState().upsert('claims', { ...searchGuess, when: '1998-08-10' });
 
-    expect(開いているケース().timelineOrder).toEqual([
+    expect(getOpenCase().timelineOrder).toEqual([
       'claim:claim-police-search',
       'claim:claim-caretaker',
       'claim:claim-police-camera',
@@ -469,13 +469,13 @@ describe('人物の動きの列の並び順', () => {
     // 前提: サンプルの人物の登録順は、別荘の持ち主 → 隣家の住人 → 管理人 → …
     useCaseStore.getState().movePersonLane('person-caretaker', 'person-owner');
 
-    expect(開いているケース().personLaneOrder.slice(0, 3)).toEqual(['person-caretaker', 'person-owner', 'person-neighbor']);
+    expect(getOpenCase().personLaneOrder.slice(0, 3)).toEqual(['person-caretaker', 'person-owner', 'person-neighbor']);
   });
 
   it('存在しない人物は動かせず、ケースを変更しない', () => {
-    const 変更前 = 開いているケース();
+    const beforeChange = getOpenCase();
 
     expect(() => useCaseStore.getState().movePersonLane('person-deleted', 'person-owner')).toThrow('人物が見つかりません');
-    expect(開いているケース()).toBe(変更前);
+    expect(getOpenCase()).toBe(beforeChange);
   });
 });

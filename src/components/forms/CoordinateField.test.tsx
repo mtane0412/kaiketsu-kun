@@ -13,7 +13,7 @@ import { CoordinateField } from './CoordinateField';
 vi.mock('@/lib/geocoding', () => ({ searchCoordinates: vi.fn() }));
 
 /** 地図（差し替え）をクリックしたときに選ばれる地点です。 */
-const 湖のほとり = { latitude: 35.5, longitude: 138.75 };
+const lakeshore = { latitude: 35.5, longitude: 138.75 };
 
 // jsdom は地図を描画できないため、ピンの位置を文字で示し、ボタンで地点を選ぶ部品に差し替える
 vi.mock('./CoordinateMap', () => ({
@@ -21,7 +21,7 @@ vi.mock('./CoordinateMap', () => ({
     return (
       <div>
         <p>ピンの位置: {value ? `${value.latitude},${value.longitude}` : 'なし'}</p>
-        <button type="button" onClick={() => onPick(湖のほとり)}>
+        <button type="button" onClick={() => onPick(lakeshore)}>
           地図をクリック
         </button>
       </div>
@@ -29,11 +29,11 @@ vi.mock('./CoordinateMap', () => ({
   },
 }));
 
-const 永田町 = { title: '東京都千代田区永田町一丁目７番', latitude: 35.677414, longitude: 139.744382 };
-const 永田町二丁目 = { title: '東京都千代田区永田町二丁目', latitude: 35.675, longitude: 139.741 };
+const nagatacho = { title: '東京都千代田区永田町一丁目７番', latitude: 35.677414, longitude: 139.744382 };
+const nagatacho2Chome = { title: '東京都千代田区永田町二丁目', latitude: 35.675, longitude: 139.741 };
 
 /** 入力欄の値を保持する親です。onChange で受け取った値を、画面と onChange の記録の両方で確認できます。 */
-function 座標の入力欄({ initial, onChange }: { initial?: Coordinates; onChange: (value: Coordinates | undefined) => void }) {
+function CoordinateFieldHarness({ initial, onChange }: { initial?: Coordinates; onChange: (value: Coordinates | undefined) => void }) {
   const [value, setValue] = useState(initial);
   return (
     <CoordinateField
@@ -57,17 +57,17 @@ afterEach(() => {
 
 describe('CoordinateField', () => {
   it('住所を検索して候補を選ぶと、その座標を登録し、地図のピンと表示に反映する', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町, 永田町二丁目], warnings: [] });
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [nagatacho, nagatacho2Chome], warnings: [] });
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={onChange} />);
+    render(<CoordinateFieldHarness onChange={onChange} />);
 
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
     await user.click(screen.getByRole('button', { name: '検索' }));
-    const 候補 = await screen.findByRole('list', { name: '座標の候補' });
+    const candidate = await screen.findByRole('list', { name: '座標の候補' });
     // 検証: 候補の一覧には、OpenStreetMap の出典を表示する（Nominatim の利用条件のため）
     expect(screen.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
-    await user.click(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' }));
+    await user.click(within(candidate).getByRole('button', { name: '東京都千代田区永田町一丁目７番' }));
 
     expect(searchCoordinates).toHaveBeenCalledWith('永田町');
     expect(onChange).toHaveBeenLastCalledWith({ latitude: 35.677414, longitude: 139.744382 });
@@ -80,12 +80,12 @@ describe('CoordinateField', () => {
   });
 
   it('検索欄で Enter を押すと検索し、フォームは送信しない', async () => {
-    vi.mocked(searchCoordinates).mockResolvedValue({ results: [永田町], warnings: [] });
+    vi.mocked(searchCoordinates).mockResolvedValue({ results: [nagatacho], warnings: [] });
     const onSubmit = vi.fn();
     const user = userEvent.setup();
     render(
       <form onSubmit={onSubmit}>
-        <座標の入力欄 onChange={vi.fn()} />
+        <CoordinateFieldHarness onChange={vi.fn()} />
       </form>,
     );
 
@@ -97,10 +97,10 @@ describe('CoordinateField', () => {
 
   it('検索中に検索欄で Enter を押しても、重ねて検索しない', async () => {
     // 前提: 1回目の検索の応答がまだ返ってこない
-    let 検索を終える: (search: { results: typeof 永田町[]; warnings: string[] }) => void = () => {};
-    vi.mocked(searchCoordinates).mockReturnValue(new Promise((resolve) => (検索を終える = resolve)));
+    let finishSearch: (search: { results: typeof nagatacho[]; warnings: string[] }) => void = () => {};
+    vi.mocked(searchCoordinates).mockReturnValue(new Promise((resolve) => (finishSearch = resolve)));
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町{Enter}');
     await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
@@ -108,17 +108,17 @@ describe('CoordinateField', () => {
     expect(searchCoordinates).toHaveBeenCalledTimes(1);
 
     // 検証: 検索が終わった後は、Enter で再び検索できる
-    検索を終える({ results: [永田町], warnings: [] });
+    finishSearch({ results: [nagatacho], warnings: [] });
     await screen.findByRole('list', { name: '座標の候補' });
     await user.type(screen.getByLabelText('住所・地名で検索'), '{Enter}');
     expect(searchCoordinates).toHaveBeenCalledTimes(2);
   });
 
   it('日本語入力の変換を確定する Enter では、検索しない', () => {
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
-    const 検索欄 = screen.getByLabelText('住所・地名で検索');
-    検索欄.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
+    const searchField = screen.getByLabelText('住所・地名で検索');
+    searchField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
 
     expect(searchCoordinates).not.toHaveBeenCalled();
   });
@@ -126,7 +126,7 @@ describe('CoordinateField', () => {
   it('候補が無い場合は、地図で決めるよう案内する', async () => {
     vi.mocked(searchCoordinates).mockResolvedValue({ results: [], warnings: [] });
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
     await user.type(screen.getByLabelText('住所・地名で検索'), '湖畔の別荘');
     await user.click(screen.getByRole('button', { name: '検索' }));
@@ -137,7 +137,7 @@ describe('CoordinateField', () => {
   it('検索に失敗した場合は、理由を表示する', async () => {
     vi.mocked(searchCoordinates).mockRejectedValue(new Error('住所を検索できませんでした（通信に失敗しました）'));
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
     await user.click(screen.getByRole('button', { name: '検索' }));
@@ -147,33 +147,33 @@ describe('CoordinateField', () => {
 
   it('片方の検索先で失敗した場合は、見つかった候補と共に、失敗したことを表示する', async () => {
     vi.mocked(searchCoordinates).mockResolvedValue({
-      results: [永田町],
+      results: [nagatacho],
       warnings: ['OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。'],
     });
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
     await user.type(screen.getByLabelText('住所・地名で検索'), '永田町');
     await user.click(screen.getByRole('button', { name: '検索' }));
 
-    const 候補 = await screen.findByRole('list', { name: '座標の候補' });
-    expect(within(候補).getByRole('button', { name: '東京都千代田区永田町一丁目７番' })).toBeInTheDocument();
+    const candidate = await screen.findByRole('list', { name: '座標の候補' });
+    expect(within(candidate).getByRole('button', { name: '東京都千代田区永田町一丁目７番' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('OpenStreetMapで検索できませんでした（HTTP 503）。見つかった候補だけを表示しています。');
   });
 
   it('地図をクリックすると、その地点の座標を登録する（住所の無い場所のため）', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<座標の入力欄 onChange={onChange} />);
+    render(<CoordinateFieldHarness onChange={onChange} />);
 
     await user.click(await screen.findByRole('button', { name: '地図をクリック' }));
 
-    expect(onChange).toHaveBeenLastCalledWith(湖のほとり);
+    expect(onChange).toHaveBeenLastCalledWith(lakeshore);
     expect(screen.getByText('緯度 35.50000・経度 138.75000')).toBeInTheDocument();
   });
 
   it('座標が無い場合は、未設定と表示し、削除のボタンを出さない', () => {
-    render(<座標の入力欄 onChange={vi.fn()} />);
+    render(<CoordinateFieldHarness onChange={vi.fn()} />);
 
     expect(screen.getByText('座標は未設定です。')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '座標を削除' })).not.toBeInTheDocument();
@@ -182,7 +182,7 @@ describe('CoordinateField', () => {
   it('「座標を削除」を押すと、登録済みの座標を取り除く', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<座標の入力欄 initial={湖のほとり} onChange={onChange} />);
+    render(<CoordinateFieldHarness initial={lakeshore} onChange={onChange} />);
 
     await user.click(screen.getByRole('button', { name: '座標を削除' }));
 

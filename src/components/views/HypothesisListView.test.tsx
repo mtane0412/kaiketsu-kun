@@ -18,28 +18,28 @@ describe('HypothesisListView', () => {
   it('否定されていない仮説を、状態・支える証言と反する証言の件数・対象の人物とともに並べる', () => {
     render(<HypothesisListView target={sampleFictionalCase} />);
 
-    const 一覧 = screen.getByRole('list', { name: '仮説の一覧' });
-    const [管理人の仮説] = within(一覧).getAllByRole('listitem');
-    expect(within(管理人の仮説!).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
+    const list = screen.getByRole('list', { name: '仮説の一覧' });
+    const [caretakerHypothesis] = within(list).getAllByRole('listitem');
+    expect(within(caretakerHypothesis!).getByRole('link', { name: /管理人が失踪に関わっている/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses'
     );
-    expect(管理人の仮説).toHaveTextContent('検討中');
-    expect(管理人の仮説).toHaveTextContent('支える証言 1件');
-    expect(管理人の仮説).toHaveTextContent('反する証言 0件');
-    expect(管理人の仮説).toHaveTextContent('対象: 管理人');
+    expect(caretakerHypothesis).toHaveTextContent('検討中');
+    expect(caretakerHypothesis).toHaveTextContent('支える証言 1件');
+    expect(caretakerHypothesis).toHaveTextContent('反する証言 0件');
+    expect(caretakerHypothesis).toHaveTextContent('対象: 管理人');
     // 検証: 否定された仮説は、否定されていない仮説の一覧には並べない
-    expect(within(一覧).queryByText(/持ち主は19時より前に別荘を離れた/)).not.toBeInTheDocument();
+    expect(within(list).queryByText(/持ち主は19時より前に別荘を離れた/)).not.toBeInTheDocument();
   });
 
   it('否定された仮説を、否定の理由とともに、別の一覧に区別して残す', () => {
     render(<HypothesisListView target={sampleFictionalCase} />);
 
-    const 否定された仮説 = screen.getByRole('list', { name: '否定された仮説の一覧' });
-    const [項目] = within(否定された仮説).getAllByRole('listitem');
-    expect(within(項目!).getByRole('link', { name: /持ち主は19時より前に別荘を離れた/ })).toBeInTheDocument();
-    expect(項目).toHaveTextContent('否定された');
-    expect(項目).toHaveTextContent('20:10に持ち主の車が別荘の方向へ走り');
+    const rejectedHypothesis = screen.getByRole('list', { name: '否定された仮説の一覧' });
+    const [item] = within(rejectedHypothesis).getAllByRole('listitem');
+    expect(within(item!).getByRole('link', { name: /持ち主は19時より前に別荘を離れた/ })).toBeInTheDocument();
+    expect(item).toHaveTextContent('否定された');
+    expect(item).toHaveTextContent('20:10に持ち主の車が別荘の方向へ走り');
   });
 
   it('仮説を登録するページへのリンクを置く', () => {
