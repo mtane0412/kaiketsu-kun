@@ -400,7 +400,7 @@ export type ClaimDetail = {
 };
 
 /** 証言が触れている人物（発言者・経由した人物・言及している人物）のIDを、重複なく返します。 */
-function personIdsOf(claim: Claim): Id[] {
+export function personIdsOf(claim: Claim): Id[] {
   const speakerIds = claim.speaker.kind === 'person' ? claim.speaker.personIds : [];
   return [...new Set([...speakerIds, ...claim.viaPersonIds, ...claim.mentionedPersonIds])];
 }

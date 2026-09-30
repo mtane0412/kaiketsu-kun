@@ -11,6 +11,7 @@
  * 未了事項にひもづいた証言を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
+ * 人物・場所・日時・聴取を多く共有する証言を似ている順に並べる欄は、SimilarClaimsSection が担います。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
  *
  * 注意: ケースに無い証言のIDが渡された場合（URLの直接入力、削除済みの証言）は、見つからないことを表示します。
@@ -33,6 +34,7 @@ import { ClaimLink } from './ClaimLink';
 import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { HypothesisUsageSection } from './HypothesisUsageSection';
+import { SimilarClaimsSection } from './SimilarClaimsSection';
 import { TaskLinkSection } from './TaskLinkSection';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
@@ -178,6 +180,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
         </nav>
       )}
+
+      <SimilarClaimsSection claimId={claimId} tab={tab} />
 
       {relatedClaimGroups.map((group) => {
         const label = `「${group.label}」に触れている他の証言`;

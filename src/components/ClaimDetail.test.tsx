@@ -98,6 +98,38 @@ describe('ClaimDetail', () => {
     expect(within(lakesideVilla).getByRole('link', { name: '湖畔の別荘' })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 
+  it('似ている証言を、似ている順にリンクにし、似ている理由を添える', () => {
+    // 前提: 隣家の住人の証言に最も似ているのは、同じ場所で日時も近い管理人の証言
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const similarSection = screen.getByRole('region', { name: '似ている証言' });
+    const items = within(within(similarSection).getByRole('list')).getAllByRole('listitem');
+    expect(within(items[0]!).getByRole('link')).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker');
+    expect(items[0]).toHaveTextContent('人物: 別荘の持ち主');
+    expect(items[0]).toHaveTextContent('同じ場所: 湖畔の別荘');
+    expect(items[0]).toHaveTextContent('日時が近い（約2時間差）');
+  });
+
+  it('似ている証言に、照合の種類と、両方をひもづけている仮説を目印として添える', () => {
+    // 前提: 隣家の住人の証言と管理人の証言は「食い違う」照合を持ち、仮説「持ち主は19時より前に別荘を離れた」に両方ひもづいている
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const similarSection = screen.getByRole('region', { name: '似ている証言' });
+    const caretakerItem = within(similarSection)
+      .getAllByRole('listitem')
+      .find((item) => within(item).queryByRole('link', { name: /見回りをしたとき/ }) !== null);
+    expect(caretakerItem).toHaveTextContent('照合: 食い違い');
+    expect(caretakerItem).toHaveTextContent('仮説: 持ち主は19時より前に別荘を離れた');
+  });
+
+  it('似ている証言の欄を、「〇〇に触れている他の証言」より前に置く', () => {
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const similarSection = screen.getByRole('region', { name: '似ている証言' });
+    const lakesideVilla = screen.getByRole('region', { name: '「湖畔の別荘」に触れている他の証言' });
+    expect(similarSection.compareDocumentPosition(lakesideVilla)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('開いているタブをURLから引き継ぎ、詳細を閉じるリンクと、他の証言へのリンクに反映する', () => {
     resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor?tab=map');
     render(<ClaimDetail claimId="claim-neighbor" />);
