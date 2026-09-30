@@ -461,6 +461,36 @@ describe('時系列ボードの並び順', () => {
       'claim:claim-user-guess',
     ]);
   });
+
+  it('upsertMany に並び順の移動を渡すと、要素の保存と移動を1回で反映する', () => {
+    // 前提: サンプルの並びは、管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測（日時なし）
+    useCaseStore.getState().upsertMany([{ key: 'claims', entity: newClaim }], {
+      key: 'claim:claim-postman',
+      toIndex: 3,
+    });
+
+    expect(loadCase(sampleFictionalCase.id).timelineOrder).toEqual([
+      'claim:claim-caretaker',
+      'claim:claim-police-camera',
+      'claim:claim-neighbor',
+      'claim:claim-postman',
+      'claim:claim-report',
+      'claim:claim-user-guess',
+    ]);
+  });
+
+  it('upsertMany に渡した移動が日時と矛盾する場合は、要素も保存せず、ケースを変更しない', () => {
+    // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている
+    const beforeChange = getOpenCase();
+
+    expect(() =>
+      useCaseStore.getState().upsertMany([{ key: 'claims', entity: searchGuess }], {
+        key: 'claim:claim-police-search',
+        toIndex: 0,
+      })
+    ).toThrow('日時と矛盾するため');
+    expect(getOpenCase()).toBe(beforeChange);
+  });
 });
 
 describe('人物の動きの列の並び順', () => {

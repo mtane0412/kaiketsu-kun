@@ -185,6 +185,7 @@ describe('CrossCheckSection の反応の記録', () => {
     await user.click(screen.getByRole('button', { name: '反応を記録' }));
     const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
     await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await chooseReactionSpeaker(user, reactionRegion, '管理人');
     await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
 
     const caseData = openedCase();
@@ -201,6 +202,7 @@ describe('CrossCheckSection の反応の記録', () => {
     const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
     await user.click(within(reactionRegion).getByRole('radio', { name: '裏付ける' }));
     await user.type(within(reactionRegion).getByLabelText('内容'), '自分も庭に人影を見た。');
+    await chooseReactionSpeaker(user, reactionRegion, '管理人');
     await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
 
     const caseData = openedCase();
@@ -208,6 +210,21 @@ describe('CrossCheckSection の反応の記録', () => {
     expect(caseData.crossChecks.find((crossCheck) => crossCheck.claimIds.includes(reactionClaimId))).toMatchObject({
       kind: 'supports',
     });
+  });
+
+  it('発言者を選ばずに保存しようとすると、理由を示して、証言も照合も追加しない', async () => {
+    // 前提: 反応は別の人物の反応を記録するものであり、発言者の無い証言（ユーザーの推測）にはしない
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+    await user.type(within(reactionRegion).getByLabelText('内容'), 'その夜、持ち主は別荘にいなかった。');
+    await user.click(within(reactionRegion).getByRole('button', { name: '書き足す' }));
+
+    expect(await within(reactionRegion).findByRole('alert')).toHaveTextContent('反応した人物を発言者に選んでください');
+    expect(openedCase().claims).toHaveLength(sampleFictionalCase.claims.length);
+    expect(openedCase().crossChecks).toHaveLength(sampleFictionalCase.crossChecks.length);
   });
 
   it('「やめる」で閉じると、証言も照合も追加しない', async () => {

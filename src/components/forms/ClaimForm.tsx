@@ -19,6 +19,9 @@
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
  * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
  *
+ * speakerRequiredMessage を渡すと、発言者を必須にし、発言者を選ばずに保存しようとしたときにその文を表示します
+ * （別の人物の反応を記録する場合など、ユーザーの推測にしてはならない場合に使います）。
+ *
  * withEntries を渡すと、保存する証言のIDを使った要素（書き足した証言をひもづけた未了事項など）を、証言と同じ1回の保存で書き込みます。
  * どちらかが保存できない場合は、証言も含めて何も保存しません（ひもづけ先の無い証言だけが残らないようにするためです）。
  *
@@ -83,12 +86,22 @@ type ClaimFormProps = {
    * 例外を投げると、その理由を表示して、証言も保存しません。
    */
   withEntries?: (claimId: Id) => UpsertEntry[];
+  /** 指定すると発言者を必須にし、発言者を選ばずに保存しようとしたときに、この文を表示します。 */
+  speakerRequiredMessage?: string;
 };
 
-export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actions, withEntries }: ClaimFormProps) {
+export function ClaimForm({
+  initial,
+  defaults,
+  onDone,
+  autoFocus,
+  compact,
+  actions,
+  withEntries,
+  speakerRequiredMessage,
+}: ClaimFormProps) {
   const currentCase = useCurrentCase();
   const upsertMany = useCaseStore((state) => state.upsertMany);
-  const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
 
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
@@ -152,6 +165,10 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
+    if (speakerRequiredMessage !== undefined && speaker.personIds.length === 0) {
+      setError(speakerRequiredMessage);
+      return;
+    }
     if (speaker.personIds.length === 0 && speaker.viaPersonIds.length > 0) {
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
@@ -187,8 +204,11 @@ export function ClaimForm({ initial, defaults, onDone, autoFocus, compact, actio
     const insertIndex = initial ? undefined : defaults?.insertIndex;
 
     try {
-      upsertMany([...newEntries, { key: 'claims', entity: claim }, ...(withEntries?.(claim.id) ?? [])]);
-      if (insertIndex !== undefined) moveTimelineItem(boardKey, insertIndex);
+      // 保存と並び順の移動を1回で反映する（移動だけが失敗して、再送信で証言が重複しないようにするため）
+      upsertMany(
+        [...newEntries, { key: 'claims', entity: claim }, ...(withEntries?.(claim.id) ?? [])],
+        insertIndex === undefined ? undefined : { key: boardKey, toIndex: insertIndex }
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       return;

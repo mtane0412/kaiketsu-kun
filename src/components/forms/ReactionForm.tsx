@@ -9,10 +9,12 @@
  *
  * 入力は、照合の種類と、証言のフォーム（ClaimForm）の見出し・本文・「発言者」です。
  * 反応の多くは否定のため、種類の初期値は「食い違う」にします。
+ * 反応は別の人物の反応を記録するものであり、ユーザーの推測にはしないため、発言者を必須にします。
  * 反応の本文が一致・食い違いの中身を表すため、照合の理由は持たせません。
  * 反応の証言は、時系列の並び順で元の証言の直後に置きます（見比べやすくするためです）。
  *
- * 注意: 証言と照合は同じ1回の保存で書き込み、どちらかが保存できない場合は何も保存しません（ClaimForm の withEntries）。
+ * 注意: 証言・照合・並び順の移動は同じ1回の保存で書き込み、いずれかが反映できない場合は何も保存しません
+ * （ClaimForm の withEntries と defaults.insertIndex）。
  */
 'use client';
 
@@ -47,6 +49,7 @@ export function ReactionForm({ claimId, onDone, onCancel }: ReactionFormProps) {
       <ClaimForm
         defaults={{ insertIndex }}
         onDone={onDone}
+        speakerRequiredMessage="反応した人物を発言者に選んでください"
         withEntries={(reactionClaimId) => [
           { key: 'crossChecks', entity: { id: nanoid(), claimIds: [claimId, reactionClaimId], kind } },
         ]}
