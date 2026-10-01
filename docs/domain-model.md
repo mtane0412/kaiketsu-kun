@@ -60,7 +60,7 @@ UIは次の範囲に絞っています。
 |---|---|
 | `Case` | 1つの事件または作品。すべてのデータの入れ物。時系列ボードの並び順（`timelineOrder`）も保持 |
 | `Claim` | 誰が・誰を経由して・何を述べたか。人物の発言と、ユーザーの推測の総称 |
-| `Person` / `Place` | 登場する人物と場所。`Person` は、組織・記録装置・媒体（新聞、書籍、調書）・物を含む、発言しうる主体全般を表し、種別（`kind`）で区別する。`Person` は、電話番号・車両ナンバーなどの識別子（`identifiers`。種類と値の組）を複数持てる。どちらにも画像を登録できる（`imageDataUrl`。登録時に正方形の範囲を切り抜き、長辺256px以内のJPEGへ縮小した data URL で、`src/lib/image-utils.ts` が切り抜きと縮小を行う）。画像の無い `Person` は、1文字のアイコンで表示する（任意の文字を `iconText` に指定でき、省略した場合は名前の先頭の文字。`src/domain/person-icon.ts` が文字を決める）。`Place` には座標を登録できる（`latitude` / `longitude`。世界測地系の緯度・経度で、単位は度。場所のフォームで、国土地理院の住所検索APIの候補から選ぶか、地理院タイルの地図をクリックして決める。検索は `src/lib/geocoding.ts` が行う。地図ビューで使用する） |
+| `Person` / `Place` | 登場する人物と場所。`Person` は、組織・記録装置・媒体（新聞、書籍、調書）・物を含む、発言しうる主体全般を表し、種別（`kind`）で区別する。`Person` は、電話番号・車両ナンバーなどの識別子（`identifiers`。種類と値の組）を複数持てる。どちらにも画像を登録できる（`imageDataUrl`。登録時に正方形の範囲を切り抜き、長辺256px以内のJPEGへ縮小した data URL で、`src/lib/image-utils.ts` が切り抜きと縮小を行う）。画像の無い `Person` は、1文字のアイコンで表示する（任意の文字を `iconText` に指定でき、省略した場合は名前の先頭の文字。`src/domain/person-icon.ts` が文字を決める）。`Place` には座標を登録できる（`latitude` / `longitude`。世界測地系の緯度・経度で、単位は度。場所のフォームで、国土地理院の住所検索APIの候補から選ぶか、OpenStreetMap の地図をクリックして決める。検索は `src/lib/geocoding.ts` が行う。地図ビューで使用する） |
 | `Relationship` | 証言から導いた結論。`basisClaimIds` で根拠を参照。任意で期間（開始 `since`・終了 `until`。`TimeRef`）を持つ |
 | `Interview` | 証言を得た機会（聴取）。日時・相手・聴取者または媒体・場所・相手の立場・資料番号を持ち、証言は `Claim.interviewId` で任意に参照する |
 | `CrossCheck` | 読み手が2件の証言を突き合わせた結果（裏付ける・食い違う・同じ事柄を述べている） |
