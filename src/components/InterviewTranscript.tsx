@@ -6,6 +6,7 @@
  *   重なり合う引用は、重なった範囲から最初の証言へ移ります（区切り方は src/domain/transcript.ts の buildTranscriptSegments）。
  * - 本文の範囲を選んで「選んだ範囲を証言にする」を押すと、選んだ範囲を引用として onQuote に渡します。
  *   動画の文字起こしでは、選んだ範囲の直前にある時刻を、動画の位置として補います（quoteSecondsAt）。
+ * - 「証言の候補を抽出」を押すと、選んだ範囲（選んでいなければ本文の全文）から LLM で証言の候補を抽出する画面（ClaimExtraction）を開きます。
  *
  * 注意: 選択の範囲は document の selectionchange で追い、本文の中だけを選んでいるときに限ってボタンを押せるようにします。
  * ボタンを押したときに選択が外れないよう、ボタンの mousedown の既定の動作を止めます。
@@ -17,12 +18,15 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { buildTranscriptSegments, quoteSecondsAt } from '@/domain/transcript';
-import type { ClaimQuote } from '@/domain/types';
+import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
+import { ClaimExtraction, type ExtractionSource } from './ClaimExtraction';
 import { claimHref, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 
 type InterviewTranscriptProps = {
+  /** 本文を持つ聴取のIDです。証言の候補の抽出に使います。 */
+  interviewId: Id;
   /** 聴取の本文です。 */
   transcript: string;
   /** この聴取で得た証言です。引用を持つ証言の引用を、本文の中に示します。 */
@@ -60,10 +64,18 @@ function quoteFromSelection(container: HTMLElement, transcript: string): ClaimQu
   return { text, ...(seconds !== undefined && { seconds }) };
 }
 
-export function InterviewTranscript({ transcript, claims, label, tab, onQuote }: InterviewTranscriptProps) {
+export function InterviewTranscript({ interviewId, transcript, claims, label, tab, onQuote }: InterviewTranscriptProps) {
   const caseId = useCaseId();
   const textRef = useRef<HTMLDivElement>(null);
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
+  /** 証言の候補の抽出に送る本文です。押すたびに作り直すため、何回目に押したかも持ちます。 */
+  const [extraction, setExtraction] = useState<{ source: ExtractionSource; count: number } | null>(null);
+
+  const openExtraction = () =>
+    setExtraction((current) => ({
+      source: selectedQuote ? { text: selectedQuote.text, scope: 'selection' } : { text: transcript, scope: 'all' },
+      count: (current?.count ?? 0) + 1,
+    }));
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -104,7 +116,17 @@ export function InterviewTranscript({ transcript, claims, label, tab, onQuote }:
           );
         })}
       </div>
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          // 押したときに本文の選択が外れないよう、フォーカスの移動と選択の変更を止める
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={openExtraction}
+        >
+          証言の候補を抽出
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -117,6 +139,14 @@ export function InterviewTranscript({ transcript, claims, label, tab, onQuote }:
           選んだ範囲を証言にする
         </Button>
       </div>
+      {extraction && (
+        <ClaimExtraction
+          key={extraction.count}
+          interviewId={interviewId}
+          source={extraction.source}
+          onClose={() => setExtraction(null)}
+        />
+      )}
     </section>
   );
 }

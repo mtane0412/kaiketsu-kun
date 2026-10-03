@@ -968,6 +968,74 @@ describe('ClaimForm（聴取）', () => {
 
     expect(screen.queryByLabelText('聴取（任意）')).not.toBeInTheDocument();
   });
+
+  it('証言の候補から開くと、見出し・本文・発言者と経由を入力済みにし、新規作成する人物を証言とあわせて保存する', async () => {
+    const user = userEvent.setup();
+    // 前提: 書籍の著者が、未登録の「元従業員」から聞いた話として、持ち主の車について書いている
+    render(
+      <ClaimForm
+        defaults={{
+          interviewId: bookInterview.id,
+          quote: { text: '持ち主の車は無かったと元従業員は語る' },
+          title: '車の不在',
+          draft: {
+            text: '@湖畔の別荘 に @別荘の持ち主 の車は無かった',
+            mentions: [
+              { kind: 'place', id: 'place-villa', label: '湖畔の別荘' },
+              { kind: 'person', id: 'person-owner', label: '別荘の持ち主' },
+            ],
+          },
+          speaker: { personIds: ['person-former-employee'], viaPersonIds: ['person-caretaker'] },
+          newEntities: [{ kind: 'person', id: 'person-former-employee', name: '元従業員' }],
+        }}
+        onDone={vi.fn()}
+        compact
+      />
+    );
+
+    expect(screen.getByLabelText('見出し（任意）')).toHaveValue('車の不在');
+    expect(screen.getByLabelText('内容')).toHaveValue('@湖畔の別荘 に @別荘の持ち主 の車は無かった');
+    expect(screen.getByRole('button', { name: /^発言者/ })).toHaveTextContent('発言者: 元従業員');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    expect(lastSavedClaim()).toMatchObject({
+      title: '車の不在',
+      speaker: { kind: 'person', personIds: ['person-former-employee'] },
+      viaPersonIds: ['person-caretaker'],
+      placeId: 'place-villa',
+      mentionedPersonIds: ['person-owner'],
+      interviewId: bookInterview.id,
+      quote: { text: '持ち主の車は無かったと元従業員は語る' },
+    });
+    expect(openedCase().persons.find((person) => person.id === 'person-former-employee')).toEqual({
+      id: 'person-former-employee',
+      name: '元従業員',
+      kind: 'individual',
+    });
+  });
+
+  it('証言の候補から新規作成する人物を、保存までに発言者からも本文からも外した場合は作らない', async () => {
+    const user = userEvent.setup();
+    render(
+      <ClaimForm
+        defaults={{
+          draft: { text: '車は無かった', mentions: [] },
+          speaker: { personIds: ['person-former-employee'], viaPersonIds: [] },
+          newEntities: [{ kind: 'person', id: 'person-former-employee', name: '元従業員' }],
+        }}
+        onDone={vi.fn()}
+        compact
+      />
+    );
+
+    // 発言者の元従業員を外す（発言者のいない、ユーザーの推測にする）
+    await openSpeakerPanel(user);
+    const speakerField = screen.getByRole('group', { name: '発言者' });
+    await user.click(within(speakerField).getByRole('checkbox', { name: '元従業員' }));
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    expect(openedCase().persons.some((person) => person.id === 'person-former-employee')).toBe(false);
+  });
 });
 
 describe('ClaimForm（証言とあわせて保存する要素）', () => {

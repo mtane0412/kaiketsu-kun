@@ -1,7 +1,9 @@
 /**
  * ケース設定のメニュー
  *
- * 開いているケースの名前の変更・JSONの書き出し・ケースの削除をまとめたメニューです。
+ * 開いているケースの名前の変更・JSONの書き出し・ケースの削除と、LLM の設定をまとめたメニューです。
+ * LLM の設定（OpenRouter の API キーとモデル）はケースごとではなくブラウザごとの設定ですが、証言の候補の抽出（ClaimExtraction）の前に
+ * 設定しておけるよう、ここにも置きます。入力欄は抽出の画面と共通です（LlmSettingsFields）。
  * いずれも毎日使う操作ではないため、画面の一等地には置かず、サイドバーの足元のメニューに畳んでいます。
  * ケースの追加（新しいケース・JSONの読み込み・架空のサンプル）は、ケースをまたぐ操作のため、ケースの一覧（CaseList）が担います。
  *
@@ -10,7 +12,7 @@
  */
 'use client';
 
-import { Download, Pencil, Settings, Trash2 } from 'lucide-react';
+import { Download, KeyRound, Pencil, Settings, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import {
@@ -40,7 +42,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
+import { FormError } from './forms/fields';
+import { findModelError, LlmSettingsFields, loadInitialLlmSettings, useOpenRouterModels } from './LlmSettingsFields';
 import { casesHref } from './routes';
 
 /** ケース名の入力欄と、その説明を結び付けるためのIDです。 */
@@ -54,6 +59,7 @@ export function CaseSettingsMenu() {
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingLlmSettings, setIsEditingLlmSettings] = useState(false);
   /** 変更の画面を開いている間の、入力中のケース名です。保存するまで、開いているケースには反映しません。 */
   const [draftName, setDraftName] = useState(currentCase.name);
 
@@ -104,6 +110,10 @@ export function CaseSettingsMenu() {
             <Download />
             JSONを書き出す
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setIsEditingLlmSettings(true)}>
+            <KeyRound />
+            LLM の設定
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => setIsDeleting(true)}>
             <Trash2 />
             このケースを削除
@@ -137,6 +147,13 @@ export function CaseSettingsMenu() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isEditingLlmSettings} onOpenChange={setIsEditingLlmSettings}>
+        <DialogContent>
+          {/* 開くたびに保存済みの設定を読み直すよう、開いている間だけ入力欄を描画する */}
+          {isEditingLlmSettings && <LlmSettingsForm onDone={() => setIsEditingLlmSettings(false)} />}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={isDeleting} onOpenChange={setIsDeleting}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -152,5 +169,49 @@ export function CaseSettingsMenu() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * 「LLM の設定」の画面の中身です。保存すると、証言の候補の抽出で入力済みの状態で使います。
+ * API キーを空にして保存すると、保存済みのキーを消せます。モデルの一覧にないモデルは保存しません。
+ */
+function LlmSettingsForm({ onDone }: { onDone: () => void }) {
+  const [initial] = useState(loadInitialLlmSettings);
+  const [settings, setSettings] = useState<LlmSettings>(initial.settings);
+  const [error, setError] = useState<string | null>(null);
+  const modelList = useOpenRouterModels();
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const modelError = findModelError(settings.model, modelList);
+    if (modelError !== null) {
+      setError(modelError);
+      return;
+    }
+    saveLlmSettings({ apiKey: settings.apiKey.trim(), model: settings.model.trim() });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>LLM の設定</DialogTitle>
+        <DialogDescription>
+          聴取の本文から証言の候補を抽出するときに使う、OpenRouter の API キーとモデルです。API キーを空にして保存すると、保存済みのキーを消せます。
+        </DialogDescription>
+      </DialogHeader>
+      <div className="my-4 space-y-2">
+        <FormError message={initial.error} />
+        <LlmSettingsFields settings={settings} onChange={setSettings} modelList={modelList} />
+        <FormError message={error} />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onDone}>
+          やめる
+        </Button>
+        <Button type="submit">保存</Button>
+      </DialogFooter>
+    </form>
   );
 }

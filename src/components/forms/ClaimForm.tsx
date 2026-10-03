@@ -20,6 +20,9 @@
  * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
  * 聴取の本文から書き起こす場合（defaults.quote）は、引用の原文から時刻だけの行を除いた文字列を本文の初期値にし、
  * 引用を証言とあわせて保存します。引用は編集でも保持し、「引用を外す」で外せます（src/domain/transcript.ts）。
+ * LLM が抽出した証言の候補から開く場合（src/domain/claim-extraction.ts の candidateToClaimDraft）は、見出し・本文の下書き・
+ * 発言者と経由・新規作成するエンティティも defaults で受け取ります。新規作成するエンティティは、この入力欄で「@」から
+ * 新規作成したものと同じく、保存するまでに本文からも発言者・経由からも外した場合は作りません。
  *
  * speakerRequiredMessage を渡すと、発言者を必須にし、発言者を選ばずに保存しようとしたときにその文を表示します
  * （別の人物の反応を記録する場合など、ユーザーの推測にしてはならない場合に使います）。
@@ -50,6 +53,7 @@ import { formatTimeRef } from '@/domain/time-ref';
 import { formatInterviewLabel } from '@/domain/interviews';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
+import type { NewEntity } from '@/domain/claim-extraction';
 import type { Claim, ClaimQuote, Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
@@ -70,6 +74,14 @@ export type ClaimDefaults = {
   interviewId?: Id;
   /** 聴取の本文から選んだ引用です。指定すると、引用の原文から時刻だけの行を除いた文字列を、本文の初期値にします。 */
   quote?: ClaimQuote;
+  /** 見出しの初期値です。 */
+  title?: string;
+  /** 本文の下書きの初期値です。指定すると、引用から作る本文の初期値より優先します。 */
+  draft?: ClaimDraft;
+  /** 発言者と経由の初期値です。指定すると、聴取の相手を発言者にする初期値より優先します。 */
+  speaker?: SpeakerDraft;
+  /** 本文の下書き・発言者・経由が参照する、まだ登録していないエンティティです。証言とあわせて保存します。 */
+  newEntities?: NewEntity[];
 };
 
 /** 聴取を選ばない場合の、選択肢の値です。 */
@@ -111,13 +123,14 @@ export function ClaimForm({
   const [draft, setDraft] = useState<ClaimDraft>(() =>
     initial
       ? claimToDraft(initial, currentCase)
-      : { text: defaults?.quote ? stripTimestampLines(defaults.quote.text) : '', mentions: [] }
+      : (defaults?.draft ?? { text: defaults?.quote ? stripTimestampLines(defaults.quote.text) : '', mentions: [] })
   );
   const [quote, setQuote] = useState<ClaimQuote | undefined>(initial?.quote ?? defaults?.quote);
-  const [title, setTitle] = useState(initial?.title ?? '');
+  const [title, setTitle] = useState(initial?.title ?? defaults?.title ?? '');
   const [interviewId, setInterviewId] = useState<Id>(() => initial?.interviewId ?? defaults?.interviewId ?? NO_INTERVIEW);
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => {
     const presetInterview = currentCase.interviews.find((interview) => interview.id === defaults?.interviewId);
+    if (initial === undefined && defaults?.speaker !== undefined) return defaults.speaker;
     if (initial === undefined && presetInterview !== undefined) {
       return { personIds: [presetInterview.subjectPersonId], viaPersonIds: [] };
     }
@@ -125,7 +138,9 @@ export function ClaimForm({
   });
   const interviewFieldId = useId();
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
-  const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>([]);
+  const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>(() =>
+    (defaults?.newEntities ?? []).map(({ kind, id, name }) => ({ mention: { kind, id, label: name }, entry: createEntry(kind, id, name) }))
+  );
   const [error, setError] = useState<string | null>(null);
 
   const candidates = [...caseToCandidates(currentCase), ...pending.map((item) => item.mention)];

@@ -10,6 +10,7 @@
  *
  * 本文（記事の本文・動画の文字起こし）を持つ聴取は、「本文を開く」で本文を表示し、範囲を選んで証言を書き起こせます（InterviewTranscript）。
  * 書き起こしの入力欄は、「この聴取の証言を書き足す」と同じ入力欄に、選んだ範囲を引用として渡して開きます。
+ * 本文から LLM で証言の候補を抽出する画面（ClaimExtraction）も、本文の下に開きます（InterviewTranscript の「証言の候補を抽出」）。
  * URLを持つ聴取には、資料を新しいタブで開くリンクを置きます。
  *
  * 注意: 証言がひもづいている聴取は削除できません（参照の整合性の検証で拒否され、理由を表示します）。
@@ -128,6 +129,7 @@ export function InterviewSection({ personId, tab }: InterviewSectionProps) {
                 )}
                 {view.interview.transcript !== undefined && openTranscriptIds.has(view.interview.id) && (
                   <InterviewTranscript
+                    interviewId={view.interview.id}
                     transcript={view.interview.transcript}
                     claims={view.claims}
                     label={`${timeLabel}の聴取の本文`}
