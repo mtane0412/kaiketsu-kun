@@ -149,12 +149,12 @@ describe('checkClaimQuote', () => {
   /** 管理人へのインタビュー動画の聴取です（文字起こしを貼り付けています）。 */
   const videoInterview: Interview = {
     id: 'interview-video',
-    subjectPersonId: 'person-caretaker',
+    subjectPersonIds: ['person-caretaker'],
     url: 'https://www.youtube.com/watch?v=abc',
     transcript: youtubeTranscript,
   };
   /** 文字起こしを貼り付けていない聴取です。 */
-  const blankInterview: Interview = { id: 'interview-blank', subjectPersonId: 'person-caretaker' };
+  const blankInterview: Interview = { id: 'interview-blank', subjectPersonIds: ['person-caretaker'] };
 
   const baseClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker') as Claim;
   const caseWith = (claim: Claim): Case => ({

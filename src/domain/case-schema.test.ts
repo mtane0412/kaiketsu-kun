@@ -565,7 +565,7 @@ describe('parseCase（人物のアイコンの文字）', () => {
 /** 管理人が、書籍の著者の取材に応じた機会です（管理人の証言は書籍を経由して伝わっています）。 */
 const bookInterview = {
   id: 'interview-caretaker-book',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   interviewerPersonId: 'person-book',
   at: '2018-05',
   placeId: 'place-villa',
@@ -596,14 +596,14 @@ describe('parseCase（聴取）', () => {
   it('証言が存在しない聴取を参照している場合は拒否する', () => {
     const caseData = { ...caseWithInterviews, interviews: [] };
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない聴取を参照しています: interview-caretaker-book/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない資料を参照しています: interview-caretaker-book/);
   });
 
   it('聴取の相手・聴取者・場所が存在しない場合は拒否する', () => {
     const caseData = {
       ...sampleFictionalCase,
       interviews: [
-        { id: 'interview-broken', subjectPersonId: 'person-unknown', interviewerPersonId: 'person-gone', placeId: 'place-gone' },
+        { id: 'interview-broken', subjectPersonIds: ['person-unknown'], interviewerPersonId: 'person-gone', placeId: 'place-gone' },
       ],
     };
 
@@ -628,13 +628,13 @@ describe('parseCase（聴取）', () => {
     };
 
     expect(() => parseCase(toJsonData(caseData))).toThrow(
-      /聴取の相手が、証言の発言者にも経由にも含まれていません: claim-neighbor/
+      /資料の相手が、証言の発言者にも経由にも含まれていません: claim-neighbor/
     );
   });
 
   it('聴取の相手が経由の一段である証言は、ひもづけを受け付ける（伝聞のその段が述べた機会として扱う）', () => {
     // 前提: 県警の発表（防犯カメラの記録を伝えた）を、聴取として記録している
-    const policeAnnouncement = { id: 'interview-police-press', subjectPersonId: 'person-police', at: '1998-08-13' };
+    const policeAnnouncement = { id: 'interview-police-press', subjectPersonIds: ['person-police'], at: '1998-08-13' };
     const caseData = {
       ...sampleFictionalCase,
       interviews: [policeAnnouncement],
@@ -646,6 +646,34 @@ describe('parseCase（聴取）', () => {
     expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-police-camera')?.interviewId).toBe(
       'interview-police-press'
     );
+  });
+});
+
+describe('parseCase（資料の相手が複数）', () => {
+  it('相手を1人だけ持っていた頃のデータ（subjectPersonId）は、相手の一覧（subjectPersonIds）に直して受け付ける', () => {
+    const { subjectPersonIds: _subjectPersonIds, ...legacyInterview } = bookInterview;
+    const caseData = { ...caseWithInterviews, interviews: [{ ...legacyInterview, subjectPersonId: 'person-caretaker' }] };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([bookInterview]);
+  });
+
+  it('相手が1人もいない資料は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: [] }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.subjectPersonIds/);
+  });
+
+  it('同じ人物を相手に2回選んだ資料は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: ['person-caretaker', 'person-caretaker'] }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/資料の相手に同じ人物が重なっています: interview-caretaker-book/);
+  });
+
+  it('相手のうち1人でも証言の発言者か経由に含まれていれば、ひもづけを受け付ける', () => {
+    // 前提: 書籍の取材には、管理人と隣家の住人がそろって応じた
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: ['person-neighbor', 'person-caretaker'] }] };
+
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(bookInterview.id);
   });
 });
 

@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 /** 管理人への県警の初回の聴取です（事件の翌日。証言はまだひもづけていません）。 */
 const firstInterview: Interview = {
   id: 'interview-first',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   interviewerPersonId: 'person-police',
   at: '1998-08-13T10:00',
   placeId: 'place-villa',
@@ -28,7 +28,7 @@ const firstInterview: Interview = {
 /** 20年後の、書籍の著者による取材です（管理人の証言をひもづけています）。 */
 const bookInterview: Interview = {
   id: 'interview-book',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   interviewerPersonId: 'person-book',
   at: '2018-05',
 };
@@ -60,7 +60,7 @@ describe('InterviewSection', () => {
 
     const interviewHeading = within(history).getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent);
     expect(interviewHeading).toEqual(['1998年8月13日 10:00', '2018年5月']);
-    expect(within(history).getByText('聴取者: 県警 / 場所: 湖畔の別荘 / 立場: 参考人 / 資料: 供述調書 第1号')).toBeInTheDocument();
+    expect(within(history).getByText('聴取者: 県警 / 場所: 湖畔の別荘 / 立場: 参考人 / 資料番号: 供述調書 第1号')).toBeInTheDocument();
   });
 
   it('各聴取の下に、その聴取で得た証言を、証言の詳細へのリンクで並べる', () => {
@@ -70,14 +70,14 @@ describe('InterviewSection', () => {
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
-    expect(within(history).getByText('この聴取にひもづく証言は、まだありません。')).toBeInTheDocument();
+    expect(within(history).getByText('この資料にひもづく証言は、まだありません。')).toBeInTheDocument();
   });
 
   it('聴取が1件も無い人物では、聴取の登録を促す案内を表示する', () => {
     render(<InterviewSection personId="person-neighbor" tab="timeline" />);
 
     const history = screen.getByRole('region', { name: '供述の変遷' });
-    expect(within(history).getByRole('button', { name: '聴取を追加' })).toBeInTheDocument();
+    expect(within(history).getByRole('button', { name: '資料を追加' })).toBeInTheDocument();
     expect(within(history).queryByRole('listitem')).not.toBeInTheDocument();
   });
 
@@ -85,17 +85,17 @@ describe('InterviewSection', () => {
     const user = userEvent.setup();
     renderCaretakerStatementHistory();
 
-    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
-    const registerButton = screen.getByRole('region', { name: '聴取の登録' });
+    await user.click(screen.getByRole('button', { name: '資料を追加' }));
+    const registerButton = screen.getByRole('region', { name: '資料の登録' });
     await user.type(within(registerButton).getByLabelText('日時（任意）'), '1998年8月20日14時');
     await user.selectOptions(within(registerButton).getByLabelText('聴取者または媒体（任意）'), 'person-police');
     await user.selectOptions(within(registerButton).getByLabelText('場所（任意）'), 'place-villa');
     await user.type(within(registerButton).getByLabelText('相手の立場（任意）'), '参考人');
     await user.type(within(registerButton).getByLabelText('資料番号（任意）'), '供述調書 第2号');
-    await user.click(within(registerButton).getByRole('button', { name: '聴取を保存' }));
+    await user.click(within(registerButton).getByRole('button', { name: '資料を保存' }));
 
     expect(openedCase().interviews.at(-1)).toMatchObject({
-      subjectPersonId: 'person-caretaker',
+      subjectPersonIds: ['person-caretaker'],
       interviewerPersonId: 'person-police',
       at: '1998-08-20T14:00',
       placeId: 'place-villa',
@@ -108,36 +108,36 @@ describe('InterviewSection', () => {
     const user = userEvent.setup();
     renderCaretakerStatementHistory();
 
-    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
-    await user.click(within(screen.getByRole('region', { name: '聴取の登録' })).getByRole('button', { name: '聴取を保存' }));
+    await user.click(screen.getByRole('button', { name: '資料を追加' }));
+    await user.click(within(screen.getByRole('region', { name: '資料の登録' })).getByRole('button', { name: '資料を保存' }));
 
     const addedInterview = openedCase().interviews.at(-1);
-    expect(addedInterview).toEqual({ id: expect.any(String), subjectPersonId: 'person-caretaker' });
+    expect(addedInterview).toEqual({ id: expect.any(String), subjectPersonIds: ['person-caretaker'] });
   });
 
   it('日時として解釈できない表記では、エラーを示して保存しない', async () => {
     const user = userEvent.setup();
     renderCaretakerStatementHistory();
 
-    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
-    const registerButton = screen.getByRole('region', { name: '聴取の登録' });
+    await user.click(screen.getByRole('button', { name: '資料を追加' }));
+    const registerButton = screen.getByRole('region', { name: '資料の登録' });
     await user.type(within(registerButton).getByLabelText('日時（任意）'), '事件の翌週');
-    await user.click(within(registerButton).getByRole('button', { name: '聴取を保存' }));
+    await user.click(within(registerButton).getByRole('button', { name: '資料を保存' }));
 
     expect(within(registerButton).getByText(/日時を解釈できません/)).toBeInTheDocument();
     expect(openedCase().interviews).toHaveLength(2);
   });
 
-  it('登録済みの聴取を編集して保存すると、同じ聴取を書き換える', async () => {
+  it('登録済みの資料を編集して保存すると、同じ聴取を書き換える', async () => {
     const user = userEvent.setup();
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取を編集' }));
-    const editButton = screen.getByRole('region', { name: '聴取の編集' });
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料を編集' }));
+    const editButton = screen.getByRole('region', { name: '資料の編集' });
     expect(within(editButton).getByLabelText('日時（任意）')).toHaveValue('1998-08-13T10:00');
     await user.clear(within(editButton).getByLabelText('相手の立場（任意）'));
     await user.type(within(editButton).getByLabelText('相手の立場（任意）'), '重要参考人');
-    await user.click(within(editButton).getByRole('button', { name: '聴取を保存' }));
+    await user.click(within(editButton).getByRole('button', { name: '資料を保存' }));
 
     expect(openedCase().interviews.find((interview) => interview.id === firstInterview.id)).toEqual({
       ...firstInterview,
@@ -149,7 +149,7 @@ describe('InterviewSection', () => {
     const user = userEvent.setup();
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取を削除' }));
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料を削除' }));
     await user.click(screen.getByRole('button', { name: '削除する' }));
 
     expect(openedCase().interviews.map((interview) => interview.id)).toEqual([bookInterview.id]);
@@ -159,19 +159,19 @@ describe('InterviewSection', () => {
     const user = userEvent.setup();
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '2018年5月の聴取を削除' }));
+    await user.click(within(history).getByRole('button', { name: '2018年5月の資料を削除' }));
     await user.click(screen.getByRole('button', { name: '削除する' }));
 
     expect(within(history).getByText(/他のデータから参照されているため削除できません/)).toBeInTheDocument();
     expect(openedCase().interviews).toHaveLength(2);
   });
 
-  it('「この聴取の証言を書き足す」から書いた証言は、その聴取にひもづき、聴取の相手の発言として保存する', async () => {
+  it('「この資料の証言を書き足す」から書いた証言は、その聴取にひもづき、聴取の相手の発言として保存する', async () => {
     const user = userEvent.setup();
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の証言を書き足す' }));
-    const appendButton = screen.getByRole('region', { name: '聴取の証言の書き足し' });
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の証言を書き足す' }));
+    const appendButton = screen.getByRole('region', { name: '資料の証言の書き足し' });
     await user.type(within(appendButton).getByLabelText('内容'), '見回りは夜10時ごろで、別荘には明かりがついていた。');
     await user.click(within(appendButton).getByRole('button', { name: '書き足す' }));
 
@@ -179,17 +179,49 @@ describe('InterviewSection', () => {
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
       interviewId: firstInterview.id,
     });
-    expect(screen.queryByRole('region', { name: '聴取の証言の書き足し' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '資料の証言の書き足し' })).not.toBeInTheDocument();
   });
+  describe('相手が複数の資料', () => {
+    /** 管理人と隣家の住人がそろって応じた記者会見です。 */
+    const pressConference: Interview = { id: 'interview-press', subjectPersonIds: ['person-caretaker', 'person-neighbor'], at: '1998-08-14' };
+
+    beforeEach(() => {
+      openTestCase({ ...caseWithInterviews, interviews: [...caseWithInterviews.interviews, pressConference] });
+    });
+
+    it('相手のどの人物の供述の変遷にも並べ、相手の全員を示す', () => {
+      render(<InterviewSection personId="person-neighbor" tab="timeline" />);
+      const history = screen.getByRole('region', { name: '供述の変遷' });
+
+      expect(within(history).getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual(['1998年8月14日']);
+      expect(within(history).getByText('相手: 管理人、隣家の住人')).toBeInTheDocument();
+    });
+
+    it('「この資料の証言を書き足す」では、開いている人物を発言者に選んだ状態で始まる', async () => {
+      const user = userEvent.setup();
+      render(<InterviewSection personId="person-neighbor" tab="timeline" />);
+
+      await user.click(screen.getByRole('button', { name: '1998年8月14日の資料の証言を書き足す' }));
+      const appendSection = screen.getByRole('region', { name: '資料の証言の書き足し' });
+      await user.type(within(appendSection).getByLabelText('内容'), '夜9時に明かりが見えた。');
+      await user.click(within(appendSection).getByRole('button', { name: '書き足す' }));
+
+      expect(openedCase().claims.at(-1)).toMatchObject({
+        speaker: { kind: 'person', personIds: ['person-neighbor'] },
+        interviewId: pressConference.id,
+      });
+    });
+  });
+
   it('URLと本文を入力して保存すると、聴取に資料のURLと本文を持たせる', async () => {
     const user = userEvent.setup();
     renderCaretakerStatementHistory();
 
-    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
-    const registration = screen.getByRole('region', { name: '聴取の登録' });
+    await user.click(screen.getByRole('button', { name: '資料を追加' }));
+    const registration = screen.getByRole('region', { name: '資料の登録' });
     await user.type(within(registration).getByLabelText('URL（任意）'), 'https://www.youtube.com/watch?v=abc');
     await user.type(within(registration).getByLabelText('本文・文字起こし（任意）'), '0:05{Enter}あの夜は別荘が真っ暗でした');
-    await user.click(within(registration).getByRole('button', { name: '聴取を保存' }));
+    await user.click(within(registration).getByRole('button', { name: '資料を保存' }));
 
     expect(openedCase().interviews.at(-1)).toMatchObject({
       url: 'https://www.youtube.com/watch?v=abc',
@@ -201,10 +233,10 @@ describe('InterviewSection', () => {
     const user = userEvent.setup();
     renderCaretakerStatementHistory();
 
-    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
-    const registration = screen.getByRole('region', { name: '聴取の登録' });
+    await user.click(screen.getByRole('button', { name: '資料を追加' }));
+    const registration = screen.getByRole('region', { name: '資料の登録' });
     await user.type(within(registration).getByLabelText('URL（任意）'), '動画のページ');
-    await user.click(within(registration).getByRole('button', { name: '聴取を保存' }));
+    await user.click(within(registration).getByRole('button', { name: '資料を保存' }));
 
     expect(within(registration).getByText(/URLは http か https/)).toBeInTheDocument();
     expect(openedCase().interviews).toHaveLength(2);
@@ -214,7 +246,7 @@ describe('InterviewSection', () => {
     openTestCase(withVideoInterview());
     const history = renderCaretakerStatementHistory();
 
-    const link = within(history).getByRole('link', { name: '1998年8月13日 10:00の聴取の資料を開く' });
+    const link = within(history).getByRole('link', { name: '1998年8月13日 10:00の資料のURLを開く' });
     expect(link).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -225,8 +257,8 @@ describe('InterviewSection', () => {
     openTestCase(withVideoInterview());
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
-    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の聴取の本文' });
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の本文を開く' }));
+    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
     const quoteButton = within(transcriptRegion).getByRole('button', { name: '選んだ範囲を証言にする' });
     expect(quoteButton).toBeDisabled();
 
@@ -234,7 +266,7 @@ describe('InterviewSection', () => {
     selectTextIn(within(transcriptRegion).getByTestId('transcript-text'), '0:05\nあの夜は別荘が真っ暗でした');
     await user.click(quoteButton);
 
-    const composer = screen.getByRole('region', { name: '聴取の証言の書き足し' });
+    const composer = screen.getByRole('region', { name: '資料の証言の書き足し' });
     expect(within(composer).getByLabelText('内容')).toHaveValue('あの夜は別荘が真っ暗でした');
     expect(within(composer).getByRole('group', { name: '引用' })).toHaveTextContent('0:05');
     await user.click(within(composer).getByRole('button', { name: '書き足す' }));
@@ -252,7 +284,7 @@ describe('InterviewSection', () => {
     openTestCase(withVideoInterview());
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の本文を開く' }));
     selectTextIn(within(history).getByRole('heading', { name: '1998年8月13日 10:00' }), '1998年8月13日');
 
     expect(screen.getByRole('button', { name: '選んだ範囲を証言にする' })).toBeDisabled();
@@ -269,8 +301,8 @@ describe('InterviewSection', () => {
     );
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
-    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の聴取の本文' });
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の本文を開く' }));
+    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
 
     const quoted = within(transcriptRegion).getByRole('link', { name: /^書き起こした証言:/ });
     expect(quoted).toHaveTextContent('別荘が真っ暗でした');
@@ -333,7 +365,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
 
   /** 本文を開き、「証言の候補を抽出」を押して、送る前の確認を返します。 */
   async function openExtraction(user: UserEvent, history: HTMLElement) {
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の本文を開く' }));
     await user.click(screen.getByRole('button', { name: '証言の候補を抽出' }));
     return screen.getByRole('region', { name: '証言の候補の抽出' });
   }
@@ -489,8 +521,8 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     openTestCase(withArticleInterview());
     const history = renderCaretakerStatementHistory();
 
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
-    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の聴取の本文' });
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料の本文を開く' }));
+    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
     selectTextIn(within(transcriptRegion).getByTestId('transcript-text'), '別荘の持ち主の車は、翌朝まで戻らなかった。');
     await user.click(screen.getByRole('button', { name: '証言の候補を抽出' }));
     const extraction = screen.getByRole('region', { name: '証言の候補の抽出' });

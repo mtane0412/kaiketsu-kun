@@ -259,7 +259,7 @@ describe('ClaimDetail', () => {
 /** 管理人へのインタビュー動画の聴取です（文字起こしを貼り付けています）。 */
 const videoInterview: Interview = {
   id: 'interview-video',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   url: 'https://www.youtube.com/watch?v=abc',
   transcript: '0:00\nこんばんは、管理人です\n12:34\nあの夜は別荘が真っ暗でした',
 };
@@ -300,7 +300,7 @@ describe('ClaimDetail（引用）', () => {
     expect(within(quoteSection).getByRole('blockquote')).toHaveTextContent(/^あの夜は別荘が真っ暗でした$/);
     expect(within(screen.getByRole('group', { name: '引用' })).queryByText(/^12:34/)).not.toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: '引用' })).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
-    expect(within(quoteSection).queryByText(/聴取の本文に見つかりません/)).not.toBeInTheDocument();
+    expect(within(quoteSection).queryByText(/資料の本文に見つかりません/)).not.toBeInTheDocument();
   });
 
   it('YouTube 以外の資料では、再生位置を付けずに資料を開くリンクを置く', () => {
@@ -315,7 +315,7 @@ describe('ClaimDetail（引用）', () => {
     openTestCase(caseWithQuote('あの夜は明かりがついていました'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/聴取の本文に見つかりません/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/資料の本文に見つかりません/)).toBeInTheDocument();
   });
 
   it('聴取に本文が無い場合は、引用を照らし合わせられないことを示す', () => {

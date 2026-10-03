@@ -74,7 +74,7 @@ function describeCandidate(candidate: ClaimCandidate, subjectName: string): { te
       ? formatTimeRef(candidate.when)
       : candidate.whenText && `「${candidate.whenText}」（日時の表記として読めないため、日時なしで書き起こします）`;
   return [
-    { term: '発言者', description: candidate.speaker ? nameWithStatus(candidate.speaker) : `${subjectName}（聴取の相手）` },
+    { term: '発言者', description: candidate.speaker ? nameWithStatus(candidate.speaker) : `${subjectName}（資料の相手）` },
     { term: '経由', description: candidate.via.map(nameWithStatus).join(' → ') },
     { term: '日時', description: whenDescription ?? '' },
     { term: '場所', description: candidate.place ? nameWithStatus(candidate.place) : '' },
@@ -93,9 +93,11 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   const [adopting, setAdopting] = useState<Adopting | null>(null);
 
   const interview = currentCase.interviews.find((item) => item.id === interviewId);
-  if (interview === undefined) throw new Error(`聴取が見つかりません: ${interviewId}`);
-  const subjectName = currentCase.persons.find((person) => person.id === interview.subjectPersonId)?.name;
-  if (subjectName === undefined) throw new Error(`聴取の相手が見つかりません: ${interview.subjectPersonId}`);
+  if (interview === undefined) throw new Error(`資料が見つかりません: ${interviewId}`);
+  // 発言者の分からない候補は最初の相手の発言として扱うため（candidateToClaimDraft）、LLM にも最初の相手を資料の主として伝える
+  const [primarySubjectId] = interview.subjectPersonIds;
+  const subjectName = currentCase.persons.find((person) => person.id === primarySubjectId)?.name;
+  if (subjectName === undefined) throw new Error(`資料の相手が見つかりません: ${primarySubjectId}`);
   const tooLong = source.text.length > MAX_EXTRACTION_TEXT_LENGTH;
 
   const handleSend = async (event: FormEvent) => {

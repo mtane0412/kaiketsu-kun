@@ -38,7 +38,7 @@ function reasonLabelOf(reason: SimilarityReason): string {
     case 'nearTime':
       return `日時が近い（${formatGap(reason.gapMs)}）`;
     case 'sameInterview':
-      return '同じ聴取';
+      return '同じ資料';
   }
 }
 
@@ -58,7 +58,7 @@ export function SimilarClaimsSection({ claimId, tab }: SimilarClaimsSectionProps
     <section aria-label={SECTION_LABEL} className="space-y-2">
       <h3 className="text-sm font-semibold">
         {SECTION_LABEL}
-        <span className="ml-2 text-xs font-normal text-muted-foreground">共有する人物・場所・日時・聴取から計算</span>
+        <span className="ml-2 text-xs font-normal text-muted-foreground">共有する人物・場所・日時・資料から計算</span>
       </h3>
       <ul className="space-y-2">
         {similars.map(({ view, reasons, crossCheckKinds, sharedHypotheses }) => (

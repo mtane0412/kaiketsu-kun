@@ -31,7 +31,7 @@ type InterviewTranscriptProps = {
   transcript: string;
   /** この聴取で得た証言です。引用を持つ証言の引用を、本文の中に示します。 */
   claims: ClaimView[];
-  /** 本文の領域の名前です（例「1998年8月13日 10:00の聴取の本文」）。 */
+  /** 本文の領域の名前です（例「1998年8月13日 10:00の資料の本文」）。 */
   label: string;
   /** リンク先のURLに引き継ぐ、開いているタブです。 */
   tab: TabKey;

@@ -331,7 +331,7 @@ describe('未了事項', () => {
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
 const bookInterview: Interview = {
   id: 'interview-caretaker-book',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   interviewerPersonId: 'person-book',
   at: '2018-05',
 };
@@ -355,7 +355,7 @@ describe('聴取', () => {
     if (!neighborResidentClaim) throw new Error('前提の証言がありません');
 
     expect(() => useCaseStore.getState().upsert('claims', { ...neighborResidentClaim, interviewId: bookInterview.id })).toThrow(
-      '聴取の相手が、証言の発言者にも経由にも含まれていません'
+      '資料の相手が、証言の発言者にも経由にも含まれていません'
     );
     expect(getOpenCase()).toEqual(beforeLink);
   });
@@ -363,7 +363,7 @@ describe('聴取', () => {
   it('証言がひもづいている聴取は削除できず、証言がひもづいていない聴取は削除できる', () => {
     useCaseStore.getState().upsertMany([
       { key: 'interviews', entity: bookInterview },
-      { key: 'interviews', entity: { id: 'interview-empty', subjectPersonId: 'person-neighbor' } },
+      { key: 'interviews', entity: { id: 'interview-empty', subjectPersonIds: ['person-neighbor'] } },
     ]);
     const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
     if (!caretakerClaim) throw new Error('前提の証言がありません');

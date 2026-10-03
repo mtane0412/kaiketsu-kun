@@ -133,7 +133,7 @@ describe('PersonDetail', () => {
     render(<PersonDetail personId="person-caretaker" />);
 
     const history = screen.getByRole('region', { name: '供述の変遷' });
-    expect(within(history).getByRole('button', { name: '聴取を追加' })).toBeInTheDocument();
+    expect(within(history).getByRole('button', { name: '資料を追加' })).toBeInTheDocument();
   });
 
   it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {

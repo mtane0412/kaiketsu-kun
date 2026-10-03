@@ -884,7 +884,7 @@ describe('ClaimForm（聴取）', () => {
   /** 管理人が、書籍の著者の取材に応じた機会です。 */
   const bookInterview = {
     id: 'interview-caretaker-book',
-    subjectPersonId: 'person-caretaker',
+    subjectPersonIds: ['person-caretaker'],
     interviewerPersonId: 'person-book',
     at: '2018-05',
   };
@@ -899,13 +899,13 @@ describe('ClaimForm（聴取）', () => {
     const user = userEvent.setup();
     render(<ClaimForm initial={caretakerClaim} onDone={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText('聴取（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
+    await user.selectOptions(screen.getByLabelText('資料（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.interviewId).toBe(bookInterview.id);
   });
 
-  it('聴取を「聴取なし」に戻すと、聴取の項目を持たない証言として保存する', async () => {
+  it('聴取を「資料なし」に戻すと、聴取の項目を持たない証言として保存する', async () => {
     const user = userEvent.setup();
     const linkedClaim = { ...caretakerClaim, interviewId: bookInterview.id };
     openTestCase({
@@ -915,7 +915,7 @@ describe('ClaimForm（聴取）', () => {
     });
     render(<ClaimForm initial={linkedClaim} onDone={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText('聴取（任意）'), '聴取なし');
+    await user.selectOptions(screen.getByLabelText('資料（任意）'), '資料なし');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)).not.toHaveProperty('interviewId');
@@ -926,7 +926,7 @@ describe('ClaimForm（聴取）', () => {
     render(<ClaimForm onDone={vi.fn()} />);
 
     await user.type(screen.getByLabelText('内容'), '見回りは夜10時ごろだった。');
-    await user.selectOptions(screen.getByLabelText('聴取（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
+    await user.selectOptions(screen.getByLabelText('資料（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
 
     expect(screen.getByRole('button', { name: /^発言者/ })).toHaveTextContent('発言者: 管理人');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
@@ -942,10 +942,10 @@ describe('ClaimForm（聴取）', () => {
 
     await user.type(screen.getByLabelText('内容'), '夜9時に明かりが見えた。');
     await chooseSpeakers(user, ['隣家の住人']);
-    await user.selectOptions(screen.getByLabelText('聴取（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
+    await user.selectOptions(screen.getByLabelText('資料（任意）'), '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(screen.getByText(/聴取の相手（管理人）を、発言者か経由に選んでください/)).toBeInTheDocument();
+    expect(screen.getByText(/資料の相手（管理人）を、発言者か経由に選んでください/)).toBeInTheDocument();
     expect(openedCase().claims).toHaveLength(sampleFictionalCase.claims.length);
   });
 
@@ -953,7 +953,7 @@ describe('ClaimForm（聴取）', () => {
     const user = userEvent.setup();
     render(<ClaimForm defaults={{ interviewId: bookInterview.id }} onDone={vi.fn()} compact />);
 
-    expect(screen.getByLabelText('聴取（任意）')).toHaveValue(bookInterview.id);
+    expect(screen.getByLabelText('資料（任意）')).toHaveValue(bookInterview.id);
     await user.type(screen.getByLabelText('内容'), '持ち主の車は無かった。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
@@ -963,10 +963,51 @@ describe('ClaimForm（聴取）', () => {
     });
   });
 
+  describe('相手が複数の聴取', () => {
+    /** 管理人と隣家の住人がそろって応じた、記者会見です。 */
+    const pressConference = { id: 'interview-press', subjectPersonIds: ['person-caretaker', 'person-neighbor'], at: '1998-08-14' };
+
+    beforeEach(() => {
+      openTestCase({ ...sampleFictionalCase, interviews: [pressConference] });
+    });
+
+    it('聴取を指定して開いても、だれが述べたかは決められないため、発言者を選ばずに始まる', () => {
+      render(<ClaimForm defaults={{ interviewId: pressConference.id }} onDone={vi.fn()} compact />);
+
+      expect(screen.getByRole('button', { name: /^発言者/ })).not.toHaveTextContent(/管理人|隣家の住人/);
+    });
+
+    it('相手のうち1人を発言者に選べば、聴取にひもづけて保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm defaults={{ interviewId: pressConference.id }} onDone={vi.fn()} compact />);
+
+      await user.type(screen.getByLabelText('内容'), '夜9時に明かりが見えた。');
+      await chooseSpeakers(user, ['隣家の住人']);
+      await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+      expect(lastSavedClaim()).toMatchObject({
+        speaker: { kind: 'person', personIds: ['person-neighbor'] },
+        interviewId: pressConference.id,
+      });
+    });
+
+    it('相手のだれも発言者にも経由にも無い場合は、相手の名前を挙げたエラーを示して保存しない', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm defaults={{ interviewId: pressConference.id }} onDone={vi.fn()} compact />);
+
+      await user.type(screen.getByLabelText('内容'), '持ち主の車は無かった。');
+      await chooseSpeakers(user, ['別荘の持ち主']);
+      await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+      expect(screen.getByText(/資料の相手（管理人、隣家の住人）のいずれかを、発言者か経由に選んでください/)).toBeInTheDocument();
+      expect(openedCase().claims).toHaveLength(sampleFictionalCase.claims.length);
+    });
+  });
+
   it('ボード上の入力欄（compact）で聴取を指定していない場合は、聴取の欄を表示しない', () => {
     render(<ClaimForm onDone={vi.fn()} compact />);
 
-    expect(screen.queryByLabelText('聴取（任意）')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('資料（任意）')).not.toBeInTheDocument();
   });
 
   it('証言の候補から開くと、見出し・本文・発言者と経由を入力済みにし、新規作成する人物を証言とあわせて保存する', async () => {

@@ -18,9 +18,9 @@ const articleTranscript = [
   '近くに住む山田花子さんは「庭に黒い車が止まっていた」と話した。',
 ].join('\n');
 
-/** 新聞（聴取の相手）・県警・山田花子・別荘を登録したケースです。 */
+/** 新聞（資料の相手）・県警・山田花子・別荘を登録したケースです。 */
 function createCase(overrides: Partial<Case> = {}): Case {
-  const interview: Interview = { id: 'interview-article', subjectPersonId: 'person-newspaper', transcript: articleTranscript };
+  const interview: Interview = { id: 'interview-article', subjectPersonIds: ['person-newspaper'], transcript: articleTranscript };
   return {
     id: 'case-1',
     name: '湖畔の別荘の事件',
@@ -98,7 +98,7 @@ describe('buildClaimCandidates', () => {
 
   it('動画の文字起こしでは、引用の位置から動画の位置（秒数）を補う', () => {
     const videoTranscript = ['0:00', 'こんばんは、管理人です', '1:05', 'あの夜は別荘が真っ暗でした'].join('\n');
-    const target = createCase({ interviews: [{ id: 'interview-video', subjectPersonId: 'person-hanako', transcript: videoTranscript }] });
+    const target = createCase({ interviews: [{ id: 'interview-video', subjectPersonIds: ['person-hanako'], transcript: videoTranscript }] });
 
     const result = buildClaimCandidates(target, 'interview-video', [extracted({ quote: 'あの夜は別荘が真っ暗でした' })]);
 
@@ -156,7 +156,7 @@ describe('buildClaimCandidates', () => {
   });
 
   it('本文の無い聴取は照らし合わせられないため、エラーにする', () => {
-    const target = createCase({ interviews: [{ id: 'interview-empty', subjectPersonId: 'person-hanako' }] });
+    const target = createCase({ interviews: [{ id: 'interview-empty', subjectPersonIds: ['person-hanako'] }] });
     expect(() => buildClaimCandidates(target, 'interview-empty', [])).toThrow('本文');
   });
 });
@@ -221,6 +221,24 @@ describe('candidateToClaimDraft', () => {
     const result = candidateToClaimDraft(target, 'interview-article', candidate!, sequentialIds());
 
     expect(result.speaker).toEqual({ personIds: ['person-newspaper'], viaPersonIds: [] });
+  });
+
+  it('相手が複数の資料では、相手の一人が発言者なら経由を足さず、発言者の分からない候補は最初の相手を発言者にする', () => {
+    // 前提: 記事に、新聞の地の文と、取材に応じた山田花子の話が載っている（相手は新聞と山田花子）
+    const target = createCase({
+      interviews: [{ id: 'interview-article', subjectPersonIds: ['person-newspaper', 'person-hanako'], transcript: articleTranscript }],
+    });
+    const { candidates } = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: '山田 花子', quote: '庭に黒い車が止まっていた' }),
+      extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
+      extracted({ speakerName: '県警', quote: '県警によると' }),
+    ]);
+
+    const [hanako, narration, police] = candidates.map((candidate) => candidateToClaimDraft(target, 'interview-article', candidate, sequentialIds()));
+
+    expect(hanako?.speaker).toEqual({ personIds: ['person-hanako'], viaPersonIds: [] });
+    expect(narration?.speaker).toEqual({ personIds: ['person-newspaper'], viaPersonIds: [] });
+    expect(police?.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper'] });
   });
 
   it('一致しない名前は、同じ名前ごとに1件だけ新規作成し、発言者・言及で同じIDを使う', () => {
