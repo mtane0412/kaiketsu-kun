@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Interview } from '@/domain/types';
 import { MAX_EXTRACTION_TEXT_LENGTH } from '@/lib/claim-extraction-api';
+import { OPENROUTER_MODELS_URL } from '@/lib/openrouter-models';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { InterviewSection } from './InterviewSection';
@@ -300,9 +301,34 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     return { ...caseWithInterviews, interviews: [bookInterview, { ...firstInterview, transcript }] };
   }
 
-  /** 抽出 API が指定した状態コードと JSON を返すよう、fetch を置き換えます。 */
-  function mockExtractionApi(status: number, body: unknown) {
-    return vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(body), { status }));
+  /** OpenRouter のモデルの一覧の API が返すモデルです（使わない項目は省いています）。 */
+  const openRouterModels = [
+    ['openai/gpt-6-luna', 'OpenAI: GPT-6 Luna', '0.0000001', '0.0000005'],
+    ['anthropic/claude-sonnet-5.5', 'Anthropic: Claude Sonnet 5.5', '0.000003', '0.000015'],
+  ].map(([id, name, prompt, completion]) => ({
+    id,
+    name,
+    context_length: 400000,
+    pricing: { prompt, completion },
+    architecture: { output_modalities: ['text'] },
+    supported_parameters: ['structured_outputs'],
+  }));
+
+  /**
+   * fetch を置き換えます。抽出 API は指定した状態コードと JSON を、OpenRouter のモデルの一覧の API は
+   * modelsStatus の状態コードで openRouterModels を返します。
+   */
+  function mockExtractionApi(status: number, body: unknown, modelsStatus = 200) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input) === OPENROUTER_MODELS_URL
+        ? new Response(JSON.stringify({ data: openRouterModels }), { status: modelsStatus })
+        : new Response(JSON.stringify(body), { status })
+    );
+  }
+
+  /** fetch の呼び出しのうち、抽出 API への呼び出しだけを返します。 */
+  function extractionCalls(fetchSpy: ReturnType<typeof mockExtractionApi>) {
+    return fetchSpy.mock.calls.filter(([input]) => String(input) === '/api/extract-claims');
   }
 
   /** 本文を開き、「証言の候補を抽出」を押して、送る前の確認を返します。 */
@@ -333,7 +359,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
 
     expect(extraction).toHaveTextContent(`本文の全文（${articleTranscript.length}文字）`);
     expect(extraction).toHaveTextContent('OpenRouter');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(extractionCalls(fetchSpy)).toHaveLength(0);
   });
 
   it('API キーを入力していない場合は、送らずに理由を示す', async () => {
@@ -346,7 +372,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
 
     expect(within(extraction).getByText('OpenRouter の API キーを入力してください。')).toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(extractionCalls(fetchSpy)).toHaveLength(0);
   });
 
   it('引用が本文にある候補だけを、名前を登録済みのものと照らし合わせて示し、捨てた件数を示す', async () => {
@@ -359,7 +385,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     const candidates = await sendWithApiKey(user, extraction);
 
     // 送ったリクエストに、本文の全文・聴取の相手・API キーを含める
-    const [, init] = fetchSpy.mock.calls[0]!;
+    const [, init] = extractionCalls(fetchSpy)[0]!;
     expect(JSON.parse(String(init?.body))).toMatchObject({ text: articleTranscript, subjectName: '管理人', apiKey: 'sk-or-テスト用のキー' });
     // 入力した API キーは、次に抽出するときのためにブラウザに保存する
     expect(localStorage.getItem('testimony-board-llm-settings')).toContain('sk-or-テスト用のキー');
@@ -473,12 +499,73 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
     expect(await within(extraction).findByText('証言の候補は見つかりませんでした。')).toBeInTheDocument();
 
-    const [, init] = fetchSpy.mock.calls[0]!;
+    const [, init] = extractionCalls(fetchSpy)[0]!;
     expect(JSON.parse(String(init?.body))).toMatchObject({ text: '別荘の持ち主の車は、翌朝まで戻らなかった。' });
+  });
+
+  it('モデルを OpenRouter のモデルの一覧から選べ、選んだモデルの料金を示す（既定は GPT-6 Luna）', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockExtractionApi(200, { claims: [] });
+    openTestCase(withArticleInterview());
+    const history = renderCaretakerStatementHistory();
+
+    const extraction = await openExtraction(user, history);
+    const modelField = within(extraction).getByRole('combobox', { name: 'モデル' });
+    expect(modelField).toHaveValue('openai/gpt-6-luna');
+    expect(await within(extraction).findByText('OpenAI: GPT-6 Luna — 入力 $0.10 / 出力 $0.50（100万トークンあたり）')).toBeInTheDocument();
+    // 選択肢は、モデルの一覧の API が返したモデルである
+    const optionValues = [...document.querySelectorAll(`#${modelField.getAttribute('list')} option`)].map((option) =>
+      option.getAttribute('value')
+    );
+    expect(optionValues).toEqual(['anthropic/claude-sonnet-5.5', 'openai/gpt-6-luna']);
+
+    await user.clear(modelField);
+    await user.type(modelField, 'anthropic/claude-sonnet-5.5');
+    expect(within(extraction).getByText('Anthropic: Claude Sonnet 5.5 — 入力 $3.00 / 出力 $15.00（100万トークンあたり）')).toBeInTheDocument();
+    await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+    await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+
+    await within(extraction).findByText('証言の候補は見つかりませんでした。');
+    const [, init] = extractionCalls(fetchSpy)[0]!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'anthropic/claude-sonnet-5.5' });
+  });
+
+  it('モデルの一覧に無いモデルは、送らずに理由を示す', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockExtractionApi(200, { claims: [] });
+    openTestCase(withArticleInterview());
+    const history = renderCaretakerStatementHistory();
+
+    const extraction = await openExtraction(user, history);
+    await within(extraction).findByText(/OpenAI: GPT-6 Luna —/);
+    const modelField = within(extraction).getByRole('combobox', { name: 'モデル' });
+    await user.clear(modelField);
+    await user.type(modelField, 'openai/存在しないモデル');
+    await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+    await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+
+    expect(within(extraction).getByText('「openai/存在しないモデル」は、OpenRouter のモデルの一覧にありません。一覧から選んでください。')).toBeInTheDocument();
+    expect(extractionCalls(fetchSpy)).toHaveLength(0);
+  });
+
+  it('モデルの一覧を取得できない場合は理由を示し、モデルの ID を直接入力して送れる', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockExtractionApi(200, { claims: [] }, 503);
+    openTestCase(withArticleInterview());
+    const history = renderCaretakerStatementHistory();
+
+    const extraction = await openExtraction(user, history);
+
+    expect(await within(extraction).findByText(/OpenRouter のモデルの一覧を取得できませんでした（503）/)).toBeInTheDocument();
+    await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+    await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+    await within(extraction).findByText('証言の候補は見つかりませんでした。');
+    expect(extractionCalls(fetchSpy)).toHaveLength(1);
   });
 
   it('送る本文が上限の文字数を超える場合は、送らずに範囲を選ぶよう示す', async () => {
     const user = userEvent.setup();
+    mockExtractionApi(200, { claims: [] });
     openTestCase(withArticleInterview('あ'.repeat(MAX_EXTRACTION_TEXT_LENGTH + 1)));
     const history = renderCaretakerStatementHistory();
 

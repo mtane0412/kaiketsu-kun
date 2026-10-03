@@ -9,6 +9,10 @@ describe('loadLlmSettings', () => {
     expect(loadLlmSettings()).toEqual({ apiKey: '', model: DEFAULT_LLM_MODEL });
   });
 
+  it('既定のモデルは、料金の安い GPT-6 Luna にする', () => {
+    expect(DEFAULT_LLM_MODEL).toBe('openai/gpt-6-luna');
+  });
+
   it('保存した設定を読み込む', () => {
     saveLlmSettings({ apiKey: 'sk-or-テスト用のキー', model: 'google/gemini-3.8-flash' });
 

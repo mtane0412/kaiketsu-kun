@@ -12,8 +12,11 @@ import { z } from 'zod';
 /** LLM の設定を保存する LocalStorage のキーです。 */
 export const LLM_SETTINGS_STORAGE_KEY = 'testimony-board-llm-settings';
 
-/** モデルを選んでいない場合に使う、OpenRouter のモデルのIDです。 */
-export const DEFAULT_LLM_MODEL = 'anthropic/claude-sonnet-5.5';
+/**
+ * モデルを選んでいない場合に使う、OpenRouter のモデルのIDです。
+ * 抽出は本文の全文を送るため入力のトークンが多くなりがちで、料金の安いモデルを既定にします。
+ */
+export const DEFAULT_LLM_MODEL = 'openai/gpt-6-luna';
 
 const LlmSettingsSchema = z.object({
   /** OpenRouter の API キーです。入力していない場合は空文字列です。 */
