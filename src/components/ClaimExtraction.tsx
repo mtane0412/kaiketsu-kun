@@ -13,16 +13,15 @@
  *    破棄: ケースを変えずに、候補を一覧から外します。
  *
  * 入力した API キーとモデルは、次の抽出のためにブラウザに保存します（src/lib/llm-settings.ts）。
- * モデルは、OpenRouter のモデルの一覧（src/lib/openrouter-models.ts）から絞り込んで選べ、選んだモデルの料金を示します。
- * 一覧にないモデルは送りません。一覧を取得できない場合は理由を示し、モデルのIDを直接入力して送れるようにします
- * （一覧の API だけが落ちている場合に、抽出まで使えなくならないようにするためです。誤ったIDは抽出 API が理由を示します）。
+ * API キーとモデルの入力欄は、ケース設定のメニューの「LLM の設定」と共通です（LlmSettingsFields）。一覧にないモデルは送りません。
+ * 一覧を取得できない場合は、モデルのIDを直接入力して送れます（誤ったIDは抽出 API が理由を示します）。
  * 注意: 送る本文は、開いた時点の選択（または全文）で固定します。範囲を選び直す場合は、もう一度「証言の候補を抽出」を押します
  * （呼び出し側で key を変えて作り直してください）。
  */
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
   buildClaimCandidates,
   candidateToClaimDraft,
@@ -34,12 +33,12 @@ import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import type { Id } from '@/domain/types';
 import { MAX_EXTRACTION_TEXT_LENGTH, requestClaimExtraction } from '@/lib/claim-extraction-api';
-import { DEFAULT_LLM_MODEL, loadLlmSettings, saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
-import { fetchOpenRouterModels, formatModelPrice, type OpenRouterModel } from '@/lib/openrouter-models';
+import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
 import { ClaimForm, type ClaimDefaults } from './forms/ClaimForm';
-import { FormError, INPUT_CLASS, LABEL_CLASS } from './forms/fields';
+import { FormError } from './forms/fields';
+import { findModelError, LlmSettingsFields, loadInitialLlmSettings, useOpenRouterModels } from './LlmSettingsFields';
 
 /** 抽出に送る本文です。scope は、本文の範囲を選んで送るか、全文を送るかです。 */
 export type ExtractionSource = { text: string; scope: 'selection' | 'all' };
@@ -52,9 +51,6 @@ type Phase =
   | { kind: 'confirm' }
   | { kind: 'loading' }
   | { kind: 'done'; extracted: ExtractedClaim[]; settledKeys: ReadonlySet<string> };
-
-/** OpenRouter のモデルの一覧の取得の状態です。 */
-type ModelList = { kind: 'loading' } | { kind: 'loaded'; models: OpenRouterModel[] } | { kind: 'failed'; message: string };
 
 /** 採用して入力欄を開いている候補です。新規作成するエンティティのIDを保つため、入力欄の初期値は採用した時点で作ります。 */
 type Adopting = { key: string; defaults: ClaimDefaults };
@@ -88,20 +84,10 @@ function describeCandidate(candidate: ClaimCandidate, subjectName: string): { te
 
 export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractionProps) {
   const currentCase = useCurrentCase();
-  const apiKeyFieldId = useId();
-  const modelFieldId = useId();
-  const modelOptionsId = useId();
   // 保存済みの設定が壊れている場合は、理由を示して入力し直してもらう（送るときに上書きで保存する）
-  const [initial] = useState<{ settings: LlmSettings; error: string | null }>(() => {
-    try {
-      return { settings: loadLlmSettings(), error: null };
-    } catch (caught) {
-      const reason = caught instanceof Error ? caught.message : String(caught);
-      return { settings: { apiKey: '', model: DEFAULT_LLM_MODEL }, error: `${reason} API キーとモデルを入力し直してください。` };
-    }
-  });
+  const [initial] = useState(loadInitialLlmSettings);
   const [settings, setSettings] = useState<LlmSettings>(initial.settings);
-  const [modelList, setModelList] = useState<ModelList>({ kind: 'loading' });
+  const modelList = useOpenRouterModels();
   const [phase, setPhase] = useState<Phase>({ kind: 'confirm' });
   const [error, setError] = useState<string | null>(null);
   const [adopting, setAdopting] = useState<Adopting | null>(null);
@@ -111,21 +97,6 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   const subjectName = currentCase.persons.find((person) => person.id === interview.subjectPersonId)?.name;
   if (subjectName === undefined) throw new Error(`聴取の相手が見つかりません: ${interview.subjectPersonId}`);
   const tooLong = source.text.length > MAX_EXTRACTION_TEXT_LENGTH;
-  const selectedModel = modelList.kind === 'loaded' ? modelList.models.find((model) => model.id === settings.model.trim()) : undefined;
-
-  useEffect(() => {
-    // 閉じた後に取得が終わった場合に、状態を書き換えないようにする
-    let active = true;
-    fetchOpenRouterModels()
-      .then((models) => active && setModelList({ kind: 'loaded', models }))
-      .catch((caught: unknown) => {
-        const reason = caught instanceof Error ? caught.message : String(caught);
-        if (active) setModelList({ kind: 'failed', message: `${reason} モデルのIDを直接入力してください。` });
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const handleSend = async (event: FormEvent) => {
     event.preventDefault();
@@ -133,12 +104,9 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
       setError('OpenRouter の API キーを入力してください。');
       return;
     }
-    if (settings.model.trim() === '') {
-      setError('モデルを入力してください。');
-      return;
-    }
-    if (modelList.kind === 'loaded' && selectedModel === undefined) {
-      setError(`「${settings.model.trim()}」は、OpenRouter のモデルの一覧にありません。一覧から選んでください。`);
+    const modelError = findModelError(settings.model, modelList);
+    if (modelError !== null) {
+      setError(modelError);
       return;
     }
     setError(null);
@@ -195,47 +163,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
             </p>
           )}
           <FormError message={initial.error} />
-          {modelList.kind === 'failed' && <FormError message={modelList.message} />}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <label htmlFor={apiKeyFieldId} className={LABEL_CLASS}>
-                OpenRouter の API キー
-              </label>
-              <input
-                id={apiKeyFieldId}
-                type="password"
-                autoComplete="off"
-                value={settings.apiKey}
-                onChange={(event) => setSettings({ ...settings, apiKey: event.target.value })}
-                className={INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <label htmlFor={modelFieldId} className={LABEL_CLASS}>
-                モデル
-              </label>
-              <input
-                id={modelFieldId}
-                list={modelOptionsId}
-                autoComplete="off"
-                placeholder="名前かIDで絞り込む（例: gpt-6-luna）"
-                value={settings.model}
-                onChange={(event) => setSettings({ ...settings, model: event.target.value })}
-                className={INPUT_CLASS}
-              />
-              <datalist id={modelOptionsId}>
-                {modelList.kind === 'loaded' &&
-                  modelList.models.map((model) => (
-                    <option key={model.id} value={model.id} label={`${model.name} — ${formatModelPrice(model)}`} />
-                  ))}
-              </datalist>
-              {modelList.kind === 'loading' && <p className="mt-1 text-xs text-muted-foreground">モデルの一覧を読み込んでいます…</p>}
-              {selectedModel && (
-                <p className="mt-1 text-xs text-muted-foreground">{`${selectedModel.name} — ${formatModelPrice(selectedModel)}`}</p>
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">API キーとモデルは、このブラウザに保存します。共用の端末では保存した後に消してください。</p>
+          <LlmSettingsFields settings={settings} onChange={setSettings} modelList={modelList} />
           <FormError message={error} />
           <div className="flex justify-end">
             <Button type="submit" size="sm" disabled={tooLong || phase.kind === 'loading'}>
