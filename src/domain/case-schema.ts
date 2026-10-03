@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
+import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
 import type { Case, Id, Person, Speaker } from './types';
@@ -147,6 +148,14 @@ const caseSchema = z.object({
       when: timeRefSchema.optional(),
       placeId: idSchema.optional(),
       interviewId: idSchema.optional(),
+      // 引用の原文が聴取の本文に見つからなくても拒否しない（本文をあとから書き換えた場合に、ケースを開けなくしないため。
+      // 見つからないことは、証言の詳細に示す。src/domain/transcript.ts の checkClaimQuote）
+      quote: z
+        .object({
+          text: z.string().min(1, '引用の原文を指定しない場合は、項目ごと省略してください'),
+          seconds: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
     })
   ),
   relationships: z.array(
@@ -172,6 +181,8 @@ const caseSchema = z.object({
         placeId: idSchema.optional(),
         subjectRole: z.string().optional(),
         documentRef: z.string().optional(),
+        url: z.string().refine(isHttpUrl, 'URLは http か https のURLで指定してください').optional(),
+        transcript: z.string().optional(),
       })
     )
     .optional(),

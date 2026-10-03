@@ -5,6 +5,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
+import type { Case, Interview } from '@/domain/types';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { ClaimDetail } from './ClaimDetail';
@@ -252,5 +253,99 @@ describe('ClaimDetail', () => {
 
     expect(screen.getByRole('heading', { name: '証言が見つかりません' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '証言の詳細を閉じる' })).toHaveAttribute('href', '/cases/case-lakeside');
+  });
+});
+
+/** 管理人へのインタビュー動画の聴取です（文字起こしを貼り付けています）。 */
+const videoInterview: Interview = {
+  id: 'interview-video',
+  subjectPersonId: 'person-caretaker',
+  url: 'https://www.youtube.com/watch?v=abc',
+  transcript: '0:00\nこんばんは、管理人です\n12:34\nあの夜は別荘が真っ暗でした',
+};
+
+/** 管理人の証言を、動画の文字起こしから書き起こした（引用 quoteText を持つ）ケースを返します。 */
+function caseWithQuote(quoteText: string, interview: Interview = videoInterview): Case {
+  return {
+    ...sampleFictionalCase,
+    interviews: [interview],
+    claims: sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-caretaker' ? { ...claim, interviewId: interview.id, quote: { text: quoteText, seconds: 754 } } : claim
+    ),
+  };
+}
+
+describe('ClaimDetail（引用）', () => {
+  beforeEach(() => {
+    resetMockNavigation('/cases/case-lakeside/claims/claim-caretaker');
+  });
+
+  it('引用の原文と動画の位置を示し、その時点から動画を再生するリンクを置く', () => {
+    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    const quoteSection = screen.getByRole('region', { name: '引用' });
+    expect(within(quoteSection).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
+    const videoLink = within(quoteSection).getByRole('link', { name: '12:34 から動画を開く' });
+    expect(videoLink).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc&t=754s');
+    expect(videoLink).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(within(quoteSection).queryByText(/本文に見つかりません/)).not.toBeInTheDocument();
+  });
+
+  it('引用の原文が時刻だけの行を含む場合は、時刻の行を除いて示す（動画の位置は別に示すため）', () => {
+    openTestCase(caseWithQuote('12:34\nあの夜は別荘が真っ暗でした'));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    const quoteSection = screen.getByRole('region', { name: '引用' });
+    expect(within(quoteSection).getByRole('blockquote')).toHaveTextContent(/^あの夜は別荘が真っ暗でした$/);
+    expect(within(screen.getByRole('group', { name: '引用' })).queryByText(/^12:34/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: '引用' })).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
+    expect(within(quoteSection).queryByText(/聴取の本文に見つかりません/)).not.toBeInTheDocument();
+  });
+
+  it('YouTube 以外の資料では、再生位置を付けずに資料を開くリンクを置く', () => {
+    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', { ...videoInterview, url: 'https://example.com/news/1' }));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    const quoteSection = screen.getByRole('region', { name: '引用' });
+    expect(within(quoteSection).getByRole('link', { name: '資料を開く' })).toHaveAttribute('href', 'https://example.com/news/1');
+  });
+
+  it('引用の原文が聴取の本文に見つからない場合は、見つからないことを示す', () => {
+    openTestCase(caseWithQuote('あの夜は明かりがついていました'));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/聴取の本文に見つかりません/)).toBeInTheDocument();
+  });
+
+  it('聴取に本文が無い場合は、引用を照らし合わせられないことを示す', () => {
+    const { transcript: _transcript, ...interviewWithoutTranscript } = videoInterview;
+    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', interviewWithoutTranscript));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/照らし合わせられません/)).toBeInTheDocument();
+  });
+
+  it('引用を持たない証言では、引用の欄を表示しない', () => {
+    openTestCase(sampleFictionalCase);
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    expect(screen.queryByRole('region', { name: '引用' })).not.toBeInTheDocument();
+  });
+
+  it('編集で引用を保持し、「引用を外す」を押して保存すると、引用を持たない証言にする', async () => {
+    const user = userEvent.setup();
+    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
+    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.quote).toEqual({
+      text: 'あの夜は別荘が真っ暗でした',
+      seconds: 754,
+    });
+
+    await user.click(screen.getByRole('button', { name: '引用を外す' }));
+    await user.click(screen.getByRole('button', { name: '証言を保存' }));
+    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')).not.toHaveProperty('quote');
   });
 });

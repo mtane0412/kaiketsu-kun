@@ -8,6 +8,7 @@
  *
  * 注意:
  * - 保存データの検証は parseCase が行います。検証に失敗したデータは、黙って捨てずに退避用のキーへ移し、呼び出し元へ例外で伝えます。
+ * - LocalStorage の容量を超えた場合は、保存せずに、理由と対処を示す例外を投げます（saveCase）。
  * - LocalStorage はブラウザにしか無いため、この関数群はブラウザ側（クライアントコンポーネント・useEffect の中）からのみ呼び出してください。
  * - キーの接頭辞 `testimony-board-` は、アプリ名を kaiketsu-kun に改めた後も変えていません。
  *   キーを変えると、すでに保存済みのケースが読めなくなるためです。
@@ -99,7 +100,19 @@ function saveCaseSummaries(summaries: CaseSummary[]): void {
 
 /** ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。 */
 export function saveCase(target: Case): void {
-  localStorage.setItem(caseKeyOf(target.id), JSON.stringify(target));
+  try {
+    localStorage.setItem(caseKeyOf(target.id), JSON.stringify(target));
+  } catch (error) {
+    // 聴取の本文（記事の本文・動画の文字起こし）や画像を多く持つケースは、容量（ブラウザごとに異なり、およそ5MB）を超えうる。
+    // ブラウザの英語のメッセージのままでは対処が分からないため、理由と対処を示す
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      throw new Error(
+        'ブラウザの保存容量を超えたため、保存できませんでした。聴取の本文や画像を減らすか、JSONを書き出してから不要なケースを削除してください。',
+        { cause: error }
+      );
+    }
+    throw error;
+  }
 
   const summary: CaseSummary = {
     id: target.id,

@@ -11,6 +11,7 @@
  * 未了事項にひもづいた証言を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
+ * 聴取の本文から書き起こした証言の引用（原文・動画の位置・元の資料へのリンク）は、QuoteSection が担います。
  * 人物・場所・日時・聴取を多く共有する証言を似ている順に並べる欄は、SimilarClaimsSection が担います。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
  *
@@ -34,6 +35,7 @@ import { ClaimLink } from './ClaimLink';
 import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { HypothesisUsageSection } from './HypothesisUsageSection';
+import { QuoteSection } from './QuoteSection';
 import { SimilarClaimsSection } from './SimilarClaimsSection';
 import { TaskLinkSection } from './TaskLinkSection';
 import { ClaimForm } from './forms/ClaimForm';
@@ -145,6 +147,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           <FormError message={deleteError} />
         </div>
       </section>
+
+      <QuoteSection claimId={claimId} />
 
       {mentionedEntities.length > 0 && (
         <nav aria-label={MENTIONED_ENTITIES_LABEL} className="space-y-2">

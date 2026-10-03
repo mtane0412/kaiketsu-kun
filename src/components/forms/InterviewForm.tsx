@@ -2,7 +2,9 @@
  * 聴取（証言を得た機会）の入力フォーム
  *
  * 人物の詳細の「供述の変遷」（InterviewSection）から開き、その人物を相手とする1件の聴取（Interview）を登録・編集します。
- * 相手は開いている人物に固定し、入力するのは、日時・聴取者または媒体・場所・相手の立場・資料番号の5つです。すべて任意です。
+ * 相手は開いている人物に固定し、入力するのは、日時・聴取者または媒体・場所・相手の立場・資料番号・URL・本文の7つです。すべて任意です。
+ * 本文には、記事の本文や動画の文字起こしを貼り付けます。証言は、本文の範囲を選んで書き起こせます（InterviewTranscript）。
+ * URLはリンクとして表示するため、http か https のURLだけを受け付けます（src/domain/transcript.ts の isHttpUrl）。
  *
  * 日時は、証言の本文の日時のメンションと同じ表記を受け付けます（1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00、
  * スラッシュ区切り、日本語の表記。src/domain/date-input.ts）。解釈できない表記は、保存せずにエラーを示します。
@@ -15,6 +17,7 @@
 import { nanoid } from 'nanoid';
 import { useId, useState, type FormEvent } from 'react';
 import { parseDateInput } from '@/domain/date-input';
+import { isHttpUrl } from '@/domain/transcript';
 import type { Id, Interview } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -45,6 +48,8 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
   const [placeId, setPlaceId] = useState<Id>(initial?.placeId ?? UNSELECTED);
   const [subjectRole, setSubjectRole] = useState(initial?.subjectRole ?? '');
   const [documentRef, setDocumentRef] = useState(initial?.documentRef ?? '');
+  const [url, setUrl] = useState(initial?.url ?? '');
+  const [transcript, setTranscript] = useState(initial?.transcript ?? '');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent) => {
@@ -64,6 +69,15 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
     if (placeId !== UNSELECTED) interview.placeId = placeId;
     if (subjectRole.trim()) interview.subjectRole = subjectRole.trim();
     if (documentRef.trim()) interview.documentRef = documentRef.trim();
+    if (url.trim()) {
+      if (!isHttpUrl(url.trim())) {
+        setError(`URLは http か https のURLで指定してください: ${url.trim()}`);
+        return;
+      }
+      interview.url = url.trim();
+    }
+    // 本文は引用の原文と一字一句照らし合わせるため、前後の空白を除くだけにとどめ、行の中身には手を加えない
+    if (transcript.trim()) interview.transcript = transcript.trim();
 
     try {
       upsert('interviews', interview);
@@ -120,7 +134,15 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
       </div>
 
       <TextField label="相手の立場（任意）" value={subjectRole} onChange={setSubjectRole} placeholder="参考人、被疑者、目撃者 など" />
-      <TextField label="資料番号（任意）" value={documentRef} onChange={setDocumentRef} placeholder="調書番号、記事のURL など" />
+      <TextField label="資料番号（任意）" value={documentRef} onChange={setDocumentRef} placeholder="調書番号 など" />
+      <TextField label="URL（任意）" value={url} onChange={setUrl} placeholder="記事・動画のURL（https://...）" />
+      <TextField
+        label="本文・文字起こし（任意）"
+        value={transcript}
+        onChange={setTranscript}
+        multiline
+        placeholder="記事の本文や、YouTube の「文字起こしを表示」の内容を貼り付けると、範囲を選んで証言を書き起こせます"
+      />
 
       <FormError message={error} />
       <div className="flex items-center justify-end gap-2">

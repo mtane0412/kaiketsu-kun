@@ -18,6 +18,8 @@
  * 書けるようにするためです）。本文から読み取った参照の一覧と、書き方の案内を表示しません。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
  * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
+ * 聴取の本文から書き起こす場合（defaults.quote）は、引用の原文から時刻だけの行を除いた文字列を本文の初期値にし、
+ * 引用を証言とあわせて保存します。引用は編集でも保持し、「引用を外す」で外せます（src/domain/transcript.ts）。
  *
  * speakerRequiredMessage を渡すと、発言者を必須にし、発言者を選ばずに保存しようとしたときにその文を表示します
  * （別の人物の反応を記録する場合など、ユーザーの推測にしてはならない場合に使います）。
@@ -46,8 +48,9 @@ import {
 import { timelineKeyOf } from '@/domain/timeline-order';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatInterviewLabel } from '@/domain/interviews';
+import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
-import type { Claim, Id, PersonKind } from '@/domain/types';
+import type { Claim, ClaimQuote, Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
@@ -65,6 +68,8 @@ export type ClaimDefaults = {
    * 同じ聴取の証言を続けて書き足すときに、聴取を引き継ぐために使います。
    */
   interviewId?: Id;
+  /** 聴取の本文から選んだ引用です。指定すると、引用の原文から時刻だけの行を除いた文字列を、本文の初期値にします。 */
+  quote?: ClaimQuote;
 };
 
 /** 聴取を選ばない場合の、選択肢の値です。 */
@@ -104,8 +109,11 @@ export function ClaimForm({
   const upsertMany = useCaseStore((state) => state.upsertMany);
 
   const [draft, setDraft] = useState<ClaimDraft>(() =>
-    initial ? claimToDraft(initial, currentCase) : { text: '', mentions: [] }
+    initial
+      ? claimToDraft(initial, currentCase)
+      : { text: defaults?.quote ? stripTimestampLines(defaults.quote.text) : '', mentions: [] }
   );
+  const [quote, setQuote] = useState<ClaimQuote | undefined>(initial?.quote ?? defaults?.quote);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [interviewId, setInterviewId] = useState<Id>(() => initial?.interviewId ?? defaults?.interviewId ?? NO_INTERVIEW);
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => {
@@ -190,6 +198,7 @@ export function ClaimForm({
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
     if (interview) claim.interviewId = interview.id;
+    if (quote) claim.quote = quote;
 
     // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
     const usedIds = new Set([
@@ -252,6 +261,18 @@ export function ClaimForm({
             : '例: @1998-08-12T21:00 ごろ、@湖畔の別荘 の庭に @別荘の持ち主 の姿が見えた。'
         }
       />
+      {quote && (
+        <div role="group" aria-label="引用" className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
+          <p className="line-clamp-3 flex-1 whitespace-pre-line">
+            <span className="mr-1 font-medium">引用{quote.seconds !== undefined && `（${formatQuoteSeconds(quote.seconds)}）`}</span>
+            {/* 時刻だけの行は、見出しの動画の位置と重なるため除いて示す（保存する原文は、本文と照らし合わせるためそのまま持つ） */}
+            <span>{stripTimestampLines(quote.text)}</span>
+          </p>
+          <button type="button" onClick={() => setQuote(undefined)} className="shrink-0 hover:underline">
+            引用を外す
+          </button>
+        </div>
+      )}
       {(!compact || interviewId !== NO_INTERVIEW) && (
         <div>
           <label htmlFor={interviewFieldId} className={LABEL_CLASS}>
