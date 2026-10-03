@@ -27,6 +27,19 @@ beforeEach(() => {
   vi.useRealTimers();
 });
 
+/**
+ * ケースの一覧（INDEX_STORAGE_KEY）への書き込みだけを、容量の超過で失敗させます。
+ * ケースの本体の書き込みは成功させ、本体を書いた後に一覧の書き込みが失敗する状況を再現します。
+ * テストの最後に、返した spy の mockRestore を呼び出してください。
+ */
+function failOnlySummaryWrites() {
+  const originalSetItem = Storage.prototype.setItem;
+  return vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
+    if (key === INDEX_STORAGE_KEY) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    originalSetItem.call(this, key, value);
+  });
+}
+
 describe('createEmptyCase', () => {
   it('毎回異なるIDの、空のケースを作る', () => {
     const firstItem = createEmptyCase();
@@ -66,6 +79,58 @@ describe('saveCase と loadCase', () => {
 
     expect(() => loadCase('case-broken')).toThrow('ケースデータの形式が正しくありません');
     expect(localStorage.getItem(`${BACKUP_STORAGE_KEY}:case-broken`)).toBe('{"id":"case-broken"}');
+  });
+
+  it('ブラウザの保存容量を超えた場合は、理由と対処を日本語で伝えるエラーにし、保存済みのケースを書き換えない', () => {
+    // 前提: 長い文字起こしを貼り付けて、LocalStorage の容量を超えた
+    saveCase(sampleFictionalCase);
+    const storedBefore = localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+
+    expect(() => saveCase({ ...sampleFictionalCase, name: '書き換えたケース' })).toThrow(
+      /ブラウザの保存容量を超えたため、保存できませんでした/
+    );
+    setItem.mockRestore();
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBe(storedBefore);
+  });
+
+  it('ケースの一覧の保存で容量を超えた場合も、理由と対処を日本語で伝えるエラーにする', () => {
+    const setItem = failOnlySummaryWrites();
+
+    expect(() => saveCase(sampleFictionalCase)).toThrow(/ブラウザの保存容量を超えたため、保存できませんでした/);
+    setItem.mockRestore();
+  });
+
+  it('ケースの一覧の保存に失敗した場合は、保存済みのケースの本体を書き換える前の内容に戻す', () => {
+    // 前提: 本体だけが新しい内容になると、画面には反映されなかった変更が、再読み込みで現れてしまう
+    saveCase(sampleFictionalCase);
+    const storedBefore = localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`);
+    const setItem = failOnlySummaryWrites();
+
+    expect(() => saveCase({ ...sampleFictionalCase, name: '書き換えたケース' })).toThrow();
+    setItem.mockRestore();
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBe(storedBefore);
+  });
+
+  it('新しいケースの一覧の保存に失敗した場合は、書き込んだケースの本体を取り除く', () => {
+    // 前提: 一覧に載らない本体だけが残ると、一覧から開けず、消すこともできない
+    const created = createEmptyCase('新しく作ったケース');
+    const setItem = failOnlySummaryWrites();
+
+    expect(() => saveCase(created)).toThrow();
+    setItem.mockRestore();
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${created.id}`)).toBeNull();
+  });
+
+  it('保存容量の超過以外の失敗は、そのまま伝える', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('予期しない失敗');
+    });
+
+    expect(() => saveCase(sampleFictionalCase)).toThrow('予期しない失敗');
+    setItem.mockRestore();
   });
 });
 

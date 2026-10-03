@@ -1,7 +1,7 @@
 /**
  * 人物の詳細に並べる「供述の変遷」（その人物が相手の聴取の一覧・登録・編集・削除と、聴取からの証言の書き足し）のテスト
  */
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -179,4 +179,147 @@ describe('InterviewSection', () => {
     });
     expect(screen.queryByRole('region', { name: '聴取の証言の書き足し' })).not.toBeInTheDocument();
   });
+  it('URLと本文を入力して保存すると、聴取に資料のURLと本文を持たせる', async () => {
+    const user = userEvent.setup();
+    renderCaretakerStatementHistory();
+
+    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
+    const registration = screen.getByRole('region', { name: '聴取の登録' });
+    await user.type(within(registration).getByLabelText('URL（任意）'), 'https://www.youtube.com/watch?v=abc');
+    await user.type(within(registration).getByLabelText('本文・文字起こし（任意）'), '0:05{Enter}あの夜は別荘が真っ暗でした');
+    await user.click(within(registration).getByRole('button', { name: '聴取を保存' }));
+
+    expect(openedCase().interviews.at(-1)).toMatchObject({
+      url: 'https://www.youtube.com/watch?v=abc',
+      transcript: '0:05\nあの夜は別荘が真っ暗でした',
+    });
+  });
+
+  it('http か https でないURLでは、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderCaretakerStatementHistory();
+
+    await user.click(screen.getByRole('button', { name: '聴取を追加' }));
+    const registration = screen.getByRole('region', { name: '聴取の登録' });
+    await user.type(within(registration).getByLabelText('URL（任意）'), '動画のページ');
+    await user.click(within(registration).getByRole('button', { name: '聴取を保存' }));
+
+    expect(within(registration).getByText(/URLは http か https/)).toBeInTheDocument();
+    expect(openedCase().interviews).toHaveLength(2);
+  });
+
+  it('URLを持つ聴取には、資料を新しいタブで開くリンクを置く', () => {
+    openTestCase(withVideoInterview());
+    const history = renderCaretakerStatementHistory();
+
+    const link = within(history).getByRole('link', { name: '1998年8月13日 10:00の聴取の資料を開く' });
+    expect(link).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('本文の範囲を選んで「選んだ範囲を証言にする」を押すと、聴取・発言者・本文・引用を入力済みにして書き足せる', async () => {
+    const user = userEvent.setup();
+    openTestCase(withVideoInterview());
+    const history = renderCaretakerStatementHistory();
+
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
+    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の聴取の本文' });
+    const quoteButton = within(transcriptRegion).getByRole('button', { name: '選んだ範囲を証言にする' });
+    expect(quoteButton).toBeDisabled();
+
+    // 「0:05」の行から「真っ暗でした」までを選ぶ（時刻の行は本文の初期値から取り除き、動画の位置として補う）
+    selectTextIn(within(transcriptRegion).getByTestId('transcript-text'), '0:05\nあの夜は別荘が真っ暗でした');
+    await user.click(quoteButton);
+
+    const composer = screen.getByRole('region', { name: '聴取の証言の書き足し' });
+    expect(within(composer).getByLabelText('内容')).toHaveValue('あの夜は別荘が真っ暗でした');
+    expect(within(composer).getByRole('group', { name: '引用' })).toHaveTextContent('0:05');
+    await user.click(within(composer).getByRole('button', { name: '書き足す' }));
+
+    expect(openedCase().claims.at(-1)).toMatchObject({
+      speaker: { kind: 'person', personIds: ['person-caretaker'] },
+      interviewId: firstInterview.id,
+      content: 'あの夜は別荘が真っ暗でした',
+      quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 },
+    });
+  });
+
+  it('本文の外を選んでいるときは、「選んだ範囲を証言にする」を押せない', async () => {
+    const user = userEvent.setup();
+    openTestCase(withVideoInterview());
+    const history = renderCaretakerStatementHistory();
+
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
+    selectTextIn(within(history).getByRole('heading', { name: '1998年8月13日 10:00' }), '1998年8月13日');
+
+    expect(screen.getByRole('button', { name: '選んだ範囲を証言にする' })).toBeDisabled();
+  });
+
+  it('本文のうち、証言として書き起こした範囲を、その証言へのリンクとして示す', async () => {
+    const user = userEvent.setup();
+    openTestCase(
+      withVideoInterview((claims) =>
+        claims.map((claim) =>
+          claim.id === 'claim-caretaker' ? { ...claim, interviewId: firstInterview.id, quote: { text: '別荘が真っ暗でした' } } : claim
+        )
+      )
+    );
+    const history = renderCaretakerStatementHistory();
+
+    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の聴取の本文を開く' }));
+    const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の聴取の本文' });
+
+    const quoted = within(transcriptRegion).getByRole('link', { name: /^書き起こした証言:/ });
+    expect(quoted).toHaveTextContent('別荘が真っ暗でした');
+    expect(quoted).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker');
+  });
 });
+
+/**
+ * 県警の初回の聴取を、動画の文字起こしを貼り付けた聴取にしたケースを返します。
+ * mapClaims で、証言を書き換えられます。
+ */
+function withVideoInterview(mapClaims: (claims: Case['claims']) => Case['claims'] = (claims) => claims): Case {
+  const videoInterview: Interview = {
+    ...firstInterview,
+    url: 'https://www.youtube.com/watch?v=abc',
+    transcript: '0:00\nこんばんは、管理人です\n0:05\nあの夜は別荘が真っ暗でした',
+  };
+  return {
+    ...caseWithInterviews,
+    interviews: [bookInterview, videoInterview],
+    claims: mapClaims(caseWithInterviews.claims),
+  };
+}
+
+/**
+ * 要素の中の文字列 text を、利用者がマウスでなぞったときと同じように選択します。
+ * 選択の変化は selectionchange で伝わるため、選択した後にこのイベントを発生させます。
+ */
+function selectTextIn(element: HTMLElement, text: string): void {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+  const fullText = textNodes.map((node) => node.data).join('');
+  const start = fullText.indexOf(text);
+  if (start === -1) throw new Error(`選択する文字列が見つかりません: ${text}`);
+
+  /** 要素の中での文字の位置を、テキストノードとその中の位置に直します。 */
+  const locate = (offset: number): [Text, number] => {
+    let rest = offset;
+    for (const node of textNodes) {
+      if (rest <= node.data.length) return [node, rest];
+      rest -= node.data.length;
+    }
+    throw new Error(`位置が要素の外です: ${offset}`);
+  };
+  const range = document.createRange();
+  range.setStart(...locate(start));
+  range.setEnd(...locate(start + text.length));
+  const selection = window.getSelection();
+  if (selection === null) throw new Error('選択を取得できません');
+  selection.removeAllRanges();
+  selection.addRange(range);
+  fireEvent(document, new Event('selectionchange'));
+}

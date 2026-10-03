@@ -8,6 +8,7 @@
  *
  * 注意:
  * - 保存データの検証は parseCase が行います。検証に失敗したデータは、黙って捨てずに退避用のキーへ移し、呼び出し元へ例外で伝えます。
+ * - LocalStorage の容量を超えた場合は、保存せずに、理由と対処を示す例外を投げます（writeStorage）。
  * - LocalStorage はブラウザにしか無いため、この関数群はブラウザ側（クライアントコンポーネント・useEffect の中）からのみ呼び出してください。
  * - キーの接頭辞 `testimony-board-` は、アプリ名を kaiketsu-kun に改めた後も変えていません。
  *   キーを変えると、すでに保存済みのケースが読めなくなるためです。
@@ -92,14 +93,42 @@ export function listCaseSummaries(): CaseSummary[] {
   }
 }
 
-/** ケースの一覧を保存します。 */
-function saveCaseSummaries(summaries: CaseSummary[]): void {
-  localStorage.setItem(INDEX_STORAGE_KEY, JSON.stringify(summaries));
+/**
+ * LocalStorage に書き込みます。容量を超えた場合は、理由と対処を示す例外に置き換えて投げます。それ以外の失敗は、そのまま投げます。
+ * 聴取の本文（記事の本文・動画の文字起こし）や画像を多く持つケースは、容量（ブラウザごとに異なり、およそ5MB）を超えうるためです。
+ * ブラウザの英語のメッセージのままでは対処が分からないため、置き換えます。
+ */
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      throw new Error(
+        'ブラウザの保存容量を超えたため、保存できませんでした。聴取の本文や画像を減らすか、JSONを書き出してから不要なケースを削除してください。',
+        { cause: error }
+      );
+    }
+    throw error;
+  }
 }
 
-/** ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。 */
+/** ケースの一覧を保存します。 */
+function saveCaseSummaries(summaries: CaseSummary[]): void {
+  writeStorage(INDEX_STORAGE_KEY, JSON.stringify(summaries));
+}
+
+/**
+ * ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。
+ *
+ * 一覧の保存に失敗した場合は、ケースの本体を書き込む前の内容に戻し（新しいケースは本体を取り除き）、例外を投げます。
+ * 本体だけが新しい内容のまま残ると、画面には反映されなかった変更が再読み込みで現れ、
+ * 新しいケースでは一覧から開けない本体だけが残るためです。
+ * 注意: 元に戻すことにも失敗した場合は、保存の失敗と元に戻す失敗の両方を AggregateError で投げます。
+ */
 export function saveCase(target: Case): void {
-  localStorage.setItem(caseKeyOf(target.id), JSON.stringify(target));
+  const caseKey = caseKeyOf(target.id);
+  const previousBody = localStorage.getItem(caseKey);
+  writeStorage(caseKey, JSON.stringify(target));
 
   const summary: CaseSummary = {
     id: target.id,
@@ -108,7 +137,17 @@ export function saveCase(target: Case): void {
     updatedAt: new Date().toISOString(),
   };
   const others = listCaseSummaries().filter((item) => item.id !== target.id);
-  saveCaseSummaries([summary, ...others]);
+  try {
+    saveCaseSummaries([summary, ...others]);
+  } catch (error) {
+    try {
+      if (previousBody === null) localStorage.removeItem(caseKey);
+      else localStorage.setItem(caseKey, previousBody);
+    } catch (restoreError) {
+      throw new AggregateError([error, restoreError], 'ケースを保存できず、保存前の内容に戻すこともできませんでした');
+    }
+    throw error;
+  }
 }
 
 /**

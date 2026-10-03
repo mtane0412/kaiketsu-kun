@@ -649,6 +649,53 @@ describe('parseCase（聴取）', () => {
   });
 });
 
+/** 書籍の取材の様子を収めた動画として、URLと文字起こしを持たせた聴取です。 */
+const videoInterview = {
+  ...bookInterview,
+  url: 'https://www.youtube.com/watch?v=abc',
+  transcript: '0:05\nあの夜は別荘が真っ暗でした',
+};
+
+/** 動画の文字起こしから、管理人の証言を書き起こしたケースです。 */
+const caseWithQuote = {
+  ...caseWithInterviews,
+  interviews: [videoInterview],
+  claims: caseWithInterviews.claims.map((claim) =>
+    claim.id === 'claim-caretaker' ? { ...claim, quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } } : claim
+  ),
+};
+
+describe('parseCase（聴取の本文と証言の引用）', () => {
+  it('聴取のURL・本文と、証言の引用を保持して受け付ける', () => {
+    expect(parseCase(toJsonData(caseWithQuote))).toEqual(caseWithQuote);
+  });
+
+  it('聴取のURLが http か https のURLでない場合は拒否する', () => {
+    const caseData = { ...caseWithQuote, interviews: [{ ...videoInterview, url: 'javascript:alert(1)' }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.url/);
+  });
+
+  it('引用の原文が空の場合と、動画の位置が負の数の場合は拒否する', () => {
+    const caseData = {
+      ...caseWithQuote,
+      claims: caseWithQuote.claims.map((claim) =>
+        claim.id === 'claim-caretaker' ? { ...claim, quote: { text: '', seconds: -1 } } : claim
+      ),
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/quote\.text[\s\S]*quote\.seconds/);
+  });
+
+  it('引用の原文が本文に見つからない証言も、拒否せずに受け付ける（本文をあとから書き換えた場合に、ケースを開けなくしないため）', () => {
+    const caseData = { ...caseWithQuote, interviews: [{ ...videoInterview, transcript: '書き換えた本文' }] };
+
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-caretaker')?.quote?.text).toBe(
+      'あの夜は別荘が真っ暗でした'
+    );
+  });
+});
+
 describe('parseCase（照合）', () => {
   it('照合を保持して受け付ける', () => {
     // 前提: サンプルのケースには、裏付ける照合と食い違う照合が1件ずつある
