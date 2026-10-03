@@ -4,25 +4,31 @@
  * jsdom には scrollIntoView が無いため、何もしない代役を用意します（開いている証言のカードへのスクロールで使用します）。
  * jsdom には matchMedia も無いため、常に「一致しない」を返す代役を用意します。
  * サイドバー（src/components/ui/sidebar.tsx）が画面幅の判定に使うため、テストでは常に広い画面として扱われます。
+ * サーバー側の処理のテスト（先頭に `// @vitest-environment node` を書いたもの）には DOM が無いため、DOM の準備をしません。
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-Element.prototype.scrollIntoView = vi.fn();
+/** DOM のある環境（jsdom）で動いているかどうかです。 */
+const hasDom = typeof window !== 'undefined';
 
-window.matchMedia = vi.fn((query: string) => ({
-  media: query,
-  matches: false,
-  onchange: null,
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  addListener: vi.fn(),
-  removeListener: vi.fn(),
-  dispatchEvent: vi.fn(),
-}));
+if (hasDom) {
+  Element.prototype.scrollIntoView = vi.fn();
 
-afterEach(() => {
-  cleanup();
-  localStorage.clear();
-});
+  window.matchMedia = vi.fn((query: string) => ({
+    media: query,
+    matches: false,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+}

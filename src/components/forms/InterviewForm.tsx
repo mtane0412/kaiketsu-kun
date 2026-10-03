@@ -4,6 +4,12 @@
  * 人物の詳細の「供述の変遷」（InterviewSection）から開き、その人物を相手とする1件の聴取（Interview）を登録・編集します。
  * 相手は開いている人物に固定し、入力するのは、日時・聴取者または媒体・場所・相手の立場・資料番号・URL・本文の7つです。すべて任意です。
  * 本文には、記事の本文や動画の文字起こしを貼り付けます。証言は、本文の範囲を選んで書き起こせます（InterviewTranscript）。
+ * Web の記事は、URLを入れて「本文を取得」を押すと、本文の取得 API（src/app/api/fetch-article/route.ts）で本文を取り出して本文の欄に入れます。
+ * 取得した本文は保存せず、欄に入れるだけです。ユーザーが確認・修正してから「聴取を保存」で保存します。
+ * - 本文の欄に入力がある場合は、黙って上書きせず、置き換えてよいかを確認します。
+ * - 記事の公開日時が分かり、日時の欄が空の場合は、公開日時を日時の欄に入れます。入力済みの日時は上書きしません。
+ * - YouTube のURLでは取得せず、文字起こしを貼り付けるよう案内します（字幕は公式APIでは動画の所有者しか取得できないためです）。
+ * - 取得に失敗した場合は理由を示し、本文の欄を変えません。
  * URLはリンクとして表示するため、http か https のURLだけを受け付けます（src/domain/transcript.ts の isHttpUrl）。
  *
  * 日時は、証言の本文の日時のメンションと同じ表記を受け付けます（1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00、
@@ -19,7 +25,18 @@ import { useId, useState, type FormEvent } from 'react';
 import { parseDateInput } from '@/domain/date-input';
 import { isHttpUrl } from '@/domain/transcript';
 import type { Id, Interview } from '@/domain/types';
+import { describeArticleUrlProblem, requestArticleFetch, type FetchedArticle } from '@/lib/article-fetch-api';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 
@@ -51,6 +68,54 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
   const [url, setUrl] = useState(initial?.url ?? '');
   const [transcript, setTranscript] = useState(initial?.transcript ?? '');
   const [error, setError] = useState<string | null>(null);
+  /** 本文を取得している最中かどうかです。取得中は「本文を取得」を押せなくします。 */
+  const [isFetchingArticle, setIsFetchingArticle] = useState(false);
+  /** 本文の欄に入力があるため、置き換えてよいかの確認を待っている、取得した記事です。 */
+  const [pendingArticle, setPendingArticle] = useState<FetchedArticle | null>(null);
+  /** 取得した本文を欄に入れたことの知らせです。 */
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** 取得した記事の本文を本文の欄に入れ、日時の欄が空なら公開日時も入れます。保存はしません。 */
+  const applyArticle = (article: FetchedArticle) => {
+    setTranscript(article.text);
+    const publishedAt = article.publishedAt;
+    const fillsAt = publishedAt !== undefined && !at.trim() && parseDateInput(publishedAt) !== null;
+    if (fillsAt) setAt(publishedAt);
+    setNotice(
+      `${article.title ? `「${article.title}」の` : '記事の'}本文（${article.text.length.toLocaleString()}文字）を本文の欄に入れました。` +
+        (fillsAt ? `公開日時（${publishedAt}）を日時の欄に入れました。` : '') +
+        '確認してから「聴取を保存」で保存してください。'
+    );
+  };
+
+  const handleFetchArticle = async () => {
+    setError(null);
+    setNotice(null);
+    const problem = describeArticleUrlProblem(url);
+    if (problem !== null) {
+      setError(problem);
+      return;
+    }
+
+    setIsFetchingArticle(true);
+    try {
+      const article = await requestArticleFetch(url.trim());
+      if (transcript.trim()) {
+        setPendingArticle(article);
+      } else {
+        applyArticle(article);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsFetchingArticle(false);
+    }
+  };
+
+  const handleConfirmReplace = () => {
+    if (pendingArticle !== null) applyArticle(pendingArticle);
+    setPendingArticle(null);
+  };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -135,7 +200,14 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
 
       <TextField label="相手の立場（任意）" value={subjectRole} onChange={setSubjectRole} placeholder="参考人、被疑者、目撃者 など" />
       <TextField label="資料番号（任意）" value={documentRef} onChange={setDocumentRef} placeholder="調書番号 など" />
-      <TextField label="URL（任意）" value={url} onChange={setUrl} placeholder="記事・動画のURL（https://...）" />
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <TextField label="URL（任意）" value={url} onChange={setUrl} placeholder="記事・動画のURL（https://...）" />
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={handleFetchArticle} disabled={isFetchingArticle} aria-busy={isFetchingArticle}>
+          {isFetchingArticle ? '取得しています…' : '本文を取得'}
+        </Button>
+      </div>
       <TextField
         label="本文・文字起こし（任意）"
         value={transcript}
@@ -144,6 +216,11 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
         placeholder="記事の本文や、YouTube の「文字起こしを表示」の内容を貼り付けると、範囲を選んで証言を書き起こせます"
       />
 
+      {notice && (
+        <p role="status" className="rounded-md bg-muted px-2 py-1.5 text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
       <FormError message={error} />
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
@@ -151,6 +228,22 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
         </Button>
         <SubmitButton label="聴取を保存" />
       </div>
+
+      <AlertDialog open={pendingArticle !== null} onOpenChange={(open) => !open && setPendingArticle(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>本文を置き換えますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              本文の欄に入力済みの内容を、取得した記事の本文（{pendingArticle?.text.length.toLocaleString()}文字）で置き換えます。
+              置き換えても、「聴取を保存」を押すまでは保存しません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>やめる</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmReplace}>置き換える</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

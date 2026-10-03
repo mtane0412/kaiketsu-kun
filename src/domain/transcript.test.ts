@@ -9,6 +9,7 @@ import {
   findQuoteRange,
   formatQuoteSeconds,
   isHttpUrl,
+  isYoutubeUrl,
   quoteSecondsAt,
   stripTimestampLines,
   youtubeUrlAt,
@@ -128,6 +129,19 @@ describe('youtubeUrlAt', () => {
 
   it('YouTube 以外のURLには、再生位置の指定を付けない', () => {
     expect(youtubeUrlAt('https://example.com/watch?v=abc', 754)).toBeUndefined();
+  });
+});
+
+describe('isYoutubeUrl', () => {
+  it('YouTube の動画のURLを YouTube のURLとみなす', () => {
+    expect(isYoutubeUrl('https://www.youtube.com/watch?v=abc')).toBe(true);
+    expect(isYoutubeUrl('https://youtu.be/abc')).toBe(true);
+    expect(isYoutubeUrl('http://m.youtube.com/watch?v=abc')).toBe(true);
+  });
+
+  it('YouTube 以外のURLと、URLとして読めない文字列は YouTube のURLとみなさない', () => {
+    expect(isYoutubeUrl('https://example.com/news/1')).toBe(false);
+    expect(isYoutubeUrl('youtube.com の動画')).toBe(false);
   });
 });
 
