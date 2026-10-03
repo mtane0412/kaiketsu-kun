@@ -83,6 +83,17 @@ describe('saveCase と loadCase', () => {
     expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBe(storedBefore);
   });
 
+  it('ケースの一覧の保存で容量を超えた場合も、理由と対処を日本語で伝えるエラーにする', () => {
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
+      if (key === INDEX_STORAGE_KEY) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      originalSetItem.call(this, key, value);
+    });
+
+    expect(() => saveCase(sampleFictionalCase)).toThrow(/ブラウザの保存容量を超えたため、保存できませんでした/);
+    setItem.mockRestore();
+  });
+
   it('保存容量の超過以外の失敗は、そのまま伝える', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('予期しない失敗');

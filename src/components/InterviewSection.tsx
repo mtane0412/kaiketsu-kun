@@ -202,8 +202,9 @@ export function InterviewSection({ personId, tab }: InterviewSectionProps) {
                 {isTarget('compose') && (
                   <section aria-label="聴取の証言の書き足し" className="border-t pt-3">
                     <ClaimForm
-                      // 別の範囲を選び直したときに、本文と引用の初期値を作り直すため、引用も key に含める
-                      key={`${view.interview.id}:${form.kind === 'compose' ? (form.quote?.text ?? '') : ''}`}
+                      // 別の範囲を選び直したときに、本文と引用の初期値を作り直すため、引用の原文と動画の位置も key に含める
+                      // （同じ文字列でも、別の時刻の箇所を選び直した場合は、動画の位置が変わるため）
+                      key={`${view.interview.id}:${form.kind === 'compose' ? `${form.quote?.text ?? ''}:${form.quote?.seconds ?? ''}` : ''}`}
                       defaults={{ interviewId: view.interview.id, ...(form.kind === 'compose' && form.quote && { quote: form.quote }) }}
                       onDone={close}
                       autoFocus
