@@ -104,7 +104,7 @@ function writeStorage(key: string, value: string): void {
   } catch (error) {
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {
       throw new Error(
-        'ブラウザの保存容量を超えたため、保存できませんでした。聴取の本文や画像を減らすか、JSONを書き出してから不要なケースを削除してください。',
+        'ブラウザの保存容量を超えたため、保存できませんでした。資料の本文や画像を減らすか、JSONを書き出してから不要なケースを削除してください。',
         { cause: error }
       );
     }

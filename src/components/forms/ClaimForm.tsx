@@ -10,14 +10,14 @@
  * 日時も本文に書きます。「@」に続けて日時を書くと候補を示し、選ぶと日時のメンションになります
  * （受け付ける表記は src/domain/date-input.ts を参照してください）。
  * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
- * 証言を得た聴取（Claim.interviewId）は、「聴取（任意）」の欄で選びます。聴取の相手は、発言者か経由のいずれかに
+ * 証言を得た聴取（Claim.interviewId）は、「資料（任意）」の欄で選びます。聴取の相手は、発言者か経由のいずれかに
  * 含まれている必要があります（src/domain/case-schema.ts）。発言者も経由も選んでいない状態で聴取を選んだ場合は、
  * 聴取の相手を発言者にします。聴取の相手が自分の供述を述べる場合が最も多く、選び直す手間を省くためです。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。本文から読み取った参照の一覧と、書き方の案内を表示しません。
  * 新規登録時は、ボード上の書いた位置（defaults）に従って、時系列の並び順の中での位置を決めます。
- * compact では、聴取を指定して開いた場合（人物の詳細の「この聴取の証言を書き足す」）だけ、聴取の欄を表示します。
+ * compact では、聴取を指定して開いた場合（人物の詳細の「この資料の証言を書き足す」）だけ、聴取の欄を表示します。
  * 聴取の本文から書き起こす場合（defaults.quote）は、引用の原文から時刻だけの行を除いた文字列を本文の初期値にし、
  * 引用を証言とあわせて保存します。引用は編集でも保持し、「引用を外す」で外せます（src/domain/transcript.ts）。
  * LLM が抽出した証言の候補から開く場合（src/domain/claim-extraction.ts の candidateToClaimDraft）は、見出し・本文の下書き・
@@ -54,7 +54,7 @@ import { formatInterviewLabel } from '@/domain/interviews';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
 import type { NewEntity } from '@/domain/claim-extraction';
-import type { Claim, ClaimQuote, Id, PersonKind } from '@/domain/types';
+import type { Claim, ClaimQuote, Id, Interview, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
@@ -107,6 +107,14 @@ type ClaimFormProps = {
   speakerRequiredMessage?: string;
 };
 
+/**
+ * 聴取を選んだときに、最初に入れておく発言者を返します。
+ * 相手が1人の聴取は、その相手を発言者にします。相手が複数の聴取は、だれが述べたかを決められないため、発言者を選ばずにおきます。
+ */
+function speakerOfInterview(interview: Interview): SpeakerDraft {
+  return { personIds: interview.subjectPersonIds.length === 1 ? [...interview.subjectPersonIds] : [], viaPersonIds: [] };
+}
+
 export function ClaimForm({
   initial,
   defaults,
@@ -131,9 +139,7 @@ export function ClaimForm({
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() => {
     const presetInterview = currentCase.interviews.find((interview) => interview.id === defaults?.interviewId);
     if (initial === undefined && defaults?.speaker !== undefined) return defaults.speaker;
-    if (initial === undefined && presetInterview !== undefined) {
-      return { personIds: [presetInterview.subjectPersonId], viaPersonIds: [] };
-    }
+    if (initial === undefined && presetInterview !== undefined) return speakerOfInterview(presetInterview);
     return speakerToDraft(initial);
   });
   const interviewFieldId = useId();
@@ -162,7 +168,7 @@ export function ClaimForm({
     setInterviewId(nextInterviewId);
     const interview = interviewOf(nextInterviewId);
     if (interview && speaker.personIds.length === 0 && speaker.viaPersonIds.length === 0) {
-      setSpeaker({ personIds: [interview.subjectPersonId], viaPersonIds: [] });
+      setSpeaker(speakerOfInterview(interview));
     }
   };
 
@@ -197,9 +203,14 @@ export function ClaimForm({
       return;
     }
     const interview = interviewOf(interviewId);
-    if (interview && ![...speaker.personIds, ...speaker.viaPersonIds].includes(interview.subjectPersonId)) {
-      const subjectName = labelOf('person', interview.subjectPersonId);
-      setError(`聴取の相手（${subjectName}）を、発言者か経由に選んでください`);
+    const involvedPersonIds = [...speaker.personIds, ...speaker.viaPersonIds];
+    if (interview && !interview.subjectPersonIds.some((id) => involvedPersonIds.includes(id))) {
+      const subjectNames = interview.subjectPersonIds.map((id) => labelOf('person', id)).join('、');
+      setError(
+        interview.subjectPersonIds.length === 1
+          ? `資料の相手（${subjectNames}）を、発言者か経由に選んでください`
+          : `資料の相手（${subjectNames}）のいずれかを、発言者か経由に選んでください`
+      );
       return;
     }
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
@@ -291,7 +302,7 @@ export function ClaimForm({
       {(!compact || interviewId !== NO_INTERVIEW) && (
         <div>
           <label htmlFor={interviewFieldId} className={LABEL_CLASS}>
-            聴取（任意）
+            資料（任意）
           </label>
           <select
             id={interviewFieldId}
@@ -299,7 +310,7 @@ export function ClaimForm({
             onChange={(event) => handleInterviewChange(event.target.value)}
             className={INPUT_CLASS}
           >
-            <option value={NO_INTERVIEW}>聴取なし</option>
+            <option value={NO_INTERVIEW}>資料なし</option>
             {currentCase.interviews.map((interview) => (
               <option key={interview.id} value={interview.id}>
                 {formatInterviewLabel(currentCase, interview)}

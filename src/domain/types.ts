@@ -186,8 +186,12 @@ export type ClaimQuote = {
  */
 export type Interview = {
   id: Id;
-  /** 供述した相手です。 */
-  subjectPersonId: Id;
+  /**
+   * 供述した相手です。1人以上で、同じ人物は重ねません（src/domain/case-schema.ts）。
+   * 記者会見や記事のように、1件の資料に何人もの発言が載る場合は全員を選びます。
+   * 先頭の相手は、本文から抽出した証言の候補のうち、発言者の分からない候補の発言者になります（src/domain/claim-extraction.ts）。
+   */
+  subjectPersonIds: Id[];
   /** 聴き取った人物、または記事・番組などの媒体です。 */
   interviewerPersonId?: Id;
   /** 聴取の日時です。 */

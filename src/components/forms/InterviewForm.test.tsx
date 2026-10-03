@@ -1,5 +1,5 @@
 /**
- * 聴取の入力フォームのうち、記事のURLから本文を取得して本文の欄に入れる操作のテスト
+ * 聴取の入力フォームのテスト（相手の選択と、記事のURLから本文を取得して本文の欄に入れる操作）
  *
  * 本文の取得 API（/api/fetch-article）の呼び出しは、fetch を置き換えて確かめます。
  */
@@ -24,7 +24,7 @@ const fetchedArticle = {
 /** 本文を貼り付け済みの、湖畔新聞による管理人への取材です。 */
 const pastedInterview: Interview = {
   id: 'interview-newspaper',
-  subjectPersonId: 'person-caretaker',
+  subjectPersonIds: ['person-caretaker'],
   at: '1998-08-14',
   transcript: '手で貼り付けた本文',
 };
@@ -45,7 +45,7 @@ function mockFetchArticleApi(status: number, body: unknown) {
 /** 管理人を相手とする聴取のフォームを描画します。 */
 function renderForm(initial?: Interview) {
   const onDone = vi.fn();
-  render(<InterviewForm subjectPersonId="person-caretaker" initial={initial} onDone={onDone} onCancel={vi.fn()} />);
+  render(<InterviewForm defaultSubjectPersonIds={['person-caretaker']} initial={initial} onDone={onDone} onCancel={vi.fn()} />);
   return { onDone };
 }
 
@@ -60,6 +60,63 @@ async function fetchArticle(user: ReturnType<typeof userEvent.setup>, url = arti
   await user.type(screen.getByLabelText('URL（任意）'), url);
   await user.click(screen.getByRole('button', { name: '本文を取得' }));
 }
+
+describe('InterviewForm の相手', () => {
+  /** 相手の欄で、人物 name の選択を切り替えます。 */
+  async function toggleSubject(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(within(screen.getByRole('group', { name: '相手' })).getByRole('checkbox', { name }));
+  }
+
+  it('最初に渡した相手を選んだ状態で始まり、相手を足すと、選んだ順に相手を持つ聴取として保存する', async () => {
+    const user = userEvent.setup();
+    const { onDone } = renderForm();
+
+    expect(within(screen.getByRole('group', { name: '相手' })).getByRole('checkbox', { name: '管理人' })).toBeChecked();
+    await toggleSubject(user, '隣家の住人');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    const saved = openedCase().interviews[0];
+    expect(saved?.subjectPersonIds).toEqual(['person-caretaker', 'person-neighbor']);
+    expect(onDone).toHaveBeenCalledWith(saved);
+  });
+
+  it('編集では、保存済みの相手を選んだ状態で始まる', () => {
+    render(
+      <InterviewForm
+        initial={{ id: 'interview-press', subjectPersonIds: ['person-neighbor', 'person-caretaker'] }}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const subjectField = screen.getByRole('group', { name: '相手' });
+    expect(within(subjectField).getByRole('checkbox', { name: '隣家の住人' })).toBeChecked();
+    expect(within(subjectField).getByRole('checkbox', { name: '管理人' })).toBeChecked();
+    expect(within(subjectField).getByRole('checkbox', { name: '別荘の持ち主' })).not.toBeChecked();
+  });
+
+  it('相手を1人も選ばずに保存しようとすると、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await toggleSubject(user, '管理人');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText('相手を1人以上選んでください')).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('聴取者に相手と同じ人物を選んで保存しようとすると、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(screen.getByLabelText('聴取者または媒体（任意）'), '管理人');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText('聴取者または媒体に、相手と同じ人物（管理人）は選べません')).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+});
 
 describe('InterviewForm の本文の取得', () => {
   it('記事のURLから取得した本文を本文の欄に、公開日時を日時の欄に入れ、保存はしない', async () => {
@@ -76,14 +133,14 @@ describe('InterviewForm の本文の取得', () => {
     expect(openedCase().interviews).toEqual(sampleFictionalCase.interviews);
   });
 
-  it('取得した本文は「聴取を保存」で保存する', async () => {
+  it('取得した本文は「資料を保存」で保存する', async () => {
     mockFetchArticleApi(200, fetchedArticle);
     const user = userEvent.setup();
     const { onDone } = renderForm();
 
     await fetchArticle(user);
     await waitForFetchedText();
-    await user.click(screen.getByRole('button', { name: '聴取を保存' }));
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
 
     expect(onDone).toHaveBeenCalled();
     const saved = openedCase().interviews.find((interview) => interview.url === articleUrl);
@@ -93,7 +150,7 @@ describe('InterviewForm の本文の取得', () => {
   it('日時の欄に入力がある場合は、公開日時で上書きしない', async () => {
     mockFetchArticleApi(200, fetchedArticle);
     const user = userEvent.setup();
-    renderForm({ id: 'interview-newspaper', subjectPersonId: 'person-caretaker', at: '1998-08-14' });
+    renderForm({ id: 'interview-newspaper', subjectPersonIds: ['person-caretaker'], at: '1998-08-14' });
 
     await fetchArticle(user);
 

@@ -49,11 +49,13 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
   place: '場所の詳細',
   hypothesis: '仮説の詳細',
   task: '未了事項の詳細',
+  interview: '資料の詳細',
   search: '検索結果',
   newPerson: '人物の登録',
   newPlace: '場所の登録',
   newHypothesis: '仮説の登録',
   newTask: '未了事項の登録',
+  newInterview: '資料の登録',
 };
 
 type CaseBoardProps = {

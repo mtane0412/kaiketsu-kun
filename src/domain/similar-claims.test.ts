@@ -61,7 +61,7 @@ describe('findSimilarClaims', () => {
     };
     const target: Case = {
       ...sampleFictionalCase,
-      interviews: [{ id: 'interview-caretaker', subjectPersonId: 'person-caretaker' }],
+      interviews: [{ id: 'interview-caretaker', subjectPersonIds: ['person-caretaker'] }],
       claims: [
         ...sampleFictionalCase.claims.map((claim) =>
           claim.id === 'claim-caretaker' ? { ...claim, interviewId: 'interview-caretaker' } : claim

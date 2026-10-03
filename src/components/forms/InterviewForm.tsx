@@ -1,11 +1,16 @@
 /**
- * 聴取（証言を得た機会）の入力フォーム
+ * 資料（聴取。証言を得た機会）の入力フォーム
  *
- * 人物の詳細の「供述の変遷」（InterviewSection）から開き、その人物を相手とする1件の聴取（Interview）を登録・編集します。
- * 相手は開いている人物に固定し、入力するのは、日時・聴取者または媒体・場所・相手の立場・資料番号・URL・本文の7つです。すべて任意です。
+ * 1件の資料（Interview）を登録・編集します。人物の詳細の「供述の変遷」（InterviewSection）・資料のカード（InterviewCard）・
+ * 資料の登録ページ（InterviewDetail の NewInterviewDetail）から開きます。
+ * 入力するのは、相手・日時・聴取者または媒体・場所・相手の立場・資料番号・URL・本文の8つです。
+ * - 相手は1人以上が必須で、複数を選べます（記者会見や記事のように、何人もの発言が載る資料のためです）。選んだ順に保存します。
+ *   人物の詳細から開いた場合は、開いている人物を選んだ状態で始めます（defaultSubjectPersonIds）。
+ * - 聴取者または媒体に、相手と同じ人物は選べません（自分自身が聴き取ることは無いためです）。
+ * - 相手以外は任意です。
  * 本文には、記事の本文や動画の文字起こしを貼り付けます。証言は、本文の範囲を選んで書き起こせます（InterviewTranscript）。
  * Web の記事は、URLを入れて「本文を取得」を押すと、本文の取得 API（src/app/api/fetch-article/route.ts）で本文を取り出して本文の欄に入れます。
- * 取得した本文は保存せず、欄に入れるだけです。ユーザーが確認・修正してから「聴取を保存」で保存します。
+ * 取得した本文は保存せず、欄に入れるだけです。ユーザーが確認・修正してから「資料を保存」で保存します。
  * - 本文の欄に入力がある場合は、黙って上書きせず、置き換えてよいかを確認します。
  * - 記事の公開日時が分かり、日時の欄が空の場合は、公開日時を日時の欄に入れます。入力済みの日時は上書きしません。
  * - YouTube のURLでは取得せず、文字起こしを貼り付けるよう案内します（字幕は公式APIでは動画の所有者しか取得できないためです）。
@@ -44,22 +49,24 @@ import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './
 const UNSELECTED = '';
 
 type InterviewFormProps = {
-  /** 聴取の相手（開いている人物）のIDです。 */
-  subjectPersonId: Id;
+  /** 新規登録で、最初から相手に選んでおく人物のIDです（人物の詳細から開いた場合の、開いている人物など）。編集では使いません。 */
+  defaultSubjectPersonIds?: Id[];
   /** 編集する聴取です。省略すると新規登録になります。 */
   initial?: Interview;
-  /** 保存できたときに呼び出します。 */
-  onDone: () => void;
+  /** 保存できたときに、保存した聴取を渡して呼び出します。 */
+  onDone: (interview: Interview) => void;
   /** 入力をやめたときに呼び出します。 */
   onCancel: () => void;
 };
 
-export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: InterviewFormProps) {
+export function InterviewForm({ defaultSubjectPersonIds = [], initial, onDone, onCancel }: InterviewFormProps) {
   const currentCase = useCurrentCase();
   const upsert = useCaseStore((state) => state.upsert);
   /** 同じ画面に複数のフォームが並んでも入力欄が混ざらないよう、このフォーム固有の接頭辞を持ちます。 */
   const formId = useId();
 
+  /** 相手の人物のIDです。選んだ順に並びます（先頭の相手は、証言の候補の抽出で発言者の分からない候補の発言者になるためです）。 */
+  const [subjectPersonIds, setSubjectPersonIds] = useState<Id[]>(initial?.subjectPersonIds ?? defaultSubjectPersonIds);
   const [at, setAt] = useState(initial?.at ?? '');
   const [interviewerPersonId, setInterviewerPersonId] = useState<Id>(initial?.interviewerPersonId ?? UNSELECTED);
   const [placeId, setPlaceId] = useState<Id>(initial?.placeId ?? UNSELECTED);
@@ -75,6 +82,10 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
   /** 取得した本文を欄に入れたことの知らせです。 */
   const [notice, setNotice] = useState<string | null>(null);
 
+  /** 人物 personId を相手に加えるか、相手から外します。加えた人物は末尾に並べます。 */
+  const toggleSubject = (personId: Id, checked: boolean) =>
+    setSubjectPersonIds((current) => (checked ? [...current, personId] : current.filter((id) => id !== personId)));
+
   /** 取得した記事の本文を本文の欄に入れ、日時の欄が空なら公開日時も入れます。保存はしません。 */
   const applyArticle = (article: FetchedArticle) => {
     setTranscript(article.text);
@@ -84,7 +95,7 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
     setNotice(
       `${article.title ? `「${article.title}」の` : '記事の'}本文（${article.text.length.toLocaleString()}文字）を本文の欄に入れました。` +
         (fillsAt ? `公開日時（${publishedAt}）を日時の欄に入れました。` : '') +
-        '確認してから「聴取を保存」で保存してください。'
+        '確認してから「資料を保存」で保存してください。'
     );
   };
 
@@ -120,8 +131,18 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
+    if (subjectPersonIds.length === 0) {
+      setError('相手を1人以上選んでください');
+      return;
+    }
+    // 自分自身が聴き取ることは無いため、聴取者と相手が重なる入力は誤りとして扱う
+    if (interviewerPersonId !== UNSELECTED && subjectPersonIds.includes(interviewerPersonId)) {
+      const interviewerName = currentCase.persons.find((person) => person.id === interviewerPersonId)?.name;
+      setError(`聴取者または媒体に、相手と同じ人物（${interviewerName}）は選べません`);
+      return;
+    }
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-    const interview: Interview = { id: initial?.id ?? nanoid(), subjectPersonId };
+    const interview: Interview = { id: initial?.id ?? nanoid(), subjectPersonIds };
     if (at.trim()) {
       const parsedAt = parseDateInput(at);
       if (parsedAt === null) {
@@ -150,11 +171,27 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
       setError(caught instanceof Error ? caught.message : String(caught));
       return;
     }
-    onDone();
+    onDone(interview);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      <fieldset>
+        <legend className={LABEL_CLASS}>相手</legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {currentCase.persons.map((person) => (
+            <label key={person.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={subjectPersonIds.includes(person.id)}
+                onChange={(event) => toggleSubject(person.id, event.target.checked)}
+              />
+              {person.name}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <TextField label="日時（任意）" value={at} onChange={setAt} placeholder="1998-08-13、1998年8月13日10時 など" />
 
       <div>
@@ -168,14 +205,11 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
           className={INPUT_CLASS}
         >
           <option value={UNSELECTED}>選ばない</option>
-          {/* 自分自身が聴き取ることは無いため、選択肢から相手を外す */}
-          {currentCase.persons
-            .filter((person) => person.id !== subjectPersonId)
-            .map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
+          {currentCase.persons.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.name}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -226,7 +260,7 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           やめる
         </Button>
-        <SubmitButton label="聴取を保存" />
+        <SubmitButton label="資料を保存" />
       </div>
 
       <AlertDialog open={pendingArticle !== null} onOpenChange={(open) => !open && setPendingArticle(null)}>
@@ -235,7 +269,7 @@ export function InterviewForm({ subjectPersonId, initial, onDone, onCancel }: In
             <AlertDialogTitle>本文を置き換えますか？</AlertDialogTitle>
             <AlertDialogDescription>
               本文の欄に入力済みの内容を、取得した記事の本文（{pendingArticle?.text.length.toLocaleString()}文字）で置き換えます。
-              置き換えても、「聴取を保存」を押すまでは保存しません。
+              置き換えても、「資料を保存」を押すまでは保存しません。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

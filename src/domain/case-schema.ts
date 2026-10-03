@@ -92,6 +92,17 @@ const speakerSchema = z.preprocess(
   ])
 );
 
+/**
+ * 資料（聴取）の相手を1人しか持てなかった頃のデータ（subjectPersonId）を、現在の形（subjectPersonIds）に変換します。
+ * それ以外の値は、そのまま返して後段の検証に委ねます。
+ */
+function migrateLegacyInterviewSubject(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  if (!('subjectPersonId' in value) || 'subjectPersonIds' in value) return value;
+  const { subjectPersonId, ...rest } = value;
+  return { ...rest, subjectPersonIds: [subjectPersonId] };
+}
+
 const caseSchema = z.object({
   id: idSchema,
   name: z.string(),
@@ -173,9 +184,11 @@ const caseSchema = z.object({
   // 聴取を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
   interviews: z
     .array(
-      z.object({
+      z.preprocess(
+        migrateLegacyInterviewSubject,
+        z.object({
         id: idSchema,
-        subjectPersonId: idSchema,
+        subjectPersonIds: z.array(idSchema).min(1),
         interviewerPersonId: idSchema.optional(),
         at: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
         placeId: idSchema.optional(),
@@ -183,7 +196,8 @@ const caseSchema = z.object({
         documentRef: z.string().optional(),
         url: z.string().refine(isHttpUrl, 'URLは http か https のURLで指定してください').optional(),
         transcript: z.string().optional(),
-      })
+        })
+      )
     )
     .optional(),
   // 照合を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
@@ -307,18 +321,22 @@ export function findCaseViolations(target: Case): string[] {
     if (claim.interviewId !== undefined) {
       const interview = interviewsById.get(claim.interviewId);
       if (interview === undefined) {
-        violations.push(`存在しない聴取を参照しています: ${claim.interviewId}`);
+        violations.push(`存在しない資料を参照しています: ${claim.interviewId}`);
       } else {
         // 聴取は「相手がこの証言を述べた（伝えた）機会」を表すため、相手が証言に関わらないひもづけは誤りとする
+        // 相手が複数の資料では、相手のうち1人でも関わっていればよい（記者会見で、そのうち1人が述べた証言など）
         const involvedPersonIds = [...(claim.speaker.kind === 'person' ? claim.speaker.personIds : []), ...claim.viaPersonIds];
-        if (!involvedPersonIds.includes(interview.subjectPersonId)) {
-          violations.push(`聴取の相手が、証言の発言者にも経由にも含まれていません: ${claim.id}`);
+        if (!interview.subjectPersonIds.some((id) => involvedPersonIds.includes(id))) {
+          violations.push(`資料の相手が、証言の発言者にも経由にも含まれていません: ${claim.id}`);
         }
       }
     }
   }
   for (const interview of target.interviews) {
-    check(personIds, interview.subjectPersonId, '人物');
+    interview.subjectPersonIds.forEach((id) => check(personIds, id, '人物'));
+    if (new Set(interview.subjectPersonIds).size !== interview.subjectPersonIds.length) {
+      violations.push(`資料の相手に同じ人物が重なっています: ${interview.id}`);
+    }
     check(personIds, interview.interviewerPersonId, '人物');
     check(placeIds, interview.placeId, '場所');
   }

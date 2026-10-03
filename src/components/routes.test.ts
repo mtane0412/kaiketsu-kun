@@ -7,8 +7,10 @@ import {
   casesHref,
   claimHref,
   hypothesisHref,
+  interviewHref,
   mentionHref,
   newHypothesisHref,
+  newInterviewHref,
   newPersonHref,
   newPlaceHref,
   newTaskHref,
@@ -173,6 +175,18 @@ describe('taskHref・newTaskHref', () => {
   it('未了事項の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
     expect(parseDetailKind('/cases/case-villa/tasks/task-camera')).toBe('task');
     expect(parseDetailKind('/cases/case-villa/tasks/new')).toBe('newTask');
+  });
+});
+
+describe('interviewHref・newInterviewHref', () => {
+  it('資料の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(interviewHref(caseId, 'interview-book', 'graph')).toBe('/cases/case-villa/interviews/interview-book?tab=graph');
+    expect(newInterviewHref(caseId, 'timeline')).toBe('/cases/case-villa/interviews/new');
+  });
+
+  it('資料の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/interviews/interview-book')).toBe('interview');
+    expect(parseDetailKind('/cases/case-villa/interviews/new')).toBe('newInterview');
   });
 });
 

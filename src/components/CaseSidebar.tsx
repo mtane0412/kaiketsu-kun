@@ -6,7 +6,7 @@
  *    その下に、証言・人物・場所を横断して検索する検索窓を置きます。Enterキーで検索結果のページ（.../search?q=）へ移ります。
  *    IMEの変換を確定するEnterキーでは移りません（変換中の文字列で検索してしまわないためです）。
  * 2. 表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・未了事項）。以前はボードの上のタブでしたが、ナビゲーションとしてここへ移しました。
- * 3. 登録済みの一覧（人物・場所・証言）。以前はボードを覆うオーバーレイ（EntryPanel）でしたが、
+ * 3. 登録済みの一覧（人物・場所・資料・証言）。以前はボードを覆うオーバーレイ（EntryPanel）でしたが、
  *    常に見える場所に置き、選ぶとメインのカラムがその詳細に切り替わるようにしました。
  * 足元には、めったに使わない操作（ケース名の変更・JSONの書き出し・ケースの削除）をメニューに畳んでいます（CaseSettingsMenu）。
  *
@@ -16,7 +16,8 @@
  * 確認すべきことがいくつ残っているかを、どの表示からでも把握できるようにするためです。
  *
  * 一覧はどれも折りたためます。証言は数が多くサイドバーを占めてしまうため、最初は折りたたんでおきます。
- * 人物・場所は、見出しの横の「＋」から登録のページ（/cases/<ケースのID>/persons/new・.../places/new）へ進みます。
+ * 人物・場所・資料は、見出しの横の「＋」から登録のページ（/cases/<ケースのID>/persons/new・.../places/new・.../interviews/new）へ進みます。
+ * 資料（聴取）は、記事・動画・調書など証言の出どころです。相手の人物を問わず、日時の早い順に並べます（buildInterviewList）。
  * 証言には「＋」を置きません。証言は時系列ボードの書き足したい位置から書くため、並び順の中での位置が決まる入り口に一本化しています。
  *
  * 注意: 一覧のリンクには、いま開いている表示（?tab=）を引き継ぎます。詳細から「ボードに戻る」で元の表示に戻れるようにするためです。
@@ -31,6 +32,7 @@ import {
   CircleDashed,
   Clock,
   Columns3,
+  FileText,
   FolderOpen,
   Layers,
   Lightbulb,
@@ -47,6 +49,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type ClaimView } from '@/domain/case-views';
 import { findUncorroboratedClaims } from '@/domain/cross-checks';
+import { buildInterviewList, formatInterviewLabel } from '@/domain/interviews';
 import { personKindSuffixOf } from '@/domain/labels';
 import { personIconText } from '@/domain/person-icon';
 import { buildTaskList } from '@/domain/tasks';
@@ -80,6 +83,8 @@ import {
   boardHref,
   casesHref,
   claimHref,
+  interviewHref,
+  newInterviewHref,
   newPersonHref,
   newPlaceHref,
   parseTab,
@@ -270,6 +275,16 @@ export function CaseSidebar() {
     imageDataUrl: place.imageDataUrl,
   }));
 
+  const interviewItems: ListItem[] = useMemo(
+    () =>
+      buildInterviewList(currentCase).map(({ interview }) => ({
+        id: interview.id,
+        label: formatInterviewLabel(currentCase, interview),
+        href: interviewHref(caseId, interview.id, tab),
+      })),
+    [currentCase, caseId, tab]
+  );
+
   const uncorroboratedClaims = useMemo(() => findUncorroboratedClaims(currentCase), [currentCase]);
 
   const toClaimItem = (view: ClaimView): ListItem => ({
@@ -366,6 +381,17 @@ export function CaseSidebar() {
           defaultOpen
           isCurrent={(item) => isCurrentHref(item.href)}
           emptyMessage="まだ登録されていません。"
+        />
+
+        <EntityGroup
+          label="資料"
+          icon={<FileText />}
+          items={interviewItems}
+          listLabel="資料の一覧"
+          addAction={{ href: newInterviewHref(caseId, tab), label: '資料を登録' }}
+          defaultOpen
+          isCurrent={(item) => isCurrentHref(item.href)}
+          emptyMessage="記事・動画・調書など、証言の出どころを登録できます。"
         />
 
         <EntityGroup

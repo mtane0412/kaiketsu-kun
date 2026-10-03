@@ -108,9 +108,9 @@ function resolveName(name: string, entries: { id: Id; name: string; keys: string
 /** 本文を持つ聴取を返します。聴取が無いか、本文が無い場合は、照らし合わせられないためエラーにします。 */
 function interviewWithTranscript(target: Case, interviewId: Id): Interview & { transcript: string } {
   const interview = target.interviews.find((item) => item.id === interviewId);
-  if (interview === undefined) throw new Error(`聴取が見つかりません: ${interviewId}`);
+  if (interview === undefined) throw new Error(`資料が見つかりません: ${interviewId}`);
   const { transcript } = interview;
-  if (transcript === undefined) throw new Error(`本文の無い聴取の候補は照らし合わせられません: ${interviewId}`);
+  if (transcript === undefined) throw new Error(`本文の無い資料の候補は照らし合わせられません: ${interviewId}`);
   return { ...interview, transcript };
 }
 
@@ -202,8 +202,8 @@ function insertMentions(content: string, mentions: DraftMention[]): string {
  *
  * - 本文の下書きは、日時のメンションを先頭に置き、場所と言及した人物を、本文の中の名前を「@」のメンションにして表します
  *   （本文に名前が無い場合は末尾に足します）。
- * - 発言者の分からない候補は、聴取の相手を発言者にします（記者の地の文は、資料そのものの記述のためです）。
- *   発言者も経由も聴取の相手でない場合は、経由の最後に聴取の相手を足します（聴取の相手を通じて伝わった発言のためです）。
+ * - 発言者の分からない候補は、聴取の最初の相手を発言者にします（記者の地の文は、資料そのものの記述のためです）。
+ *   発言者も経由も聴取の相手のだれでもない場合は、経由の最後に最初の相手を足します（聴取の相手を通じて伝わった発言のためです）。
  * - 一致しない名前は、同じ種類・同じ名前（正規化後）ごとに1件だけ、createId で振ったIDで新規作成します。
  */
 export function candidateToClaimDraft(
@@ -212,7 +212,9 @@ export function candidateToClaimDraft(
   candidate: ClaimCandidate,
   createId: () => Id
 ): CandidateClaimDraft {
-  const { subjectPersonId } = interviewWithTranscript(target, interviewId);
+  const { subjectPersonIds } = interviewWithTranscript(target, interviewId);
+  const [primarySubjectId] = subjectPersonIds;
+  if (primarySubjectId === undefined) throw new Error(`資料の相手がいません: ${interviewId}`);
   const newEntities: NewEntity[] = [];
   const idOf = (kind: MentionKind, resolved: ResolvedName): Id => {
     if (resolved.status === 'registered') return resolved.id;
@@ -224,9 +226,10 @@ export function candidateToClaimDraft(
   };
   const mentionOf = (kind: MentionKind, resolved: ResolvedName): DraftMention => ({ kind, id: idOf(kind, resolved), label: resolved.name });
 
-  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : subjectPersonId;
+  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : primarySubjectId;
   const viaPersonIds = [...new Set(candidate.via.map((name) => idOf('person', name)))].filter((id) => id !== speakerId);
-  if (speakerId !== subjectPersonId && !viaPersonIds.includes(subjectPersonId)) viaPersonIds.push(subjectPersonId);
+  const involvesSubject = [speakerId, ...viaPersonIds].some((id) => subjectPersonIds.includes(id));
+  if (!involvesSubject) viaPersonIds.push(primarySubjectId);
 
   const entityMentions = [
     ...(candidate.place ? [mentionOf('place', candidate.place)] : []),

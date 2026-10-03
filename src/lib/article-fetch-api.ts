@@ -4,7 +4,7 @@
  * ブラウザとサーバー（src/app/api/fetch-article/route.ts）の両方で使うため、サーバーだけで使う部品
  * （undici・linkedom・@mozilla/readability など）を読み込まないでください。
  *
- * 取得した本文は、聴取の本文の欄に入れるだけで、保存はしません。ユーザーが確認・修正してから「聴取を保存」で保存します。
+ * 取得した本文は、聴取の本文の欄に入れるだけで、保存はしません。ユーザーが確認・修正してから「資料を保存」で保存します。
  */
 import { z } from 'zod';
 import { isHttpUrl, isYoutubeUrl } from '@/domain/transcript';

@@ -198,7 +198,7 @@ function LlmSettingsForm({ onDone }: { onDone: () => void }) {
       <DialogHeader>
         <DialogTitle>LLM の設定</DialogTitle>
         <DialogDescription>
-          聴取の本文から証言の候補を抽出するときに使う、OpenRouter の API キーとモデルです。API キーを空にして保存すると、保存済みのキーを消せます。
+          資料の本文から証言の候補を抽出するときに使う、OpenRouter の API キーとモデルです。API キーを空にして保存すると、保存済みのキーを消せます。
         </DialogDescription>
       </DialogHeader>
       <div className="my-4 space-y-2">

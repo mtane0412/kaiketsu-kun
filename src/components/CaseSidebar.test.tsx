@@ -101,6 +101,27 @@ describe('CaseSidebar', () => {
       expect(screen.getByRole('link', { name: '場所を登録' })).toHaveAttribute('href', '/cases/case-lakeside/places/new');
     });
 
+    it('資料の一覧を日時の早い順に並べ、それぞれの詳細ページへのリンクにし、見出しの横のボタンから登録のページへ進める', async () => {
+      // 前提: 書籍の取材（2018年）と、管理人と隣家の住人がそろって応じた記者会見（1998年）を登録している
+      openTestCase({
+        ...sampleFictionalCase,
+        interviews: [
+          { id: 'interview-book', subjectPersonIds: ['person-caretaker'], interviewerPersonId: 'person-book', at: '2018-05' },
+          { id: 'interview-press', subjectPersonIds: ['person-caretaker', 'person-neighbor'], at: '1998-08-14' },
+        ],
+      });
+      renderSidebar();
+
+      const interviewList = await screen.findByRole('list', { name: '資料の一覧' });
+      const links = within(interviewList).getAllByRole('link');
+      expect(links.map((link) => link.textContent)).toEqual([
+        '管理人、隣家の住人・1998年8月14日',
+        '管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）',
+      ]);
+      expect(links[0]).toHaveAttribute('href', '/cases/case-lakeside/interviews/interview-press');
+      expect(screen.getByRole('link', { name: '資料を登録' })).toHaveAttribute('href', '/cases/case-lakeside/interviews/new');
+    });
+
     it('証言の一覧は、開いてから証言の詳細ページへのリンクを並べる', async () => {
       const user = userEvent.setup();
       renderSidebar();

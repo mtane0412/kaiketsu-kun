@@ -54,11 +54,11 @@ export function QuoteSection({ claimId }: { claimId: Id }) {
       )}
       {check === 'notFound' && (
         <p className="text-xs text-destructive">
-          この引用は、聴取の本文に見つかりません。本文を書き換えた場合は、引用を外すか、本文から選び直してください。
+          この引用は、資料の本文に見つかりません。本文を書き換えた場合は、引用を外すか、本文から選び直してください。
         </p>
       )}
       {check === 'noTranscript' && (
-        <p className="text-xs text-muted-foreground">聴取の本文が無いため、引用を本文と照らし合わせられません。</p>
+        <p className="text-xs text-muted-foreground">資料の本文が無いため、引用を本文と照らし合わせられません。</p>
       )}
     </section>
   );
