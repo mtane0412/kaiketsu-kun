@@ -116,13 +116,21 @@ export function formatQuoteSeconds(totalSeconds: number): string {
 }
 
 /**
+ * YouTube のURLかどうかを返します。
+ * YouTube の字幕は公式APIでは動画の所有者しか取得できないため、記事の本文の取得（src/lib/article-fetch-api.ts）で、
+ * 取得せずに文字起こしの貼り付けを案内するために使います。
+ */
+export function isYoutubeUrl(url: string): boolean {
+  return isHttpUrl(url) && YOUTUBE_HOSTS.has(new URL(url).hostname);
+}
+
+/**
  * YouTube の動画のURLに、seconds 秒目から再生する指定（t）を付けたURLを返します。
  * YouTube 以外のURLでは undefined です（再生位置の指定の書き方がサイトごとに異なるためです）。
  */
 export function youtubeUrlAt(url: string, seconds: number): string | undefined {
-  if (!isHttpUrl(url)) return undefined;
+  if (!isYoutubeUrl(url)) return undefined;
   const parsed = new URL(url);
-  if (!YOUTUBE_HOSTS.has(parsed.hostname)) return undefined;
   parsed.searchParams.set('t', `${seconds}s`);
   return parsed.toString();
 }
