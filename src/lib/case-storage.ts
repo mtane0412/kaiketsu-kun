@@ -117,9 +117,18 @@ function saveCaseSummaries(summaries: CaseSummary[]): void {
   writeStorage(INDEX_STORAGE_KEY, JSON.stringify(summaries));
 }
 
-/** ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。 */
+/**
+ * ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。
+ *
+ * 一覧の保存に失敗した場合は、ケースの本体を書き込む前の内容に戻し（新しいケースは本体を取り除き）、例外を投げます。
+ * 本体だけが新しい内容のまま残ると、画面には反映されなかった変更が再読み込みで現れ、
+ * 新しいケースでは一覧から開けない本体だけが残るためです。
+ * 注意: 元に戻すことにも失敗した場合は、保存の失敗と元に戻す失敗の両方を AggregateError で投げます。
+ */
 export function saveCase(target: Case): void {
-  writeStorage(caseKeyOf(target.id), JSON.stringify(target));
+  const caseKey = caseKeyOf(target.id);
+  const previousBody = localStorage.getItem(caseKey);
+  writeStorage(caseKey, JSON.stringify(target));
 
   const summary: CaseSummary = {
     id: target.id,
@@ -128,7 +137,17 @@ export function saveCase(target: Case): void {
     updatedAt: new Date().toISOString(),
   };
   const others = listCaseSummaries().filter((item) => item.id !== target.id);
-  saveCaseSummaries([summary, ...others]);
+  try {
+    saveCaseSummaries([summary, ...others]);
+  } catch (error) {
+    try {
+      if (previousBody === null) localStorage.removeItem(caseKey);
+      else localStorage.setItem(caseKey, previousBody);
+    } catch (restoreError) {
+      throw new AggregateError([error, restoreError], 'ケースを保存できず、保存前の内容に戻すこともできませんでした');
+    }
+    throw error;
+  }
 }
 
 /**
