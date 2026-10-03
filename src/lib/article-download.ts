@@ -165,6 +165,7 @@ async function followRedirects(startUrl: string, fetcher: typeof fetch, signal: 
 
     await response.body?.cancel();
     if (redirects >= MAX_REDIRECTS) throw new ArticleFetchError(502, 'リダイレクトが多すぎるため、取得をやめました。');
+    if (!URL.canParse(location, url)) throw new ArticleFetchError(502, `リダイレクト先のURLを読めませんでした（${location}）。`);
     url = new URL(location, url);
   }
 }

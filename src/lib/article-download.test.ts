@@ -89,6 +89,14 @@ describe('downloadArticleHtml', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('リダイレクト先がURLとして読めない場合は、理由を示す', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => redirectResponse('http://'));
+
+    const failure = await failureOf(downloadArticleHtml('https://news.example.com/kohan', fetcher));
+
+    expect(failure).toEqual({ status: 502, message: 'リダイレクト先のURLを読めませんでした（http://）。' });
+  });
+
   it('リダイレクトが続きすぎる場合は、取得をやめる', async () => {
     let count = 0;
     const fetcher = vi.fn<typeof fetch>(async () => redirectResponse(`https://news.example.com/loop/${++count}`));
