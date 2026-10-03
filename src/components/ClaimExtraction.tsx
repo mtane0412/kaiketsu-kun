@@ -110,7 +110,9 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
       return;
     }
     setError(null);
-    saveLlmSettings(settings);
+    // 前後の空白を除いた値を、保存と送信の両方に使う（設定の画面で保存する値と揃えるため）
+    const trimmed = { apiKey: settings.apiKey.trim(), model: settings.model.trim() };
+    saveLlmSettings(trimmed);
     setPhase({ kind: 'loading' });
     try {
       const extracted = await requestClaimExtraction({
@@ -118,8 +120,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
         subjectName,
         personNames: currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
         placeNames: currentCase.places.map((place) => place.name),
-        apiKey: settings.apiKey.trim(),
-        model: settings.model.trim(),
+        ...trimmed,
       });
       setPhase({ kind: 'done', extracted, settledKeys: new Set() });
     } catch (caught) {
