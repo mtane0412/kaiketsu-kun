@@ -92,13 +92,14 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
   const contentId = useId();
   const [isExpanded, setIsExpanded] = useState(false);
   const isCollapsible = isLongClaimContent(view);
+  const isCollapsed = isCollapsible && !isExpanded;
 
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
     // 本文はリンクの当たり判定より手前に置く（カード全体がリンクだと、本文をドラッグして選択・コピーできないため）
     <p
       id={contentId}
-      className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground ${isCollapsible && !isExpanded ? 'line-clamp-4' : ''}`}
+      className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground ${isCollapsed ? 'line-clamp-4' : ''}`}
     >
       {view.contentSegments.map((segment, index) =>
         segment.type !== 'mention' ? (
@@ -112,6 +113,8 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
           <Link
             key={index}
             href={mentionHref(caseId, segment.kind, segment.id, tab)}
+            // 省略中は、見えない行のリンクに Tab キーで移らないよう、本文のリンクをフォーカスの順から外す（展開すると移れる）
+            tabIndex={isCollapsed ? -1 : undefined}
             className={`${ABOVE_CARD_LINK} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}

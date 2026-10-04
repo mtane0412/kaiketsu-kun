@@ -179,6 +179,26 @@ describe('TimelineView', () => {
     expect(within(claim).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('省略中の本文のメンションは、隠れている場合があるため Tab キーで移らず、展開すると移れる', async () => {
+    const user = userEvent.setup();
+    const longStatement: Claim = {
+      ...statementWithHeading,
+      content: [
+        ...Array.from({ length: 6 }, (_, index) => `Zは被害者の自宅を${index + 1}回目に訪れた。`),
+        '@[別荘の持ち主](person:person-owner)も、その様子を見ていた。',
+      ].join('\n'),
+      mentionedPersonIds: ['person-owner'],
+    };
+    render(<TimelineView target={{ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, longStatement] }} />);
+
+    const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+    const mention = () => within(claim).getByRole('link', { name: /@別荘の持ち主/ });
+    expect(mention()).toHaveAttribute('tabindex', '-1');
+
+    await user.click(within(claim).getByRole('button', { name: '全文を表示' }));
+    expect(mention()).not.toHaveAttribute('tabindex');
+  });
+
   it('短い本文は省略せず、「全文を表示」を置かない', () => {
     const caseData: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, statementWithHeading] };
     render(<TimelineView target={caseData} />);
