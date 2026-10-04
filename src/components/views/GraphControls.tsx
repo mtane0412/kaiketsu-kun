@@ -120,12 +120,13 @@ export function GraphFilterControls({ filter, onFilterChange }: GraphFilterContr
   const idPrefix = useId();
   return (
     <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 text-xs">
         {FILTER_ITEMS.map((item) => (
-          <div key={item.key} className="flex items-center gap-1.5">
+          <div key={item.key} className="flex min-h-6 items-center gap-1.5">
             <input
               id={`${idPrefix}-${item.key}`}
               type="checkbox"
+              className="size-4 accent-foreground"
               checked={filter[item.key]}
               onChange={(event) => onFilterChange({ ...filter, [item.key]: event.target.checked })}
             />

@@ -10,6 +10,7 @@
  */
 'use client';
 
+import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { buildHypothesisList, type HypothesisListItem } from '@/domain/hypotheses';
@@ -69,6 +70,7 @@ export function HypothesisListView({ target }: HypothesisListViewProps) {
     <div className="space-y-6">
       <div className="flex justify-end">
         <Link href={newHypothesisHref(caseId, TAB)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <Plus aria-hidden="true" />
           仮説を追加
         </Link>
       </div>

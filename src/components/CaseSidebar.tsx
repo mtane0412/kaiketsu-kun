@@ -28,6 +28,7 @@
 'use client';
 
 import {
+  ChevronDown,
   ChevronRight,
   CircleDashed,
   Clock,
@@ -141,7 +142,17 @@ function kindSuffixOf(item: ListItem): string {
   return item.personKind === undefined ? '' : personKindSuffixOf(item.personKind);
 }
 
-/** 人物・場所・証言の一覧を、折りたためる1つのまとまりとして表示します。 */
+/**
+ * 一覧に最初から並べる件数の上限です。
+ * 登録が多いと一覧が長くなり、下にある他の一覧の見出しが画面の外へ押し出されるため、この件数で区切ります。
+ */
+const INITIAL_VISIBLE_ITEMS = 10;
+
+/**
+ * 人物・場所・証言の一覧を、折りたためる1つのまとまりとして表示します。
+ * 件数が INITIAL_VISIBLE_ITEMS を超える場合は、先頭だけを並べ、残りは「あと◯件表示」のボタンで広げます。
+ * ただし、いま開いている項目が区切りより後ろにある場合は、現在地を見失わないよう、最初からすべてを並べます。
+ */
 function EntityGroup({
   label,
   icon,
@@ -152,6 +163,11 @@ function EntityGroup({
   isCurrent,
   emptyMessage,
 }: EntityGroupProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const hasCurrentBeyondLimit = items.slice(INITIAL_VISIBLE_ITEMS).some(isCurrent);
+  const visibleItems = isExpanded || hasCurrentBeyondLimit ? items : items.slice(0, INITIAL_VISIBLE_ITEMS);
+  const hiddenCount = items.length - visibleItems.length;
+
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
       <SidebarGroup>
@@ -168,8 +184,12 @@ function EntityGroup({
           <ChevronRight className="transition-transform group-data-[panel-open]/collapsible:rotate-90" />
         </SidebarGroupLabel>
 
+        {/* 「＋」は、タップしやすいよう、既定（20px）より大きい 24px 四方にする（WCAG 2.5.8） */}
         {addAction && (
-          <SidebarGroupAction render={<Link href={addAction.href} aria-label={addAction.label} />}>
+          <SidebarGroupAction
+            render={<Link href={addAction.href} aria-label={addAction.label} />}
+            className="top-3 right-2.5 w-6"
+          >
             <Plus />
           </SidebarGroupAction>
         )}
@@ -180,7 +200,7 @@ function EntityGroup({
               <p className="px-2 py-1 text-xs text-muted-foreground">{emptyMessage}</p>
             ) : (
               <SidebarMenu aria-label={listLabel}>
-                {items.map((item) => (
+                {visibleItems.map((item) => (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton
                       size="sm"
@@ -201,6 +221,16 @@ function EntityGroup({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                {hiddenCount > 0 && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton size="sm" className="text-muted-foreground" onClick={() => setIsExpanded(true)}>
+                      <ChevronDown aria-hidden="true" />
+                      <span>
+                        {label}をあと{hiddenCount}件表示
+                      </span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             )}
           </SidebarGroupContent>
@@ -216,6 +246,9 @@ function EntityGroup({
  * （ブラウザの「戻る」や、検索結果のページを離れたときに、検索窓の文字列をURLに合わせるためです）。
  * 注意: IMEの変換を確定するEnterキー（isComposing）と、空白だけの検索語では移りません。
  */
+/** ボード全体の検索窓のIDです。ショートカット（「/」・⌘K）でフォーカスを移すときに使います。 */
+export const BOARD_SEARCH_INPUT_ID = 'board-search';
+
 function BoardSearchInput({ tab, initialQuery }: { tab: TabKey; initialQuery: string }) {
   const caseId = useCaseId();
   const router = useRouter();
@@ -233,14 +266,22 @@ function BoardSearchInput({ tab, initialQuery }: { tab: TabKey; initialQuery: st
     <div className="relative">
       <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 opacity-50" />
       <SidebarInput
+        id={BOARD_SEARCH_INPUT_ID}
         type="search"
         aria-label="ボード全体を検索"
         placeholder="証言・人物・場所を検索"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
-        className="pl-8"
+        className="peer pr-7 pl-8"
       />
+      {/* 「/」キーで検索窓へ移れること（useBoardShortcuts）を示す印。入力中は邪魔にならないよう隠す */}
+      <kbd
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border bg-background px-1.5 font-sans text-[0.65rem] text-muted-foreground peer-focus:hidden"
+      >
+        /
+      </kbd>
     </div>
   );
 }
@@ -315,7 +356,10 @@ export function CaseSidebar() {
             <DropdownMenu>
               <DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
                 <FolderOpen />
-                <span className="font-medium">{currentCase.name}</span>
+                {/* ケースの名前が長くても見出しの高さを保つよう、1行に収めて末尾を省く */}
+                <span className="min-w-0 truncate font-medium" title={currentCase.name}>
+                  {currentCase.name}
+                </span>
                 <Layers className="ml-auto" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">

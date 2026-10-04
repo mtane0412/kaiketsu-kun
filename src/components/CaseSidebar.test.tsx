@@ -172,6 +172,43 @@ describe('CaseSidebar', () => {
       expect(within(list).queryByRole('link', { name: /天気/ })).not.toBeInTheDocument();
     });
 
+    describe('登録が多い一覧', () => {
+      /** サンプルのケースに人物を足し、人物が15件あるケースを開きます。 */
+      function openCaseWith15Persons() {
+        const extraPersons = Array.from({ length: 8 }, (_, index) => ({
+          id: `person-villager-${index + 1}`,
+          name: `村人${index + 1}`,
+          kind: 'individual' as const,
+        }));
+        openTestCase({ ...sampleFictionalCase, persons: [...sampleFictionalCase.persons, ...extraPersons] });
+      }
+
+      it('最初は先頭の10件だけを並べ、残りの件数を示すボタンで、すべてを表示できる', async () => {
+        const user = userEvent.setup();
+        openCaseWith15Persons();
+        renderSidebar();
+
+        const personList = await screen.findByRole('list', { name: '人物の一覧' });
+        // 前提: 一覧が長くなりすぎて、下の「場所」「証言」の見出しが画面の外へ押し出されないよう、10件で区切る
+        expect(within(personList).getAllByRole('link')).toHaveLength(10);
+
+        await user.click(screen.getByRole('button', { name: '人物をあと5件表示' }));
+
+        expect(within(personList).getAllByRole('link')).toHaveLength(15);
+        expect(screen.queryByRole('button', { name: '人物をあと5件表示' })).not.toBeInTheDocument();
+      });
+
+      it('開いている項目が11件目以降にある場合は、最初からすべてを並べる（現在地を見失わないため）', async () => {
+        openCaseWith15Persons();
+        resetMockNavigation('/cases/case-lakeside/persons/person-villager-8');
+        renderSidebar();
+
+        const personList = await screen.findByRole('list', { name: '人物の一覧' });
+        expect(within(personList).getByRole('link', { name: '村人8' })).toHaveAttribute('aria-current', 'page');
+        expect(within(personList).getAllByRole('link')).toHaveLength(15);
+      });
+    });
+
     it('開いている人物の詳細は、一覧でも現在地として示す', async () => {
       resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
       renderSidebar();

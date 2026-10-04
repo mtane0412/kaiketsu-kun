@@ -121,7 +121,7 @@ function AddButton({ label, children, onClick }: { label?: string; children: Rea
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+      className="flex min-h-6 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </button>

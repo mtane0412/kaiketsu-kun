@@ -19,7 +19,7 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Id } from '@/domain/types';
 import { initializeCaseStore, useCaseStore } from '@/stores/useCaseStore';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { FormError } from './forms/fields';
 import { boardHref } from './routes';
@@ -97,12 +97,19 @@ export function CaseList() {
           <Plus />
           新しいケース
         </Button>
-        {/* ファイル選択は input が担うため、ボタンの見た目だけを借りる */}
-        <Button type="button" variant="outline" size="sm" render={<label />} className="cursor-pointer">
+        {/* ファイル選択は input が担うため、label にボタンの見た目だけを借りる（ボタンの役割を持たせると、input を入れ子にできない）。
+            input は見えないため、input にフォーカスがあるときは、label の側にフォーカスの枠を出す */}
+        <label
+          className={buttonVariants({
+            variant: 'outline',
+            size: 'sm',
+            className: 'cursor-pointer has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50',
+          })}
+        >
           <Upload />
           JSONを読み込む
           <input type="file" accept="application/json,.json" onChange={handleImport} className="sr-only" />
-        </Button>
+        </label>
         <Button type="button" variant="outline" size="sm" onClick={handleLoadSample}>
           <FlaskConical />
           架空のサンプルを読み込む
@@ -135,9 +142,21 @@ export function CaseList() {
       </ul>
 
       {isLoaded && summaries.length === 0 && (
-        <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-          保存されているケースはありません。「新しいケース」から始めてください。
-        </p>
+        <section
+          aria-labelledby="empty-cases-heading"
+          className="flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-10 text-center"
+        >
+          <h2 id="empty-cases-heading" className="text-sm font-semibold">
+            保存されているケースはありません
+          </h2>
+          <p className="max-w-md text-sm text-muted-foreground">
+            「新しいケース」から書き始めるか、架空の事件のサンプルで、証言を時系列・グラフ・地図で見比べる流れを試せます。
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={handleLoadSample}>
+            <FlaskConical />
+            サンプルで使い方を見る
+          </Button>
+        </section>
       )}
     </div>
   );

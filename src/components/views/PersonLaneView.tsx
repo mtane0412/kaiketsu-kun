@@ -47,6 +47,7 @@ import { ClaimCard } from './ClaimCard';
 import { ROLE_LABELS, ROLE_STYLES } from './lane-role-style';
 import { PersonTimeAxisView } from './PersonTimeAxisView';
 import { PersonKindFilter } from './PersonKindFilter';
+import { BoardEmptyState } from './BoardEmptyState';
 
 const DRAG_INSTRUCTIONS =
   '列を動かすには、スペースキーで持ち上げ、左右の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -115,11 +116,7 @@ export function PersonLaneView({ target }: PersonLaneViewProps) {
   const hasAnyRow = useMemo(() => buildPersonLanes(target).rows.length > 0, [target]);
 
   if (!hasAnyRow) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。
-      </p>
-    );
+    return <BoardEmptyState message="人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。" />;
   }
 
   return (

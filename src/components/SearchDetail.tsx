@@ -21,6 +21,7 @@ import { ClaimLink } from './ClaimLink';
 import { EntityAvatar } from './EntityAvatar';
 import { boardHref, parseTab, personHref, placeHref, SEARCH_QUERY_PARAM, TAB_SEARCH_PARAM } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** 一致した項目の名前を、行に添える文字列（「名前・別名」など）にします。 */
 function formatFields(fields: SearchField[]): string {
@@ -77,15 +78,7 @@ export function SearchDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <Link
-          href={boardHref(caseId, tab)}
-          aria-label="検索結果を閉じる"
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          閉じる
-        </Link>
-      </div>
+      <DetailCloseLink href={boardHref(caseId, tab)} label="検索結果を閉じる" />
 
       <h2 className="text-lg font-semibold">「{query}」の検索結果</h2>
 
@@ -94,9 +87,8 @@ export function SearchDetail() {
       {results.claims.length > 0 && (
         <ResultSection label="証言" count={results.claims.length}>
           {results.claims.map(({ view, fields }) => (
-            <li key={view.claim.id} className="space-y-0.5">
-              <ClaimLink view={view} tab={tab} />
-              <p className="px-3 text-xs text-muted-foreground">{formatFields(fields)}に一致</p>
+            <li key={view.claim.id}>
+              <ClaimLink view={view} tab={tab} note={`${formatFields(fields)}に一致`} />
             </li>
           ))}
         </ResultSection>

@@ -43,6 +43,11 @@ type FormProps<T> = {
    * 新規登録では、保存した直後にそのエンティティの詳細へ移るために使います。
    */
   onDone: (id: Id) => void;
+  /**
+   * 保存ボタンの左に並べる操作です（詳細の「削除」など）。
+   * 証言のフォーム（ClaimForm）とそろえ、保存は右端、取り消せない操作は左端に置きます。
+   */
+  actions?: ReactNode;
 };
 
 /** 例外をフォームに表示するエラー文に変換します。 */
@@ -104,7 +109,7 @@ function toPersonKind(value: string): PersonKind {
   return kind;
 }
 
-export function PersonForm({ initial, onDone }: FormProps<Person>) {
+export function PersonForm({ initial, onDone, actions }: FormProps<Person>) {
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
   const [kind, setKind] = useState<PersonKind>(initial?.kind ?? DEFAULT_PERSON_KIND);
@@ -173,12 +178,15 @@ export function PersonForm({ initial, onDone }: FormProps<Person>) {
       />
       {noteField}
       <FormError message={error} />
-      <SubmitButton label="人物を保存" />
+      <div className="flex items-center justify-end gap-3">
+        {actions}
+        <SubmitButton label="人物を保存" />
+      </div>
     </form>
   );
 }
 
-export function PlaceForm({ initial, onDone }: FormProps<Place>) {
+export function PlaceForm({ initial, onDone, actions }: FormProps<Place>) {
   const upsertMany = useCaseStore((state) => state.upsertMany);
   const [name, setName] = useState(initial?.name ?? '');
   const [imageDataUrl, setImageDataUrl] = useState(initial?.imageDataUrl);
@@ -217,7 +225,10 @@ export function PlaceForm({ initial, onDone }: FormProps<Place>) {
       <CoordinateField label="座標" value={coordinates} onChange={setCoordinates} />
       {noteField}
       <FormError message={error} />
-      <SubmitButton label="場所を保存" />
+      <div className="flex items-center justify-end gap-3">
+        {actions}
+        <SubmitButton label="場所を保存" />
+      </div>
     </form>
   );
 }

@@ -64,7 +64,23 @@ describe('claimLabelOf', () => {
       (item) => item.view.claim.id === 'claim-neighbor'
     )!;
 
-    expect(claimLabelOf(neighborClaim.view)).toBe('ごろ、@湖畔の別荘の明かりがついていて、…');
+    expect(claimLabelOf(neighborClaim.view)).toBe('湖畔の別荘の明かりがついていて、庭に別荘…');
+  });
+
+  it('先頭の日時を除いたあとに残る「ごろ、」「に」などの言葉は、名前の頭に残さない', () => {
+    // 前提: 管理人の証言は「@1998年8月12日 19:00に見回りをしたとき、…」で始まる
+    const caretakerClaim = buildTimeline(sampleFictionalCase).items.find(
+      (item) => item.view.claim.id === 'claim-caretaker'
+    )!;
+
+    expect(claimLabelOf(caretakerClaim.view)).toBe('見回りをしたとき、湖畔の別荘はすでに真っ…');
+  });
+
+  it('人物・場所のメンションは、入力の記法である「@」を付けずに名前だけで表す', () => {
+    // 前提: 架空日報の証言は「@別荘の持ち主は12日夜から連絡が取れなくなっている。」
+    const reportClaim = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-report')!;
+
+    expect(claimLabelOf(reportClaim.view)).toBe('別荘の持ち主は12日夜から連絡が取れなく…');
   });
 });
 

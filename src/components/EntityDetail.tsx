@@ -43,6 +43,7 @@ import { TaskLinkSection } from './TaskLinkSection';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, personHref, placeHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** 関連するエンティティの一覧の見出しです。 */
 const RELATED_ENTITIES_LABEL = '関連するエンティティ';
@@ -52,15 +53,7 @@ function CloseLink({ kindLabel, tab }: { kindLabel: string; tab: TabKey }) {
   const caseId = useCaseId();
 
   return (
-    <div className="flex justify-end">
-      <Link
-        href={boardHref(caseId, tab)}
-        aria-label={`${kindLabel}の詳細を閉じる`}
-        className="text-xs text-muted-foreground hover:underline"
-      >
-        閉じる
-      </Link>
-    </div>
+    <DetailCloseLink href={boardHref(caseId, tab)} label={`${kindLabel}の詳細を閉じる`} />
   );
 }
 
@@ -88,7 +81,8 @@ type EntityDetailShellProps = {
   name: string;
   tab: TabKey;
   /** 人物・場所の編集フォームです。 */
-  form: (onDone: () => void) => ReactNode;
+  /** 編集のフォームを描きます。actions は、フォームの保存ボタンの左に並べる操作（削除）です。 */
+  form: (onDone: () => void, actions: ReactNode) => ReactNode;
   claimGroups: EntityClaimGroup[];
   relatedEntities: RelatedEntity[];
   /**
@@ -132,20 +126,22 @@ function EntityDetailShell({ kind, id, name, tab, form, claimGroups, relatedEnti
 
       <section aria-label={`${kindLabel}の編集`} className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-lg font-semibold">{name}</h2>
-        {form(() => setIsSaved(true))}
+        {form(
+          () => setIsSaved(true),
+          <div className="mr-auto">
+            <DeleteConfirmButton
+              label={`この${kindLabel}を削除`}
+              title={`「${name}」を削除しますか？`}
+              description={deleteDescription}
+              onConfirm={handleDelete}
+            />
+          </div>
+        )}
         {isSaved && (
           <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
             保存しました
           </p>
         )}
-        <div className="mt-3">
-          <DeleteConfirmButton
-            label={`この${kindLabel}を削除`}
-            title={`「${name}」を削除しますか？`}
-            description={deleteDescription}
-            onConfirm={handleDelete}
-          />
-        </div>
         <div className="mt-2">
           <FormError message={deleteError} />
         </div>
@@ -268,7 +264,7 @@ export function PersonDetail({ personId }: { personId: Id }) {
       id={personId}
       name={detail.person.name}
       tab={tab}
-      form={(onDone) => <PersonForm initial={detail.person} onDone={onDone} />}
+      form={(onDone, actions) => <PersonForm initial={detail.person} onDone={onDone} actions={actions} />}
       claimGroups={detail.claimGroups}
       relatedEntities={detail.relatedEntities}
       extraSection={
@@ -336,7 +332,7 @@ export function PlaceDetail({ placeId }: { placeId: Id }) {
       id={placeId}
       name={detail.place.name}
       tab={tab}
-      form={(onDone) => <PlaceForm initial={detail.place} onDone={onDone} />}
+      form={(onDone, actions) => <PlaceForm initial={detail.place} onDone={onDone} actions={actions} />}
       claimGroups={detail.claimGroups}
       relatedEntities={detail.relatedEntities}
     />

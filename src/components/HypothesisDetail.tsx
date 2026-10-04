@@ -34,6 +34,7 @@ import { FormError, INPUT_CLASS } from './forms/fields';
 import { HypothesisForm } from './forms/HypothesisForm';
 import { boardHref, hypothesisHref, parseTab, personHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** 対象の人物の表の名前です。読み上げのための名前（aria-label）にも使います。 */
 const TARGET_TABLE_LABEL = '対象の人物の動機・機会・手段';
@@ -42,11 +43,7 @@ const TARGET_TABLE_LABEL = '対象の人物の動機・機会・手段';
 function CloseLink({ tab }: { tab: TabKey }) {
   const caseId = useCaseId();
   return (
-    <div className="flex justify-end">
-      <Link href={boardHref(caseId, tab)} aria-label="仮説の詳細を閉じる" className="text-xs text-muted-foreground hover:underline">
-        閉じる
-      </Link>
-    </div>
+    <DetailCloseLink href={boardHref(caseId, tab)} label="仮説の詳細を閉じる" />
   );
 }
 

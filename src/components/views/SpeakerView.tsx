@@ -9,6 +9,7 @@ import { groupClaimsBySpeaker } from '@/domain/case-views';
 import type { Case } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
 import { ClaimCard } from './ClaimCard';
+import { BoardEmptyState } from './BoardEmptyState';
 
 const KIND_LABELS = { person: '人物', user: 'ユーザー' } as const;
 
@@ -20,7 +21,7 @@ export function SpeakerView({ target }: SpeakerViewProps) {
   const groups = useMemo(() => groupClaimsBySpeaker(target), [target]);
 
   if (groups.length === 0) {
-    return <p className="text-sm text-muted-foreground">証言がまだ登録されていません。時系列のボードから書き足してください。</p>;
+    return <BoardEmptyState message="証言がまだ登録されていません。時系列のボードから書き足してください。" />;
   }
 
   return (

@@ -117,15 +117,23 @@ const CLAIM_LABEL_LENGTH = 20;
  *
  * 注意: 本文の日時のメンションは名前に含めません。日時は時系列の並びと、カードの上の表示で分かるため、
  * 短い名前の文字数を日時で使ってしまうと、証言を見分けにくくなるためです。
+ * 本文が日時で始まる場合は、日時に続く「ごろ、」「に」などの言葉も名前の頭から除きます（「ごろ、…」のような名前は読みにくいため）。
+ * 人物・場所のメンションは、入力の記法である「@」を付けず、名前だけで表します。
  */
 export function claimLabelOf(view: ClaimView): string {
   if (view.claim.title) return view.claim.title;
-  const text = view.contentSegments
+  const [first] = view.contentSegments;
+  const startsWithDate = first?.type === 'mention' && first.kind === 'date';
+  const joined = view.contentSegments
     .filter((segment) => segment.type !== 'mention' || segment.kind !== 'date')
-    .map((segment) => (segment.type === 'text' ? segment.text : `@${segment.label}`))
+    .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
     .join('');
+  const text = (startsWithDate ? joined.replace(LEADING_DATE_PARTICLES, '') : joined).trimStart();
   return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
 }
+
+/** 本文の先頭の日時に続く言葉（「ごろ、」「頃に」「に」「、」など）に一致する正規表現です。 */
+const LEADING_DATE_PARTICLES = /^\s*(?:ごろ|頃)?(?:に|には|、|,|，|\s)*/;
 
 /**
  * 証言を、時系列ボードの並び順（resolveTimelineOrder）で並べます。

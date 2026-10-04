@@ -72,6 +72,7 @@ import {
 import { PERSON_KIND_STYLES } from '../person-kind-style';
 import { claimHref, personHref } from '../routes';
 import { useCaseId } from '../useCaseId';
+import { BoardEmptyState } from './BoardEmptyState';
 
 /** このビューを表すタブです。ノードのリンク先に、戻り先として引き継ぎます。 */
 const TAB = 'graph';
@@ -400,11 +401,7 @@ export function GraphView({ target }: GraphViewProps) {
   };
 
   if (layout.nodes.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        人物も証言もまだ登録されていません。時系列のボードから書き足してください。
-      </p>
-    );
+    return <BoardEmptyState message="人物も証言もまだ登録されていません。時系列のボードから書き足してください。" />;
   }
 
   const arrowMarkerId = `${idPrefix}-arrow`;

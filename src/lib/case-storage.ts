@@ -150,6 +150,11 @@ export function saveCase(target: Case): void {
   }
 }
 
+/** IDを指定したケースの本体が保存されているかどうかを返します。ケースを開けなかった理由（見つからない・形式が正しくない）を見分けるために使います。 */
+export function hasStoredCase(caseId: Id): boolean {
+  return localStorage.getItem(caseKeyOf(caseId)) !== null;
+}
+
 /**
  * IDを指定してケースを読み出します。
  * 保存が無い場合と、保存データが検証に失敗した場合は例外を投げます。
