@@ -7,9 +7,9 @@
  *   同じ資料の証言を続けて書くときに、資料と発言者を選び直す手間を省くためです。
  *   speakerPersonId を渡した場合（人物の詳細から開いた場合）は、その人物を発言者に選んでおきます。
  *   渡さない場合は、発言者を選ばずにおきます（資料には何人もの発言が載る場合があるためです）。
- * - 本文を持つ資料は、「本文を開く」で本文を表示し、範囲を選んで証言を書き起こせます（InterviewTranscript）。
- *   資料の詳細では、読みながら証言を拾えるよう、本文を最初から開いておきます（opensTranscript）。
- *   本文の無い資料では、資料の詳細に、本文を貼り付けると証言を書き起こせることを示します。
+ * - 本文を持つ資料は、本文を常に表示し、範囲を選んで証言を書き起こせます（InterviewTranscript）。
+ *   人物の詳細の「供述の変遷」では、資料が何件も並ぶため、長い本文の見た目を省略し、「全文を表示」で展開します（collapsesLongTranscript）。
+ *   本文の無い資料では、資料の詳細に、本文を貼り付けると証言を書き起こせることを示します（showsTranscriptHint）。
  *   書き起こしの入力欄は、「この資料の証言を書き足す」と同じ入力欄に、選んだ範囲を引用として渡して開きます。
  *   本文から LLM で証言の候補を抽出する画面（ClaimExtraction）も、本文の下に開きます（InterviewTranscript の「証言の候補を抽出」）。
  * - 編集（InterviewForm）と削除。
@@ -76,19 +76,20 @@ type InterviewCardProps = {
   speakerPersonId?: Id;
   /** 資料の詳細へのリンクと、発言者が複数の資料の発言者の全員を示すかどうかです。省略すると示します。 */
   showsSource?: boolean;
-  /** 本文を最初から開いておくかどうかです。資料の詳細で指定します。 */
-  opensTranscript?: boolean;
+  /** 本文の無い資料に、本文を貼り付けると証言を書き起こせることを示すかどうかです。資料の詳細で指定します。 */
+  showsTranscriptHint?: boolean;
+  /** 長い本文の見た目を省略し、「全文を表示」で展開できるようにするかどうかです。人物の詳細の「供述の変遷」で指定します。 */
+  collapsesLongTranscript?: boolean;
   /** YouTube の動画の資料で、動画を埋め込みプレーヤーで表示するかどうかです。資料の詳細で指定します。 */
   embedsVideo?: boolean;
   /** 資料を削除できたときに呼び出します。 */
   onDeleted?: () => void;
 };
 
-export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, opensTranscript = false, embedsVideo = false, onDeleted }: InterviewCardProps) {
+export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, showsTranscriptHint = false, collapsesLongTranscript = false, embedsVideo = false, onDeleted }: InterviewCardProps) {
   const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const [form, setForm] = useState<FormState>(CLOSED);
-  const [isTranscriptOpen, setIsTranscriptOpen] = useState(opensTranscript);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [playback, setPlayback] = useState<Playback | null>(null);
 
@@ -149,12 +150,12 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
           allowFullScreen
         />
       )}
-      {interview.transcript === undefined && opensTranscript && (
+      {interview.transcript === undefined && showsTranscriptHint && (
         <p className="text-xs text-muted-foreground">
           「編集」から記事の本文や動画の文字起こしを貼り付けると、範囲を選んで証言を書き起こせます。
         </p>
       )}
-      {interview.transcript !== undefined && isTranscriptOpen && (
+      {interview.transcript !== undefined && (
         <InterviewTranscript
           interviewId={interview.id}
           transcript={interview.transcript}
@@ -163,6 +164,7 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
           tab={tab}
           onQuote={(quote) => setForm({ kind: 'compose', quote })}
           onSeek={seekTo}
+          collapsesLongTranscript={collapsesLongTranscript}
         />
       )}
 
@@ -189,18 +191,6 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {interview.transcript !== undefined && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`${timeLabel}の資料の本文を${isTranscriptOpen ? '閉じる' : '開く'}`}
-            aria-expanded={isTranscriptOpen}
-            onClick={() => setIsTranscriptOpen((current) => !current)}
-          >
-            {isTranscriptOpen ? '本文を閉じる' : '本文を開く'}
-          </Button>
-        )}
         <Button
           type="button"
           variant="outline"

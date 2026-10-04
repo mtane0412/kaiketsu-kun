@@ -9,6 +9,9 @@ import {
   findQuoteRange,
   formatQuoteSeconds,
   isHttpUrl,
+  isLongTranscript,
+  LONG_TRANSCRIPT_MAX_LENGTH,
+  LONG_TRANSCRIPT_MAX_LINES,
   isYoutubeUrl,
   quoteSecondsAt,
   splitTimestampLines,
@@ -108,6 +111,19 @@ describe('buildTranscriptSegments', () => {
     expect(buildTranscriptSegments('別荘は真っ暗だった', [{ claimId: 'claim-lost', text: '明かり' }])).toEqual([
       { text: '別荘は真っ暗だった', claimIds: [] },
     ]);
+  });
+});
+
+describe('isLongTranscript', () => {
+  it('文字数が上限を超える本文を、長い本文とする', () => {
+    expect(isLongTranscript('あ'.repeat(LONG_TRANSCRIPT_MAX_LENGTH))).toBe(false);
+    expect(isLongTranscript('あ'.repeat(LONG_TRANSCRIPT_MAX_LENGTH + 1))).toBe(true);
+  });
+
+  it('文字数が上限以内でも、行数が上限を超える本文を、長い本文とする', () => {
+    const lines = (count: number) => Array.from({ length: count }, (_, index) => `${index + 1}行目`).join('\n');
+    expect(isLongTranscript(lines(LONG_TRANSCRIPT_MAX_LINES))).toBe(false);
+    expect(isLongTranscript(lines(LONG_TRANSCRIPT_MAX_LINES + 1))).toBe(true);
   });
 });
 
