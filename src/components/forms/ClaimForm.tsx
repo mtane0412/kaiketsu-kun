@@ -57,6 +57,7 @@ import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
 import type { NewEntity } from '@/domain/claim-extraction';
 import type { Claim, ClaimQuote, Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
@@ -294,15 +295,15 @@ export function ClaimForm({
         {/* 常に表示する案内は1行に絞り、詳しい書き方は折りたたむ（慣れたユーザーが毎回読み飛ばす長文にしないため） */}
         <div className="space-y-1 text-xs text-muted-foreground">
           <p>「@」で人物・場所・日時を書けます。誰の発言かは「発言者」で選びます。</p>
-          <details>
-            <summary className="w-fit cursor-pointer hover:underline">書き方のヒント</summary>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          <Collapsible>
+            <CollapsibleTrigger className="hover:underline">書き方のヒント</CollapsibleTrigger>
+            <CollapsibleContent render={<ul />} className="mt-1 list-disc space-y-0.5 pl-4">
               <li>未登録の名前は、「@」の候補からその場で作成できます。</li>
               <li>日時は「@1998-08-12」「@1998年8月12日19時」のように書くと候補に出ます。</li>
               <li>誰を経由して伝わったか（新聞・書籍・警察の発表など）も、保存ボタンの横の「発言者」で選びます。</li>
               <li>発言者を選ばない証言は、ユーザーの推測です。</li>
-            </ul>
-          </details>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
         {summaryItems.length > 0 && (
           <dl

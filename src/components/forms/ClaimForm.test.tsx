@@ -224,9 +224,10 @@ describe('ClaimForm', () => {
       const user = userEvent.setup();
       render(<ClaimForm onDone={() => {}} />);
 
-      // 前提: 折りたたまれている間は、日時の書き方の例が見えない
-      const hintToggle = screen.getByText('書き方のヒント');
-      expect(screen.getByText(/@1998年8月12日19時/)).not.toBeVisible();
+      // 前提: 折りたたまれている間は、日時の書き方の例を表示しない
+      const hintToggle = screen.getByRole('button', { name: '書き方のヒント' });
+      expect(hintToggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText(/@1998年8月12日19時/)).not.toBeInTheDocument();
 
       await user.click(hintToggle);
 
@@ -238,7 +239,7 @@ describe('ClaimForm', () => {
     it('ボード上の入力欄（compact）では、案内も「書き方のヒント」も表示しない', () => {
       render(<ClaimForm onDone={() => {}} compact />);
 
-      expect(screen.queryByText('書き方のヒント')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '書き方のヒント' })).not.toBeInTheDocument();
       expect(screen.queryByText(/誰の発言かは「発言者」で選びます。$/)).not.toBeInTheDocument();
     });
   });
