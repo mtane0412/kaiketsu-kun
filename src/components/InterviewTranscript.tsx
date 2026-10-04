@@ -4,7 +4,7 @@
  * 資料のカード（InterviewCard）で、本文を持つ聴取の下に表示します。
  * - collapsesLongTranscript を渡すと（人物の詳細の「供述の変遷」）、長い本文（isLongTranscript）の見た目を省略し、
  *   「全文を表示」で展開、「折りたたむ」で省略に戻します。展開した本文は、高さを制限せずに全文を並べます。
- *   省略中も本文のリンク・ボタンには Tab キーで移れ、省略で隠れている要素に移ったときは本文を展開します（isClippedBelow）。
+ *   省略中も本文のリンク・ボタンには Tab キーで移れ、省略で隠れている要素に移ったときは本文を展開します（expandOnClippedFocus）。
  *   渡さない場合（資料の詳細）は、本文を省略せず、高さを制限した枠の中でスクロールして読みます
  *   （埋め込みプレーヤーを画面に残したまま、本文の時刻の行を押せるようにするためです）。
  * - 本文のうち、証言として書き起こした範囲（証言の引用）を、その証言へのリンクとして示します。
@@ -29,7 +29,7 @@ import { buildTranscriptSegments, formatQuoteSeconds, isLongTranscript, quoteSec
 import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
 import { ClaimExtraction, type ExtractionSource } from './ClaimExtraction';
-import { isClippedBelow } from './clipping';
+import { expandOnClippedFocus } from './clipping';
 import { claimHref, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 
@@ -168,9 +168,7 @@ export function InterviewTranscript({
           id={textId}
           data-testid="transcript-text"
           // 省略で隠れているリンク・ボタンに Tab キーで移ったときは、移った先が見えるよう本文を展開する
-          onFocus={(event) => {
-            if (textHeight === 'collapsed' && isClippedBelow(event.target, event.currentTarget)) setIsExpanded(true);
-          }}
+          onFocus={expandOnClippedFocus(textHeight === 'collapsed', () => setIsExpanded(true))}
           className={`${TEXT_HEIGHT_CLASSES[textHeight]} whitespace-pre-wrap rounded border bg-background p-2 text-sm leading-relaxed`}
         >
           {segments.map((segment, index) => {

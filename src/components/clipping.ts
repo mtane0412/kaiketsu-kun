@@ -7,6 +7,7 @@
  *
  * 注意: 描画後の位置で判定するため、レイアウトを計算しない環境（jsdom）では、位置を与えてから確かめてください。
  */
+import type { FocusEvent } from 'react';
 
 /**
  * 要素の下端が、省略した枠（container）の下端より下にはみ出しているかどうかを返します。一部でも隠れていれば true です。
@@ -15,4 +16,15 @@
  */
 export function isClippedBelow(element: Element, container: Element): boolean {
   return element.getBoundingClientRect().bottom + container.scrollTop > container.getBoundingClientRect().bottom;
+}
+
+/**
+ * 省略した枠に付ける onFocus の処理を返します。
+ * 省略中（isCollapsed）に、省略で隠れている要素へフォーカスが移ったときだけ、expand を呼び出して本文を展開します。
+ * 見えている要素へ移った場合は、省略したままにします。
+ */
+export function expandOnClippedFocus(isCollapsed: boolean, expand: () => void): (event: FocusEvent<Element>) => void {
+  return (event) => {
+    if (isCollapsed && isClippedBelow(event.target, event.currentTarget)) expand();
+  };
 }
