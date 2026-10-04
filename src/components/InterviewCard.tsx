@@ -164,7 +164,7 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
           tab={tab}
           onQuote={(quote) => setForm({ kind: 'compose', quote })}
           onSeek={seekTo}
-          collapsesLongText={collapsesLongTranscript}
+          collapsesLongTranscript={collapsesLongTranscript}
         />
       )}
 

@@ -2,7 +2,7 @@
  * 聴取の本文（記事の本文・動画の文字起こし）の表示と、本文の範囲からの証言の書き起こし
  *
  * 資料のカード（InterviewCard）で、本文を持つ聴取の下に表示します。
- * - collapsesLongText を渡すと（人物の詳細の「供述の変遷」）、長い本文（isLongTranscript）の見た目を省略し、
+ * - collapsesLongTranscript を渡すと（人物の詳細の「供述の変遷」）、長い本文（isLongTranscript）の見た目を省略し、
  *   「全文を表示」で展開、「折りたたむ」で省略に戻します。展開した本文は、高さを制限せずに全文を並べます。
  *   渡さない場合（資料の詳細）は、本文を省略せず、高さを制限した枠の中でスクロールして読みます
  *   （埋め込みプレーヤーを画面に残したまま、本文の時刻の行を押せるようにするためです）。
@@ -47,7 +47,7 @@ type InterviewTranscriptProps = {
   /** 本文の時刻の行を押したときに、その秒数で呼び出します。渡さない場合は、時刻の行をボタンにしません。 */
   onSeek?: (seconds: number) => void;
   /** 長い本文の見た目を省略し、「全文を表示」で展開できるようにするかどうかです。省略すると、省略せずに枠の中でスクロールします。 */
-  collapsesLongText?: boolean;
+  collapsesLongTranscript?: boolean;
 };
 
 /**
@@ -100,15 +100,16 @@ export function InterviewTranscript({
   tab,
   onQuote,
   onSeek,
-  collapsesLongText = false,
+  collapsesLongTranscript = false,
 }: InterviewTranscriptProps) {
   const caseId = useCaseId();
   const textRef = useRef<HTMLDivElement>(null);
   const textId = useId();
   const [isExpanded, setIsExpanded] = useState(false);
-  const isCollapsible = collapsesLongText && isLongTranscript(transcript);
-  const textHeight = !collapsesLongText ? 'scroll' : isCollapsible && !isExpanded ? 'collapsed' : 'full';
-  // 省略中は、見えない行のリンクやボタンに Tab キーで移らないよう、本文の中の操作できる要素をフォーカスの順から外す（展開すると移れる）
+  const isCollapsible = collapsesLongTranscript && isLongTranscript(transcript);
+  const textHeight = !collapsesLongTranscript ? 'scroll' : isCollapsible && !isExpanded ? 'collapsed' : 'full';
+  // 省略中は、見えない行のリンクやボタンに Tab キーで移らないよう、本文の中の操作できる要素をすべてフォーカスの順から外す。
+  // 見えている先頭の行の要素も外れるが、どの行が見えているかは描画後の高さに依存するため、行ごとには判定しない（「全文を表示」で展開すると移れる）
   const focusableTabIndex = textHeight === 'collapsed' ? -1 : undefined;
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
   /** 証言の候補の抽出に送る本文です。押すたびに作り直すため、何回目に押したかも持ちます。 */
