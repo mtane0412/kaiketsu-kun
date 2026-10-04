@@ -86,6 +86,52 @@ describe('InterviewDetail', () => {
     expect(screen.getByTitle('日時不明の資料の動画')).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
   });
 
+  describe('引用の時刻から、埋め込みプレーヤーをその位置へ進める', () => {
+    /** 管理人の会見動画です。文字起こしを貼り付け、0:05 からの発言を管理人の証言として書き起こしています。 */
+    const videoInterview: Interview = {
+      id: 'interview-video',
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      transcript: '0:00\nこんばんは、管理人です\n0:05\nあの夜は別荘が真っ暗でした',
+    };
+
+    beforeEach(() => {
+      openTestCase({
+        ...caseWithInterviews,
+        interviews: [...caseWithInterviews.interviews, videoInterview],
+        claims: caseWithInterviews.claims.map((claim) =>
+          claim.id === 'claim-caretaker'
+            ? { ...claim, interviewId: videoInterview.id, quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 } }
+            : claim
+        ),
+      });
+    });
+
+    it('ひもづく証言の引用の時刻を押すと、プレーヤーをその位置から再生する', async () => {
+      const user = userEvent.setup();
+      render(<InterviewDetail interviewId="interview-video" />);
+
+      await user.click(screen.getByRole('button', { name: '0:05から動画を再生' }));
+
+      expect(screen.getByTitle('日時不明の資料の動画')).toHaveAttribute(
+        'src',
+        'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=5&autoplay=1'
+      );
+    });
+
+    it('本文の時刻の行を押すと、プレーヤーをその位置から再生する', async () => {
+      const user = userEvent.setup();
+      render(<InterviewDetail interviewId="interview-video" />);
+
+      const transcriptRegion = screen.getByRole('region', { name: '日時不明の資料の本文' });
+      await user.click(within(transcriptRegion).getByRole('button', { name: '0:00から動画を再生' }));
+
+      expect(screen.getByTitle('日時不明の資料の動画')).toHaveAttribute(
+        'src',
+        'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=0&autoplay=1'
+      );
+    });
+  });
+
   it('YouTube 以外のURLの資料では、動画を埋め込まない', () => {
     const { container } = render(<InterviewDetail interviewId="interview-press" />);
 

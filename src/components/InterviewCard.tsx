@@ -16,6 +16,8 @@
  * URLを持つ資料には、URLを新しいタブで開くリンクを置きます。
  * YouTube の動画の資料では、embedsVideo を渡すと、動画を埋め込みプレーヤーで表示します（資料の詳細で指定します）。
  * 人物の詳細の「供述の変遷」では、資料が並ぶたびにプレーヤーを読み込むと重くなるため、埋め込みません。
+ * 動画を埋め込んでいる場合は、ひもづく証言の引用の時刻と、本文の時刻の行を押すと、プレーヤーをその位置から再生します。
+ * 再生の位置は埋め込みプレーヤーのURL（start）で指定し、押すたびにプレーヤーを読み込み直します。
  * 人物の詳細の「供述の変遷」では、資料の詳細へのリンクを資料の名前（タイトルかURL）で置き、発言者が複数の資料には発言者の全員を示します
  * （資料の詳細では、見出しと「発言者」の欄で示すため、showsSource に false を渡して省きます）。
  *
@@ -28,7 +30,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
 import { formatTimeRef } from '@/domain/time-ref';
-import { youtubeEmbedUrl } from '@/domain/transcript';
+import { formatQuoteSeconds, youtubeEmbedUrl } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -37,7 +39,7 @@ import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { InterviewForm } from './forms/InterviewForm';
-import { InterviewTranscript } from './InterviewTranscript';
+import { InterviewTranscript, seekLabelOf } from './InterviewTranscript';
 import { interviewHref, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 
@@ -45,6 +47,9 @@ import { useCaseId } from './useCaseId';
 type FormState = { kind: 'closed' } | { kind: 'edit' } | { kind: 'compose'; quote?: ClaimQuote };
 
 const CLOSED: FormState = { kind: 'closed' };
+
+/** 埋め込みプレーヤーで再生を始める位置です。同じ位置を押し直しても読み込み直すよう、押した回数も持ちます。 */
+type Playback = { seconds: number; count: number };
 
 /** 資料の見出し（日時）を返します。日時の分からない資料は「日時不明」です。 */
 function timeLabelOf(view: InterviewView): string {
@@ -85,11 +90,17 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
   const [form, setForm] = useState<FormState>(CLOSED);
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(opensTranscript);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [playback, setPlayback] = useState<Playback | null>(null);
 
   const { interview } = view;
   const timeLabel = timeLabelOf(view);
   const description = describeInterview(view);
-  const embedUrl = embedsVideo && interview.url !== undefined ? youtubeEmbedUrl(interview.url) : undefined;
+  const embedUrl = embedsVideo && interview.url !== undefined ? youtubeEmbedUrl(interview.url, playback?.seconds) : undefined;
+  /** 埋め込みプレーヤーを seconds 秒目から再生します。動画を埋め込んでいない場合は undefined です。 */
+  const seekTo =
+    embedUrl === undefined
+      ? undefined
+      : (seconds: number) => setPlayback((current) => ({ seconds, count: (current?.count ?? 0) + 1 }));
   const close = () => setForm(CLOSED);
 
   const handleDelete = () => {
@@ -128,10 +139,12 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
       )}
       {embedUrl !== undefined && (
         <iframe
+          // 同じ位置を押し直した場合も再生し直すよう、押した回数で作り直す
+          key={playback?.count ?? 0}
           src={embedUrl}
           title={`${timeLabel}の資料の動画`}
           className="aspect-video w-full rounded-md border"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           referrerPolicy="strict-origin-when-cross-origin"
           allowFullScreen
         />
@@ -149,6 +162,7 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
           label={`${timeLabel}の資料の本文`}
           tab={tab}
           onQuote={(quote) => setForm({ kind: 'compose', quote })}
+          onSeek={seekTo}
         />
       )}
 
@@ -156,11 +170,21 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
         <p className="text-xs text-muted-foreground">この資料にひもづく証言は、まだありません。</p>
       ) : (
         <ul className="space-y-1">
-          {view.claims.map((claimView) => (
-            <li key={claimView.claim.id}>
-              <ClaimLink view={claimView} tab={tab} />
-            </li>
-          ))}
+          {view.claims.map((claimView) => {
+            const quoteSeconds = claimView.claim.quote?.seconds;
+            return (
+              <li key={claimView.claim.id} className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <ClaimLink view={claimView} tab={tab} />
+                </div>
+                {seekTo !== undefined && quoteSeconds !== undefined && (
+                  <Button type="button" variant="outline" size="sm" aria-label={seekLabelOf(quoteSeconds)} onClick={() => seekTo(quoteSeconds)}>
+                    {formatQuoteSeconds(quoteSeconds)}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

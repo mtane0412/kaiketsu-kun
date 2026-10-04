@@ -6,18 +6,21 @@
  *   重なり合う引用は、重なった範囲から最初の証言へ移ります（区切り方は src/domain/transcript.ts の buildTranscriptSegments）。
  * - 本文の範囲を選んで「選んだ範囲を証言にする」を押すと、選んだ範囲を引用として onQuote に渡します。
  *   動画の文字起こしでは、選んだ範囲の直前にある時刻を、動画の位置として補います（quoteSecondsAt）。
+ * - onSeek を渡すと（資料の詳細で YouTube の動画を埋め込んでいる場合）、本文の時刻だけの行を、動画をその位置から再生するボタンにします。
+ *   書き起こした範囲（証言へのリンク）の中の時刻の行は、リンクの中にボタンを置けないため、ボタンにしません。
  * - 「証言の候補を抽出」を押すと、選んだ範囲（選んでいなければ本文の全文）から LLM で証言の候補を抽出する画面（ClaimExtraction）を開きます。
  *
  * 注意: 選択の範囲は document の selectionchange で追い、本文の中だけを選んでいるときに限ってボタンを押せるようにします。
  * ボタンを押したときに選択が外れないよう、ボタンの mousedown の既定の動作を止めます。
- * 本文の中の位置は、本文を描いた要素の先頭から選択の始まりまでの文字数で求めるため、本文の要素には本文以外の文字を描かないでください。
+ * 本文の中の位置は、本文を描いた要素の先頭から選択の始まりまでの文字数で求めるため、本文の要素には本文以外の文字を描かないでください
+ * （時刻の行のボタンも、時刻の行の文字だけを描き、読み上げの名前は aria-label で付けます）。
  */
 'use client';
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { claimLabelOf, type ClaimView } from '@/domain/case-views';
-import { buildTranscriptSegments, quoteSecondsAt } from '@/domain/transcript';
+import { buildTranscriptSegments, formatQuoteSeconds, quoteSecondsAt, splitTimestampLines } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
 import { ClaimExtraction, type ExtractionSource } from './ClaimExtraction';
@@ -37,7 +40,14 @@ type InterviewTranscriptProps = {
   tab: TabKey;
   /** 「選んだ範囲を証言にする」を押したときに、選んだ範囲を引用として呼び出します。 */
   onQuote: (quote: ClaimQuote) => void;
+  /** 本文の時刻の行を押したときに、その秒数で呼び出します。渡さない場合は、時刻の行をボタンにしません。 */
+  onSeek?: (seconds: number) => void;
 };
+
+/** 動画を seconds 秒目から再生するボタンの、読み上げのための名前です（例「0:05から動画を再生」）。 */
+export function seekLabelOf(seconds: number): string {
+  return `${formatQuoteSeconds(seconds)}から動画を再生`;
+}
 
 /**
  * 要素の中だけを選んでいる場合に、選択の範囲を本文の中の引用として返します。
@@ -64,7 +74,7 @@ function quoteFromSelection(container: HTMLElement, transcript: string): ClaimQu
   return { text, ...(seconds !== undefined && { seconds }) };
 }
 
-export function InterviewTranscript({ interviewId, transcript, claims, label, tab, onQuote }: InterviewTranscriptProps) {
+export function InterviewTranscript({ interviewId, transcript, claims, label, tab, onQuote, onSeek }: InterviewTranscriptProps) {
   const caseId = useCaseId();
   const textRef = useRef<HTMLDivElement>(null);
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
@@ -93,6 +103,30 @@ export function InterviewTranscript({ interviewId, transcript, claims, label, ta
   );
   const viewOf = (claimId: string) => quotedClaims.find(({ view }) => view.claim.id === claimId)?.view;
 
+  /** 書き起こしていない範囲を描きます。onSeek を渡された場合は、時刻だけの行を、その位置から再生するボタンにします。 */
+  const renderPlainText = (text: string, key: number) => {
+    if (onSeek === undefined) return <span key={key}>{text}</span>;
+    return (
+      <span key={key}>
+        {splitTimestampLines(text).map(({ text: partText, seconds }, partIndex) =>
+          seconds === undefined ? (
+            partText
+          ) : (
+            <button
+              key={partIndex}
+              type="button"
+              aria-label={seekLabelOf(seconds)}
+              onClick={() => onSeek(seconds)}
+              className="text-primary underline underline-offset-2 hover:no-underline"
+            >
+              {partText}
+            </button>
+          )
+        )}
+      </span>
+    );
+  };
+
   return (
     <section aria-label={label} className="space-y-2">
       <div
@@ -103,7 +137,7 @@ export function InterviewTranscript({ interviewId, transcript, claims, label, ta
         {segments.map((segment, index) => {
           const [firstClaimId] = segment.claimIds;
           const view = firstClaimId === undefined ? undefined : viewOf(firstClaimId);
-          if (view === undefined) return <span key={index}>{segment.text}</span>;
+          if (view === undefined) return renderPlainText(segment.text, index);
           return (
             <Link
               key={index}
