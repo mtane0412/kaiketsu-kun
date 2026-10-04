@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate-case": "tsx scripts/validate-case.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -53,6 +54,7 @@
     "jsdom": "^28.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.55.0",
     "vitest": "^4.0.18"
