@@ -331,7 +331,7 @@ describe('未了事項', () => {
 /** 管理人が、書籍の著者の取材に応じた機会です。 */
 const bookInterview: Interview = {
   id: 'interview-caretaker-book',
-  subjectPersonIds: ['person-caretaker'],
+  title: '湖畔の夏 第3章',
   interviewerPersonId: 'person-book',
   at: '2018-05',
 };
@@ -348,22 +348,10 @@ describe('聴取', () => {
     expect(getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(bookInterview.id);
   });
 
-  it('聴取の相手が発言者にも経由にも含まれない証言は、ひもづけられず、ケースを変更しない', () => {
-    useCaseStore.getState().upsert('interviews', bookInterview);
-    const beforeLink = getOpenCase();
-    const neighborResidentClaim = beforeLink.claims.find((claim) => claim.id === 'claim-neighbor');
-    if (!neighborResidentClaim) throw new Error('前提の証言がありません');
-
-    expect(() => useCaseStore.getState().upsert('claims', { ...neighborResidentClaim, interviewId: bookInterview.id })).toThrow(
-      '資料の相手が、証言の発言者にも経由にも含まれていません'
-    );
-    expect(getOpenCase()).toEqual(beforeLink);
-  });
-
   it('証言がひもづいている聴取は削除できず、証言がひもづいていない聴取は削除できる', () => {
     useCaseStore.getState().upsertMany([
       { key: 'interviews', entity: bookInterview },
-      { key: 'interviews', entity: { id: 'interview-empty', subjectPersonIds: ['person-neighbor'] } },
+      { key: 'interviews', entity: { id: 'interview-empty', title: '隣家の住人の話' } },
     ]);
     const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
     if (!caretakerClaim) throw new Error('前提の証言がありません');

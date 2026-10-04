@@ -1,5 +1,5 @@
 /**
- * 聴取の入力フォームのテスト（相手の選択と、記事のURLから本文を取得して本文の欄に入れる操作）
+ * 聴取の入力フォームのテスト（URL・タイトル・本文だけでの登録、詳しい情報の入力と、記事のURLから本文を取得して本文の欄に入れる操作）
  *
  * 本文の取得 API（/api/fetch-article）の呼び出しは、fetch を置き換えて確かめます。
  */
@@ -24,7 +24,7 @@ const fetchedArticle = {
 /** 本文を貼り付け済みの、湖畔新聞による管理人への取材です。 */
 const pastedInterview: Interview = {
   id: 'interview-newspaper',
-  subjectPersonIds: ['person-caretaker'],
+  title: '管理人の話',
   at: '1998-08-14',
   transcript: '手で貼り付けた本文',
 };
@@ -42,10 +42,10 @@ function mockFetchArticleApi(status: number, body: unknown) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(body, { status }));
 }
 
-/** 管理人を相手とする聴取のフォームを描画します。 */
+/** 聴取のフォームを描画します。initial を省くと新規登録になります。 */
 function renderForm(initial?: Interview) {
   const onDone = vi.fn();
-  render(<InterviewForm defaultSubjectPersonIds={['person-caretaker']} initial={initial} onDone={onDone} onCancel={vi.fn()} />);
+  render(<InterviewForm initial={initial} onDone={onDone} onCancel={vi.fn()} />);
   return { onDone };
 }
 
@@ -61,60 +61,92 @@ async function fetchArticle(user: ReturnType<typeof userEvent.setup>, url = arti
   await user.click(screen.getByRole('button', { name: '本文を取得' }));
 }
 
-describe('InterviewForm の相手', () => {
-  /** 相手の欄で、人物 name の選択を切り替えます。 */
-  async function toggleSubject(user: ReturnType<typeof userEvent.setup>, name: string) {
-    await user.click(within(screen.getByRole('group', { name: '相手' })).getByRole('checkbox', { name }));
-  }
-
-  it('最初に渡した相手を選んだ状態で始まり、相手を足すと、選んだ順に相手を持つ聴取として保存する', async () => {
+describe('InterviewForm の入力', () => {
+  it('URLだけを入れて保存すると、URLだけを持つ資料として保存する（人物を先に登録しなくても資料を登録できるようにするため）', async () => {
     const user = userEvent.setup();
     const { onDone } = renderForm();
 
-    expect(within(screen.getByRole('group', { name: '相手' })).getByRole('checkbox', { name: '管理人' })).toBeChecked();
-    await toggleSubject(user, '隣家の住人');
+    await user.type(screen.getByLabelText('URL（任意）'), articleUrl);
     await user.click(screen.getByRole('button', { name: '資料を保存' }));
 
     const saved = openedCase().interviews[0];
-    expect(saved?.subjectPersonIds).toEqual(['person-caretaker', 'person-neighbor']);
+    expect(saved).toEqual({ id: expect.any(String), url: articleUrl });
     expect(onDone).toHaveBeenCalledWith(saved);
   });
 
-  it('編集では、保存済みの相手を選んだ状態で始まる', () => {
-    render(
-      <InterviewForm
-        initial={{ id: 'interview-press', subjectPersonIds: ['person-neighbor', 'person-caretaker'] }}
-        onDone={vi.fn()}
-        onCancel={vi.fn()}
-      />
-    );
-
-    const subjectField = screen.getByRole('group', { name: '相手' });
-    expect(within(subjectField).getByRole('checkbox', { name: '隣家の住人' })).toBeChecked();
-    expect(within(subjectField).getByRole('checkbox', { name: '管理人' })).toBeChecked();
-    expect(within(subjectField).getByRole('checkbox', { name: '別荘の持ち主' })).not.toBeChecked();
-  });
-
-  it('相手を1人も選ばずに保存しようとすると、エラーを示して保存しない', async () => {
+  it('タイトルは前後の空白を除いて保存する', async () => {
     const user = userEvent.setup();
     renderForm();
 
-    await toggleSubject(user, '管理人');
+    await user.type(screen.getByLabelText('タイトル（任意）'), '  管理人への取材メモ  ');
     await user.click(screen.getByRole('button', { name: '資料を保存' }));
 
-    expect(screen.getByText('相手を1人以上選んでください')).toBeInTheDocument();
-    expect(openedCase().interviews).toEqual([]);
+    expect(openedCase().interviews[0]).toEqual({ id: expect.any(String), title: '管理人への取材メモ' });
   });
 
-  it('聴取者に相手と同じ人物を選んで保存しようとすると、エラーを示して保存しない', async () => {
+  it('タイトル・URL・本文のいずれも無い場合は、エラーを示して保存しない', async () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.selectOptions(screen.getByLabelText('聴取者または媒体（任意）'), '管理人');
     await user.click(screen.getByRole('button', { name: '資料を保存' }));
 
-    expect(screen.getByText('聴取者または媒体に、相手と同じ人物（管理人）は選べません')).toBeInTheDocument();
+    expect(screen.getByText('タイトル・URL・本文のいずれかを入力してください')).toBeInTheDocument();
     expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('日時・媒体などの詳しい情報は、最初は閉じておき、開くと入力して保存できる', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    expect(screen.queryByLabelText('日時（任意）')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('タイトル（任意）'), '管理人の供述調書');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.type(screen.getByLabelText('日時（任意）'), '1998-08-13');
+    await user.selectOptions(screen.getByLabelText('聴取者または媒体（任意）'), '県警');
+    await user.selectOptions(screen.getByLabelText('場所（任意）'), '湖畔の別荘');
+    await user.type(screen.getByLabelText('発言者の立場（任意）'), '参考人');
+    await user.type(screen.getByLabelText('資料番号（任意）'), '供述調書 第1号');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(openedCase().interviews[0]).toEqual({
+      id: expect.any(String),
+      title: '管理人の供述調書',
+      at: '1998-08-13',
+      interviewerPersonId: 'person-police',
+      placeId: 'place-villa',
+      subjectRole: '参考人',
+      documentRef: '供述調書 第1号',
+    });
+  });
+
+  it('http か https でないURLでは、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('URL（任意）'), '動画のページ');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText(/URLは http か https/)).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('日時として解釈できない表記では、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '管理人の供述調書');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.type(screen.getByLabelText('日時（任意）'), '事件の翌週');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText(/日時を解釈できません/)).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('編集では、詳しい情報が入力済みなら開いた状態で始まる', () => {
+    renderForm(pastedInterview);
+
+    expect(screen.getByLabelText('日時（任意）')).toHaveValue('1998-08-14');
   });
 });
 
@@ -127,7 +159,9 @@ describe('InterviewForm の本文の取得', () => {
     await fetchArticle(user);
 
     await waitForFetchedText();
+    // 検証: 公開日時を入れた日時の欄が見えるよう、詳しい情報を開く
     expect(screen.getByLabelText('日時（任意）')).toHaveValue('1998-08-13T06:30');
+    expect(screen.getByLabelText('タイトル（任意）')).toHaveValue('湖畔の別荘で火事');
     expect(screen.getByRole('status')).toHaveTextContent('「湖畔の別荘で火事」の本文（');
     expect(fetchSpy).toHaveBeenCalledWith('/api/fetch-article', expect.objectContaining({ method: 'POST' }));
     expect(openedCase().interviews).toEqual(sampleFictionalCase.interviews);
@@ -144,13 +178,25 @@ describe('InterviewForm の本文の取得', () => {
 
     expect(onDone).toHaveBeenCalled();
     const saved = openedCase().interviews.find((interview) => interview.url === articleUrl);
-    expect(saved).toMatchObject({ transcript: fetchedArticle.text, at: '1998-08-13T06:30' });
+    expect(saved).toMatchObject({ title: fetchedArticle.title, transcript: fetchedArticle.text, at: '1998-08-13T06:30' });
+  });
+
+  it('タイトルの欄に入力がある場合は、記事のタイトルで上書きしない', async () => {
+    mockFetchArticleApi(200, fetchedArticle);
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '火事の第一報');
+    await fetchArticle(user);
+
+    await waitForFetchedText();
+    expect(screen.getByLabelText('タイトル（任意）')).toHaveValue('火事の第一報');
   });
 
   it('日時の欄に入力がある場合は、公開日時で上書きしない', async () => {
     mockFetchArticleApi(200, fetchedArticle);
     const user = userEvent.setup();
-    renderForm({ id: 'interview-newspaper', subjectPersonIds: ['person-caretaker'], at: '1998-08-14' });
+    renderForm({ id: 'interview-newspaper', title: '管理人の話', at: '1998-08-14' });
 
     await fetchArticle(user);
 

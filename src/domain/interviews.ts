@@ -4,8 +4,10 @@
  * 聴取は、証言を得た機会としてユーザーが登録する一次データです（src/domain/types.ts の Interview）。
  * 画面では「資料」と呼びます（記事・動画・調書など、証言の出どころをまとめて指すためです）。
  * このファイルが担うのは次の3つです。
- * - 供述の変遷: ある人物が相手（相手が複数の場合はそのうちの1人）の聴取を日時の順に並べ、各聴取で得た証言を添えます。
+ * - 供述の変遷: ある人物が発言者の証言を含む聴取を日時の順に並べ、各聴取で得た証言を添えます。
  *   同じ人物の初回の供述と後の供述を、並べて見比べられるようにするためです。
+ *   聴取に載っている人物（発言者）は聴取の項目として持たず、聴取にひもづく証言の発言者から導きます。
+ *   経由（Claim.viaPersonIds）に含まれるだけの人物は、その人物の供述ではないため含めません。
  * - 資料の一覧と詳細: ケースのすべての聴取を日時の順に並べた一覧（サイドバー）と、1件の聴取の表示（資料の詳細）を作ります。
  * - 聴取の名前: 証言のフォームの選択肢で、聴取を見分けるための短い名前を組み立てます。
  *
@@ -19,11 +21,14 @@ import type { Case, Id, Interview, Person, Place } from './types';
 /** 日時の分からない聴取の名前に使う言葉です。 */
 export const UNKNOWN_INTERVIEW_TIME_LABEL = '日時不明';
 
+/** タイトルもURLも無い聴取の名前に使う言葉です。 */
+export const UNTITLED_INTERVIEW_LABEL = '無題の資料';
+
 /** 資料（聴取）1件の表示です。供述の変遷・資料の一覧・資料の詳細で使います。 */
 export type InterviewView = {
   interview: Interview;
-  /** 相手の人物です。資料が持つ順（選んだ順）に並びます。 */
-  subjects: Person[];
+  /** 資料にひもづく証言の発言者です。証言の並び順で最初に現れた順に、重ねずに並びます。 */
+  speakers: Person[];
   /** 聴き取った人物、または媒体です。 */
   interviewer?: Person;
   place?: Place;
@@ -45,14 +50,21 @@ function placeOf(target: Case, placeId: Id): Place {
   return place;
 }
 
+/** 証言の発言者の人物のIDを、証言の並び順で最初に現れた順に、重ねずに返します。ユーザーの推測は含めません。 */
+function speakerIdsOf(claimViews: ClaimView[]): Id[] {
+  const speakerIds = claimViews.flatMap(({ claim }) => (claim.speaker.kind === 'person' ? claim.speaker.personIds : []));
+  return [...new Set(speakerIds)];
+}
+
 /** 聴取1件を表示の形にします。claimViews は時系列ボードの並び順に並んだ証言です。 */
 function toInterviewView(target: Case, interview: Interview, claimViews: ClaimView[]): InterviewView {
+  const claims = claimViews.filter((view) => view.claim.interviewId === interview.id);
   return {
     interview,
-    subjects: interview.subjectPersonIds.map((personId) => personOf(target, personId)),
+    speakers: speakerIdsOf(claims).map((personId) => personOf(target, personId)),
     ...(interview.interviewerPersonId !== undefined && { interviewer: personOf(target, interview.interviewerPersonId) }),
     ...(interview.placeId !== undefined && { place: placeOf(target, interview.placeId) }),
-    claims: claimViews.filter((view) => view.claim.interviewId === interview.id),
+    claims,
   };
 }
 
@@ -70,15 +82,23 @@ function buildSortedInterviews(target: Case, interviews: Interview[]): Interview
     .map((interview) => toInterviewView(target, interview, claimViews));
 }
 
-/** 人物 personId が相手（相手が複数の場合はそのうちの1人）の聴取を、日時の早い順に並べて返します（供述の変遷）。 */
+/** 人物 personId が発言者の証言を含む聴取を、日時の早い順に並べて返します（供述の変遷）。 */
 export function buildPersonInterviews(target: Case, personId: Id): InterviewView[] {
+  // 表示の形に直す前に、その人物が発言者の証言がひもづく聴取だけに絞る（ケースのすべての聴取を組み立てないため）
+  const interviewIds = new Set(
+    target.claims.flatMap((claim) =>
+      claim.interviewId !== undefined && claim.speaker.kind === 'person' && claim.speaker.personIds.includes(personId)
+        ? [claim.interviewId]
+        : []
+    )
+  );
   return buildSortedInterviews(
     target,
-    target.interviews.filter((interview) => interview.subjectPersonIds.includes(personId))
+    target.interviews.filter((interview) => interviewIds.has(interview.id))
   );
 }
 
-/** ケースのすべての聴取を、相手を問わず日時の早い順に並べて返します（サイドバーの資料の一覧）。 */
+/** ケースのすべての聴取を、日時の早い順に並べて返します（サイドバーの資料の一覧）。 */
 export function buildInterviewList(target: Case): InterviewView[] {
   return buildSortedInterviews(target, target.interviews);
 }
@@ -91,13 +111,14 @@ export function buildInterviewView(target: Case, interviewId: Id): InterviewView
 }
 
 /**
- * 聴取を見分けるための名前を返します（例「管理人・1998年8月13日 10:00・県警」）。
- * 相手・日時・聴取者の名前を「・」でつなぎます。相手が複数の場合は、相手の名前を「、」でつなぎます。日時の分からない聴取は「日時不明」と示し、聴取者の無い聴取は聴取者を省きます。
+ * 聴取を見分けるための名前を返します（例「管理人の供述調書・1998年8月13日 10:00・県警」）。
+ * タイトル・日時・聴取者の名前を「・」でつなぎます。タイトルの無い聴取はURLを、URLも無い聴取は「無題の資料」を先頭に置きます。
+ * 日時の分からない聴取は日時を、聴取者の無い聴取は聴取者を省きます。
  */
 export function formatInterviewLabel(target: Case, interview: Interview): string {
   return [
-    interview.subjectPersonIds.map((personId) => personOf(target, personId).name).join('、'),
-    interview.at === undefined ? UNKNOWN_INTERVIEW_TIME_LABEL : formatTimeRef(interview.at),
+    interview.title ?? interview.url ?? UNTITLED_INTERVIEW_LABEL,
+    ...(interview.at === undefined ? [] : [formatTimeRef(interview.at)]),
     ...(interview.interviewerPersonId === undefined ? [] : [personOf(target, interview.interviewerPersonId).name]),
   ].join('・');
 }

@@ -11,7 +11,7 @@ import type { ExtractionRequest } from './claim-extraction-api';
 
 const request: ExtractionRequest = {
   text: '近くに住む山田花子さんは「庭に黒い車が止まっていた」と話した。',
-  subjectName: '湖畔新聞',
+  sourceName: '別荘の事件の記事・1998年8月13日・湖畔新聞',
   personNames: ['山田 花子', '県警'],
   placeNames: ['湖畔の別荘'],
   apiKey: 'sk-or-テスト用のキー',
@@ -34,10 +34,10 @@ function modelReturning(text: string) {
 }
 
 describe('buildExtractionPrompt', () => {
-  it('聴取の相手・登録済みの人物と場所・本文を含める', () => {
+  it('資料の名前・登録済みの人物と場所・本文を含める', () => {
     const prompt = buildExtractionPrompt(request);
 
-    expect(prompt).toContain('湖畔新聞');
+    expect(prompt).toContain('資料「別荘の事件の記事・1998年8月13日・湖畔新聞」');
     expect(prompt).toContain('- 山田 花子');
     expect(prompt).toContain('- 湖畔の別荘');
     expect(prompt).toContain(request.text);

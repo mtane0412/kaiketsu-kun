@@ -132,8 +132,7 @@ describe('PersonDetail', () => {
     resetMockNavigation('/cases/case-lakeside/persons/person-caretaker');
     render(<PersonDetail personId="person-caretaker" />);
 
-    const history = screen.getByRole('region', { name: '供述の変遷' });
-    expect(within(history).getByRole('button', { name: '資料を追加' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '供述の変遷' })).toBeInTheDocument();
   });
 
   it('ケースに無い人物を開いた場合は、見つからないことを伝え、詳細を閉じられるようにする', () => {

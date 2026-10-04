@@ -15,8 +15,8 @@
  * - 同じ聴取で書き起こし済みの引用（Claim.quote）と範囲が重なる候補は、捨てずに印（overlapsTranscribed）を付けます。
  *   同じ範囲から別の人物の発言を拾い直す場合もあるため、判断はユーザーに任せます。
  *
- * 候補を証言の入力欄の初期値に直すとき（candidateToClaimDraft）は、聴取の相手を発言者か経由に必ず含めます
- * （証言の聴取の相手は、発言者か経由のいずれかに含まれている必要があるためです。src/domain/case-schema.ts）。
+ * 候補を証言の入力欄の初期値に直すとき（candidateToClaimDraft）は、聴取の媒体（聴取者）を発言者か経由に含めます
+ * （記事の地の文は媒体の記述であり、記事に載った発言は媒体を通じて伝わったものであるためです）。
  */
 import { z } from 'zod';
 import { parseDateInput } from './date-input';
@@ -202,8 +202,9 @@ function insertMentions(content: string, mentions: DraftMention[]): string {
  *
  * - 本文の下書きは、日時のメンションを先頭に置き、場所と言及した人物を、本文の中の名前を「@」のメンションにして表します
  *   （本文に名前が無い場合は末尾に足します）。
- * - 発言者の分からない候補は、聴取の最初の相手を発言者にします（記者の地の文は、資料そのものの記述のためです）。
- *   発言者も経由も聴取の相手のだれでもない場合は、経由の最後に最初の相手を足します（聴取の相手を通じて伝わった発言のためです）。
+ * - 発言者の分からない候補は、聴取の媒体（聴取者）を発言者にします（記者の地の文は、媒体そのものの記述のためです）。
+ *   発言者も経由も媒体でない場合は、経由の最後に媒体を足します（媒体を通じて伝わった発言のためです）。
+ *   媒体の無い聴取では、経由を足さず、発言者の分からない候補は発言者を選ばずにおきます（ユーザーが入力欄で選びます）。
  * - 一致しない名前は、同じ種類・同じ名前（正規化後）ごとに1件だけ、createId で振ったIDで新規作成します。
  */
 export function candidateToClaimDraft(
@@ -212,9 +213,7 @@ export function candidateToClaimDraft(
   candidate: ClaimCandidate,
   createId: () => Id
 ): CandidateClaimDraft {
-  const { subjectPersonIds } = interviewWithTranscript(target, interviewId);
-  const [primarySubjectId] = subjectPersonIds;
-  if (primarySubjectId === undefined) throw new Error(`資料の相手がいません: ${interviewId}`);
+  const { interviewerPersonId } = interviewWithTranscript(target, interviewId);
   const newEntities: NewEntity[] = [];
   const idOf = (kind: MentionKind, resolved: ResolvedName): Id => {
     if (resolved.status === 'registered') return resolved.id;
@@ -226,10 +225,11 @@ export function candidateToClaimDraft(
   };
   const mentionOf = (kind: MentionKind, resolved: ResolvedName): DraftMention => ({ kind, id: idOf(kind, resolved), label: resolved.name });
 
-  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : primarySubjectId;
+  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : interviewerPersonId;
   const viaPersonIds = [...new Set(candidate.via.map((name) => idOf('person', name)))].filter((id) => id !== speakerId);
-  const involvesSubject = [speakerId, ...viaPersonIds].some((id) => subjectPersonIds.includes(id));
-  if (!involvesSubject) viaPersonIds.push(primarySubjectId);
+  if (interviewerPersonId !== undefined && speakerId !== interviewerPersonId && !viaPersonIds.includes(interviewerPersonId)) {
+    viaPersonIds.push(interviewerPersonId);
+  }
 
   const entityMentions = [
     ...(candidate.place ? [mentionOf('place', candidate.place)] : []),
@@ -243,7 +243,7 @@ export function candidateToClaimDraft(
       text: dateMention ? `@${dateMention.label} ${body}` : body,
       mentions: dateMention ? [dateMention, ...entityMentions] : entityMentions,
     },
-    speaker: { personIds: [speakerId], viaPersonIds },
+    speaker: { personIds: speakerId === undefined ? [] : [speakerId], viaPersonIds },
     newEntities,
   };
   if (candidate.title) result.title = candidate.title;

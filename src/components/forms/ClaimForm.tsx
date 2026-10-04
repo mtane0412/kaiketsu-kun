@@ -10,9 +10,9 @@
  * 日時も本文に書きます。「@」に続けて日時を書くと候補を示し、選ぶと日時のメンションになります
  * （受け付ける表記は src/domain/date-input.ts を参照してください）。
  * 資料内の位置（Claim.locator）は入力欄を廃止しましたが、編集時は入力済みの値を保持します。
- * 証言を得た聴取（Claim.interviewId）は、「資料（任意）」の欄で選びます。聴取の相手は、発言者か経由のいずれかに
- * 含まれている必要があります（src/domain/case-schema.ts）。発言者も経由も選んでいない状態で聴取を選んだ場合は、
- * 聴取の相手を発言者にします。聴取の相手が自分の供述を述べる場合が最も多く、選び直す手間を省くためです。
+ * 証言を得た聴取（Claim.interviewId）は、「資料（任意）」の欄で選びます。どの人物の証言でも、聴取にひもづけられます
+ * （記事のように、1件の資料に何人もの発言が載るためです。資料に載っている人物は、ひもづく証言の発言者から導きます）。
+ * 聴取を選んでも、発言者は選び直しません。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
  * 書けるようにするためです）。本文から読み取った参照の一覧と、書き方の案内を表示しません。
@@ -54,7 +54,7 @@ import { formatInterviewLabel } from '@/domain/interviews';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
 import type { NewEntity } from '@/domain/claim-extraction';
-import type { Claim, ClaimQuote, Id, Interview, PersonKind } from '@/domain/types';
+import type { Claim, ClaimQuote, Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
@@ -68,7 +68,7 @@ export type ClaimDefaults = {
   /** 項目と項目の間で書いた場合の、時系列の並び順の中での位置（0始まり）です。保存した証言を、この位置に並べます。 */
   insertIndex?: number;
   /**
-   * 証言を得た聴取のIDです。指定すると、聴取と、聴取の相手を発言者に選んだ状態で始めます。
+   * 証言を得た聴取のIDです。指定すると、聴取を選んだ状態で始めます。
    * 同じ聴取の証言を続けて書き足すときに、聴取を引き継ぐために使います。
    */
   interviewId?: Id;
@@ -78,7 +78,7 @@ export type ClaimDefaults = {
   title?: string;
   /** 本文の下書きの初期値です。指定すると、引用から作る本文の初期値より優先します。 */
   draft?: ClaimDraft;
-  /** 発言者と経由の初期値です。指定すると、聴取の相手を発言者にする初期値より優先します。 */
+  /** 発言者と経由の初期値です。 */
   speaker?: SpeakerDraft;
   /** 本文の下書き・発言者・経由が参照する、まだ登録していないエンティティです。証言とあわせて保存します。 */
   newEntities?: NewEntity[];
@@ -107,14 +107,6 @@ type ClaimFormProps = {
   speakerRequiredMessage?: string;
 };
 
-/**
- * 聴取を選んだときに、最初に入れておく発言者を返します。
- * 相手が1人の聴取は、その相手を発言者にします。相手が複数の聴取は、だれが述べたかを決められないため、発言者を選ばずにおきます。
- */
-function speakerOfInterview(interview: Interview): SpeakerDraft {
-  return { personIds: interview.subjectPersonIds.length === 1 ? [...interview.subjectPersonIds] : [], viaPersonIds: [] };
-}
-
 export function ClaimForm({
   initial,
   defaults,
@@ -136,12 +128,9 @@ export function ClaimForm({
   const [quote, setQuote] = useState<ClaimQuote | undefined>(initial?.quote ?? defaults?.quote);
   const [title, setTitle] = useState(initial?.title ?? defaults?.title ?? '');
   const [interviewId, setInterviewId] = useState<Id>(() => initial?.interviewId ?? defaults?.interviewId ?? NO_INTERVIEW);
-  const [speaker, setSpeaker] = useState<SpeakerDraft>(() => {
-    const presetInterview = currentCase.interviews.find((interview) => interview.id === defaults?.interviewId);
-    if (initial === undefined && defaults?.speaker !== undefined) return defaults.speaker;
-    if (initial === undefined && presetInterview !== undefined) return speakerOfInterview(presetInterview);
-    return speakerToDraft(initial);
-  });
+  const [speaker, setSpeaker] = useState<SpeakerDraft>(() =>
+    initial === undefined && defaults?.speaker !== undefined ? defaults.speaker : speakerToDraft(initial)
+  );
   const interviewFieldId = useId();
   /** このフォームで新規作成した、まだ保存していないエンティティです。 */
   const [pending, setPending] = useState<{ mention: DraftMention; entry: UpsertEntry }[]>(() =>
@@ -162,15 +151,6 @@ export function ClaimForm({
     { term: '言及', description: links.mentionedPersonIds.map((id) => labelOf('person', id)).join('、') },
   ].filter((item) => item.description);
 
-  const interviewOf = (id: Id) => currentCase.interviews.find((interview) => interview.id === id);
-
-  const handleInterviewChange = (nextInterviewId: Id) => {
-    setInterviewId(nextInterviewId);
-    const interview = interviewOf(nextInterviewId);
-    if (interview && speaker.personIds.length === 0 && speaker.viaPersonIds.length === 0) {
-      setSpeaker(speakerOfInterview(interview));
-    }
-  };
 
   const handleCreate = (kind: MentionKind, name: string): DraftMention => {
     const mention = { kind, id: nanoid(), label: name };
@@ -202,17 +182,6 @@ export function ClaimForm({
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
-    const interview = interviewOf(interviewId);
-    const involvedPersonIds = [...speaker.personIds, ...speaker.viaPersonIds];
-    if (interview && !interview.subjectPersonIds.some((id) => involvedPersonIds.includes(id))) {
-      const subjectNames = interview.subjectPersonIds.map((id) => labelOf('person', id)).join('、');
-      setError(
-        interview.subjectPersonIds.length === 1
-          ? `資料の相手（${subjectNames}）を、発言者か経由に選んでください`
-          : `資料の相手（${subjectNames}）のいずれかを、発言者か経由に選んでください`
-      );
-      return;
-    }
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
     const claim: Claim = {
       id: initial?.id ?? nanoid(),
@@ -223,7 +192,7 @@ export function ClaimForm({
     };
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
-    if (interview) claim.interviewId = interview.id;
+    if (interviewId !== NO_INTERVIEW) claim.interviewId = interviewId;
     if (quote) claim.quote = quote;
 
     // 新規作成した後に、本文からも発言者・経由からも外されたエンティティは保存しない
@@ -307,7 +276,7 @@ export function ClaimForm({
           <select
             id={interviewFieldId}
             value={interviewId}
-            onChange={(event) => handleInterviewChange(event.target.value)}
+            onChange={(event) => setInterviewId(event.target.value)}
             className={INPUT_CLASS}
           >
             <option value={NO_INTERVIEW}>資料なし</option>

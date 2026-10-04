@@ -1,11 +1,11 @@
 /**
- * 人物の詳細に並べる「供述の変遷」（その人物が相手の聴取の一覧・登録・編集・削除と、聴取からの証言の書き足し）のテスト
+ * 人物の詳細に並べる「供述の変遷」（その人物が発言者の証言を含む聴取の一覧・編集・削除と、聴取からの証言の書き足し・候補の抽出）のテスト
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import type { Case, Interview } from '@/domain/types';
+import type { Case, Claim, Interview } from '@/domain/types';
 import { MAX_EXTRACTION_TEXT_LENGTH } from '@/lib/claim-extraction-api';
 import { OPENROUTER_MODELS_URL } from '@/lib/openrouter-models';
 import { openedCase, openTestCase } from '@/test/open-case';
@@ -14,10 +14,10 @@ import { InterviewSection } from './InterviewSection';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-/** 管理人への県警の初回の聴取です（事件の翌日。証言はまだひもづけていません）。 */
+/** 管理人への県警の初回の聴取です（事件の翌日）。 */
 const firstInterview: Interview = {
   id: 'interview-first',
-  subjectPersonIds: ['person-caretaker'],
+  title: '管理人の供述調書',
   interviewerPersonId: 'person-police',
   at: '1998-08-13T10:00',
   placeId: 'place-villa',
@@ -28,18 +28,31 @@ const firstInterview: Interview = {
 /** 20年後の、書籍の著者による取材です（管理人の証言をひもづけています）。 */
 const bookInterview: Interview = {
   id: 'interview-book',
-  subjectPersonIds: ['person-caretaker'],
+  title: '湖畔の夏 第3章',
   interviewerPersonId: 'person-book',
   at: '2018-05',
 };
 
-/** 登録順を日時の順と逆にし、書籍の取材に管理人の証言をひもづけたケースです。 */
+/** 初回の聴取で、管理人が述べた証言です。 */
+const firstStatement: Claim = {
+  id: 'claim-caretaker-first',
+  speaker: { kind: 'person', personIds: ['person-caretaker'] },
+  viaPersonIds: ['person-police'],
+  content: '見回りは夜10時ごろだった。',
+  mentionedPersonIds: [],
+  interviewId: firstInterview.id,
+};
+
+/** 登録順を日時の順と逆にし、2件の聴取のそれぞれに管理人の証言をひもづけたケースです。 */
 const caseWithInterviews: Case = {
   ...sampleFictionalCase,
   interviews: [bookInterview, firstInterview],
-  claims: sampleFictionalCase.claims.map((claim) =>
-    claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
-  ),
+  claims: [
+    ...sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+    ),
+    firstStatement,
+  ],
 };
 
 beforeEach(() => {
@@ -55,12 +68,21 @@ function renderCaretakerStatementHistory() {
 }
 
 describe('InterviewSection', () => {
-  it('この人物が相手の聴取を、日時の早い順に、聴取者・場所・立場・資料番号とともに並べる', () => {
+  it('この人物が発言者の証言を含む聴取を、日時の早い順に、聴取者・場所・立場・資料番号とともに並べる', () => {
     const history = renderCaretakerStatementHistory();
 
     const interviewHeading = within(history).getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent);
     expect(interviewHeading).toEqual(['1998年8月13日 10:00', '2018年5月']);
     expect(within(history).getByText('聴取者: 県警 / 場所: 湖畔の別荘 / 立場: 参考人 / 資料番号: 供述調書 第1号')).toBeInTheDocument();
+  });
+
+  it('各聴取に、資料の詳細へのリンクをタイトルで置く', () => {
+    const history = renderCaretakerStatementHistory();
+
+    expect(within(history).getByRole('link', { name: '資料: 管理人の供述調書' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/interviews/interview-first'
+    );
   });
 
   it('各聴取の下に、その聴取で得た証言を、証言の詳細へのリンクで並べる', () => {
@@ -70,62 +92,14 @@ describe('InterviewSection', () => {
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
-    expect(within(history).getByText('この資料にひもづく証言は、まだありません。')).toBeInTheDocument();
   });
 
-  it('聴取が1件も無い人物では、聴取の登録を促す案内を表示する', () => {
-    render(<InterviewSection personId="person-neighbor" tab="timeline" />);
+  it('この人物の証言を含む聴取が1件も無い場合は、証言を資料にひもづけると並ぶことを示す', () => {
+    render(<InterviewSection personId="person-owner" tab="timeline" />);
 
     const history = screen.getByRole('region', { name: '供述の変遷' });
-    expect(within(history).getByRole('button', { name: '資料を追加' })).toBeInTheDocument();
+    expect(history).toHaveTextContent('この人物の証言を資料にひもづけると、ここに資料ごとに並びます');
     expect(within(history).queryByRole('listitem')).not.toBeInTheDocument();
-  });
-
-  it('日時・聴取者・場所・立場・資料番号を入力して保存すると、この人物を相手とする聴取をケースに追加する', async () => {
-    const user = userEvent.setup();
-    renderCaretakerStatementHistory();
-
-    await user.click(screen.getByRole('button', { name: '資料を追加' }));
-    const registerButton = screen.getByRole('region', { name: '資料の登録' });
-    await user.type(within(registerButton).getByLabelText('日時（任意）'), '1998年8月20日14時');
-    await user.selectOptions(within(registerButton).getByLabelText('聴取者または媒体（任意）'), 'person-police');
-    await user.selectOptions(within(registerButton).getByLabelText('場所（任意）'), 'place-villa');
-    await user.type(within(registerButton).getByLabelText('相手の立場（任意）'), '参考人');
-    await user.type(within(registerButton).getByLabelText('資料番号（任意）'), '供述調書 第2号');
-    await user.click(within(registerButton).getByRole('button', { name: '資料を保存' }));
-
-    expect(openedCase().interviews.at(-1)).toMatchObject({
-      subjectPersonIds: ['person-caretaker'],
-      interviewerPersonId: 'person-police',
-      at: '1998-08-20T14:00',
-      placeId: 'place-villa',
-      subjectRole: '参考人',
-      documentRef: '供述調書 第2号',
-    });
-  });
-
-  it('任意の項目を入力しない聴取は、その項目を持たずに保存する', async () => {
-    const user = userEvent.setup();
-    renderCaretakerStatementHistory();
-
-    await user.click(screen.getByRole('button', { name: '資料を追加' }));
-    await user.click(within(screen.getByRole('region', { name: '資料の登録' })).getByRole('button', { name: '資料を保存' }));
-
-    const addedInterview = openedCase().interviews.at(-1);
-    expect(addedInterview).toEqual({ id: expect.any(String), subjectPersonIds: ['person-caretaker'] });
-  });
-
-  it('日時として解釈できない表記では、エラーを示して保存しない', async () => {
-    const user = userEvent.setup();
-    renderCaretakerStatementHistory();
-
-    await user.click(screen.getByRole('button', { name: '資料を追加' }));
-    const registerButton = screen.getByRole('region', { name: '資料の登録' });
-    await user.type(within(registerButton).getByLabelText('日時（任意）'), '事件の翌週');
-    await user.click(within(registerButton).getByRole('button', { name: '資料を保存' }));
-
-    expect(within(registerButton).getByText(/日時を解釈できません/)).toBeInTheDocument();
-    expect(openedCase().interviews).toHaveLength(2);
   });
 
   it('登録済みの資料を編集して保存すると、同じ聴取を書き換える', async () => {
@@ -135,24 +109,14 @@ describe('InterviewSection', () => {
     await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料を編集' }));
     const editButton = screen.getByRole('region', { name: '資料の編集' });
     expect(within(editButton).getByLabelText('日時（任意）')).toHaveValue('1998-08-13T10:00');
-    await user.clear(within(editButton).getByLabelText('相手の立場（任意）'));
-    await user.type(within(editButton).getByLabelText('相手の立場（任意）'), '重要参考人');
+    await user.clear(within(editButton).getByLabelText('発言者の立場（任意）'));
+    await user.type(within(editButton).getByLabelText('発言者の立場（任意）'), '重要参考人');
     await user.click(within(editButton).getByRole('button', { name: '資料を保存' }));
 
     expect(openedCase().interviews.find((interview) => interview.id === firstInterview.id)).toEqual({
       ...firstInterview,
       subjectRole: '重要参考人',
     });
-  });
-
-  it('証言がひもづいていない聴取を削除すると、ケースから聴取を取り除く', async () => {
-    const user = userEvent.setup();
-    const history = renderCaretakerStatementHistory();
-
-    await user.click(within(history).getByRole('button', { name: '1998年8月13日 10:00の資料を削除' }));
-    await user.click(screen.getByRole('button', { name: '削除する' }));
-
-    expect(openedCase().interviews.map((interview) => interview.id)).toEqual([bookInterview.id]);
   });
 
   it('証言がひもづいている聴取は削除できず、理由を示す', async () => {
@@ -166,7 +130,7 @@ describe('InterviewSection', () => {
     expect(openedCase().interviews).toHaveLength(2);
   });
 
-  it('「この資料の証言を書き足す」から書いた証言は、その聴取にひもづき、聴取の相手の発言として保存する', async () => {
+  it('「この資料の証言を書き足す」から書いた証言は、その聴取にひもづき、開いている人物の発言として保存する', async () => {
     const user = userEvent.setup();
     const history = renderCaretakerStatementHistory();
 
@@ -181,20 +145,37 @@ describe('InterviewSection', () => {
     });
     expect(screen.queryByRole('region', { name: '資料の証言の書き足し' })).not.toBeInTheDocument();
   });
-  describe('相手が複数の資料', () => {
+
+  describe('発言者が複数の資料', () => {
     /** 管理人と隣家の住人がそろって応じた記者会見です。 */
-    const pressConference: Interview = { id: 'interview-press', subjectPersonIds: ['person-caretaker', 'person-neighbor'], at: '1998-08-14' };
+    const pressConference: Interview = { id: 'interview-press', title: '記者会見', at: '1998-08-14' };
+    /** 記者会見での、管理人と隣家の住人の発言です。 */
+    const pressStatements: Claim[] = [
+      { ...firstStatement, id: 'claim-press-caretaker', viaPersonIds: [], interviewId: pressConference.id },
+      {
+        ...firstStatement,
+        id: 'claim-press-neighbor',
+        speaker: { kind: 'person', personIds: ['person-neighbor'] },
+        viaPersonIds: [],
+        content: '夜9時に明かりが見えた。',
+        interviewId: pressConference.id,
+      },
+    ];
 
     beforeEach(() => {
-      openTestCase({ ...caseWithInterviews, interviews: [...caseWithInterviews.interviews, pressConference] });
+      openTestCase({
+        ...caseWithInterviews,
+        interviews: [...caseWithInterviews.interviews, pressConference],
+        claims: [...caseWithInterviews.claims, ...pressStatements],
+      });
     });
 
-    it('相手のどの人物の供述の変遷にも並べ、相手の全員を示す', () => {
+    it('発言者のどの人物の供述の変遷にも並べ、発言者の全員を示す', () => {
       render(<InterviewSection personId="person-neighbor" tab="timeline" />);
       const history = screen.getByRole('region', { name: '供述の変遷' });
 
       expect(within(history).getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual(['1998年8月14日']);
-      expect(within(history).getByText('相手: 管理人、隣家の住人')).toBeInTheDocument();
+      expect(within(history).getByText('発言者: 管理人、隣家の住人')).toBeInTheDocument();
     });
 
     it('「この資料の証言を書き足す」では、開いている人物を発言者に選んだ状態で始まる', async () => {
@@ -203,7 +184,7 @@ describe('InterviewSection', () => {
 
       await user.click(screen.getByRole('button', { name: '1998年8月14日の資料の証言を書き足す' }));
       const appendSection = screen.getByRole('region', { name: '資料の証言の書き足し' });
-      await user.type(within(appendSection).getByLabelText('内容'), '夜9時に明かりが見えた。');
+      await user.type(within(appendSection).getByLabelText('内容'), '車の音はしなかった。');
       await user.click(within(appendSection).getByRole('button', { name: '書き足す' }));
 
       expect(openedCase().claims.at(-1)).toMatchObject({
@@ -211,35 +192,6 @@ describe('InterviewSection', () => {
         interviewId: pressConference.id,
       });
     });
-  });
-
-  it('URLと本文を入力して保存すると、聴取に資料のURLと本文を持たせる', async () => {
-    const user = userEvent.setup();
-    renderCaretakerStatementHistory();
-
-    await user.click(screen.getByRole('button', { name: '資料を追加' }));
-    const registration = screen.getByRole('region', { name: '資料の登録' });
-    await user.type(within(registration).getByLabelText('URL（任意）'), 'https://www.youtube.com/watch?v=abc');
-    await user.type(within(registration).getByLabelText('本文・文字起こし（任意）'), '0:05{Enter}あの夜は別荘が真っ暗でした');
-    await user.click(within(registration).getByRole('button', { name: '資料を保存' }));
-
-    expect(openedCase().interviews.at(-1)).toMatchObject({
-      url: 'https://www.youtube.com/watch?v=abc',
-      transcript: '0:05\nあの夜は別荘が真っ暗でした',
-    });
-  });
-
-  it('http か https でないURLでは、エラーを示して保存しない', async () => {
-    const user = userEvent.setup();
-    renderCaretakerStatementHistory();
-
-    await user.click(screen.getByRole('button', { name: '資料を追加' }));
-    const registration = screen.getByRole('region', { name: '資料の登録' });
-    await user.type(within(registration).getByLabelText('URL（任意）'), '動画のページ');
-    await user.click(within(registration).getByRole('button', { name: '資料を保存' }));
-
-    expect(within(registration).getByText(/URLは http か https/)).toBeInTheDocument();
-    expect(openedCase().interviews).toHaveLength(2);
   });
 
   it('URLを持つ聴取には、資料を新しいタブで開くリンクを置く', () => {
@@ -416,9 +368,13 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     const extraction = await openExtraction(user, history);
     const candidates = await sendWithApiKey(user, extraction);
 
-    // 送ったリクエストに、本文の全文・聴取の相手・API キーを含める
+    // 送ったリクエストに、本文の全文・資料の名前・API キーを含める
     const [, init] = extractionCalls(fetchSpy)[0]!;
-    expect(JSON.parse(String(init?.body))).toMatchObject({ text: articleTranscript, subjectName: '管理人', apiKey: 'sk-or-テスト用のキー' });
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      text: articleTranscript,
+      sourceName: '管理人の供述調書・1998年8月13日 10:00・県警',
+      apiKey: 'sk-or-テスト用のキー',
+    });
     // 入力した API キーは、次に抽出するときのためにブラウザに保存する
     expect(localStorage.getItem('testimony-board-llm-settings')).toContain('sk-or-テスト用のキー');
 

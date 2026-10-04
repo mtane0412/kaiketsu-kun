@@ -259,7 +259,7 @@ describe('ClaimDetail', () => {
 /** 管理人へのインタビュー動画の聴取です（文字起こしを貼り付けています）。 */
 const videoInterview: Interview = {
   id: 'interview-video',
-  subjectPersonIds: ['person-caretaker'],
+  title: '管理人へのインタビュー',
   url: 'https://www.youtube.com/watch?v=abc',
   transcript: '0:00\nこんばんは、管理人です\n12:34\nあの夜は別荘が真っ暗でした',
 };

@@ -2,7 +2,7 @@
  * 証言の候補の抽出 API
  *
  * POST /api/extract-claims
- * - リクエスト: src/lib/claim-extraction-api.ts の ExtractionRequestSchema（本文・聴取の相手・登録済みの名前・API キー・モデル）
+ * - リクエスト: src/lib/claim-extraction-api.ts の ExtractionRequestSchema（本文・資料の名前・登録済みの名前・API キー・モデル）
  * - 200: { claims: ExtractedClaim[] }（原文とまだ照らし合わせていない、LLM の出力そのもの）
  * - 400: リクエストが形式に合わない
  * - 401: OpenRouter が API キーを受け付けなかった

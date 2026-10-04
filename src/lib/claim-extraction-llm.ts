@@ -38,9 +38,9 @@ function nameList(names: string[]): string {
 
 /** LLM に渡すプロンプトを作ります。 */
 export function buildExtractionPrompt(request: ExtractionRequest): string {
-  const subjectName = sanitizeName(request.subjectName);
+  const sourceName = sanitizeName(request.sourceName);
   return `あなたは、調査のために資料から証言を書き起こす補助をします。
-次の「本文」は、「${subjectName}」から得た資料（記事の本文・動画の文字起こし・調書など）です。
+次の「本文」は、資料「${sourceName}」の本文（記事の本文・動画の文字起こし・調書など）です。
 本文の中で、誰かが何かを述べている箇所を、証言の候補として抽出してください。
 
 ## 規則
@@ -48,9 +48,9 @@ export function buildExtractionPrompt(request: ExtractionRequest): string {
   本文に無い文字列を quote にした候補は、捨てられます。quote は1〜3文程度の連続した範囲にしてください。
 - content には、発言者が述べた事柄を、本文の言葉に沿って簡潔な文にしてください。本文に書かれていないことを推測で補ってはいけません。
 - speakerName は、その事柄を述べた人物・組織・媒体です。「県警によると」「〜さんは…と話した」の場合は、県警や〜さんが発言者です。
-  記者の地の文など、資料（${subjectName}）そのものの記述の場合は null にしてください。
+  記者の地の文など、資料の媒体そのものの記述の場合は null にしてください。
 - viaNames は、発言が発言者から伝わるまでに経由した人物・組織・媒体の名前を、発言者に近い順に並べてください。
-  「${subjectName}」を経由に含める必要はありません。
+  資料の媒体を経由に含める必要はありません。
 - when は、証言が述べている出来事の日時です。「1998年8月12日21時」「1998年8月」のように、年を含めて書いてください。
   本文から年が分からない場合は、年を推測せず、本文の表記のまま書いてください。日時が無ければ null にしてください。
 - placeName は、証言が述べている出来事の場所の名前です。無ければ null にしてください。

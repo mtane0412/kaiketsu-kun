@@ -13,6 +13,7 @@
  * 日時を区間で持っていた頃のデータは、最も早い時点だけを日時として引き継ぎます（migrateLegacyTimeRef）。
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
+ * 資料（聴取）の相手を持っていた頃のデータは、相手を取り除き、タイトルの無い資料は相手の名前をタイトルにします。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
@@ -28,7 +29,7 @@ import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
-import type { Case, Id, Person, Speaker } from './types';
+import type { Case, Id, Interview, Person, Speaker } from './types';
 
 const idSchema = z.string().min(1);
 
@@ -93,8 +94,8 @@ const speakerSchema = z.preprocess(
 );
 
 /**
- * 資料（聴取）の相手を1人しか持てなかった頃のデータ（subjectPersonId）を、現在の形（subjectPersonIds）に変換します。
- * それ以外の値は、そのまま返して後段の検証に委ねます。
+ * 資料（聴取）の相手を1人しか持てなかった頃のデータ（subjectPersonId）を、相手の一覧（subjectPersonIds）の形にそろえます。
+ * 相手の一覧は、読み込み後に migrateLegacyInterviewSubjects で取り除きます。それ以外の値は、そのまま返して後段の検証に委ねます。
  */
 function migrateLegacyInterviewSubject(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) return value;
@@ -188,7 +189,10 @@ const caseSchema = z.object({
         migrateLegacyInterviewSubject,
         z.object({
         id: idSchema,
-        subjectPersonIds: z.array(idSchema).min(1),
+        // 空のタイトルは資料の名前を空にしてしまうため、フォームと同じく空白だけのタイトルは持たせない
+        title: z.string().refine((value) => value.trim() !== '', 'タイトルは空白以外の文字を含めてください').optional(),
+        // 相手を持っていた頃のデータだけが持つ項目です（parseCase で取り除き、タイトルの無い資料ではタイトルに直します）
+        subjectPersonIds: z.array(idSchema).optional(),
         interviewerPersonId: idSchema.optional(),
         at: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
         placeId: idSchema.optional(),
@@ -318,25 +322,11 @@ export function findCaseViolations(target: Case): string[] {
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
     // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
     checkMentions(claim.content);
-    if (claim.interviewId !== undefined) {
-      const interview = interviewsById.get(claim.interviewId);
-      if (interview === undefined) {
-        violations.push(`存在しない資料を参照しています: ${claim.interviewId}`);
-      } else {
-        // 聴取は「相手がこの証言を述べた（伝えた）機会」を表すため、相手が証言に関わらないひもづけは誤りとする
-        // 相手が複数の資料では、相手のうち1人でも関わっていればよい（記者会見で、そのうち1人が述べた証言など）
-        const involvedPersonIds = [...(claim.speaker.kind === 'person' ? claim.speaker.personIds : []), ...claim.viaPersonIds];
-        if (!interview.subjectPersonIds.some((id) => involvedPersonIds.includes(id))) {
-          violations.push(`資料の相手が、証言の発言者にも経由にも含まれていません: ${claim.id}`);
-        }
-      }
+    if (claim.interviewId !== undefined && !interviewsById.has(claim.interviewId)) {
+      violations.push(`存在しない資料を参照しています: ${claim.interviewId}`);
     }
   }
   for (const interview of target.interviews) {
-    interview.subjectPersonIds.forEach((id) => check(personIds, id, '人物'));
-    if (new Set(interview.subjectPersonIds).size !== interview.subjectPersonIds.length) {
-      violations.push(`資料の相手に同じ人物が重なっています: ${interview.id}`);
-    }
     check(personIds, interview.interviewerPersonId, '人物');
     check(placeIds, interview.placeId, '場所');
   }
@@ -490,6 +480,30 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
   return { persons, claims };
 }
 
+/** 相手を持っていた頃の資料（聴取）です。 */
+type LegacyInterview = Interview & { subjectPersonIds?: Id[] };
+
+/**
+ * 資料（聴取）の相手を持っていた頃のデータから、相手の一覧（subjectPersonIds）を取り除きます。
+ *
+ * 資料に載っている人物は、資料にひもづく証言の発言者から導くようにしたため、相手は持ちません（src/domain/interviews.ts）。
+ * 相手は資料を見分ける名前にも使っていたため、タイトルの無い資料は、相手の名前を「、」でつないだ文字列をタイトルにします。
+ * 相手が存在しない人物を参照している場合は、データ破損として例外を投げます。
+ */
+function migrateLegacyInterviewSubjects(interviews: LegacyInterview[], persons: Person[]): Interview[] {
+  return interviews.map(({ subjectPersonIds, ...interview }) => {
+    if (subjectPersonIds === undefined || interview.title !== undefined) return interview;
+    const names = subjectPersonIds.map((personId) => {
+      const person = persons.find((candidate) => candidate.id === personId);
+      if (person === undefined) {
+        throw new Error(`ケースデータの参照に問題があります\n資料の相手が存在しない人物を参照しています: ${personId}`);
+      }
+      return person.name;
+    });
+    return names.length === 0 ? interview : { ...interview, title: names.join('、') };
+  });
+}
+
 /**
  * 型の保証が無いデータを検証し、Case として返します。
  * 検証に失敗した場合は、問題点を列挙した例外を投げます。
@@ -507,7 +521,7 @@ export function parseCase(data: unknown): Case {
     ...current,
     persons,
     personLaneOrder,
-    interviews,
+    interviews: migrateLegacyInterviewSubjects(interviews, persons),
     crossChecks,
     hypotheses,
     tasks,
