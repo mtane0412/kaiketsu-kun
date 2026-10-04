@@ -3,6 +3,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  CLAIM_CONTENT_MAX_LENGTH,
+  CLAIM_CONTENT_MAX_LINES,
+  isLongClaimContent,
   buildClaimDetail,
   buildMapTrail,
   buildPersonDetail,
@@ -54,6 +57,48 @@ describe('buildTimeline', () => {
     };
 
     expect(() => buildTimeline(brokenCase)).toThrow('場所が見つかりません: place-missing');
+  });
+});
+
+describe('isLongClaimContent', () => {
+  /** 管理人の証言の本文を content に差し替えたケースから、その証言の表示用の情報を返します。 */
+  function caretakerViewWith(content: string) {
+    const target: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) => (claim.id === 'claim-caretaker' ? { ...claim, content } : claim)),
+    };
+    return buildTimeline(target).items.find((item) => item.view.claim.id === 'claim-caretaker')!.view;
+  }
+
+  it('表示する文字数が上限を超える本文を、長い本文とする', () => {
+    expect(isLongClaimContent(caretakerViewWith('あ'.repeat(CLAIM_CONTENT_MAX_LENGTH)))).toBe(false);
+    expect(isLongClaimContent(caretakerViewWith('あ'.repeat(CLAIM_CONTENT_MAX_LENGTH + 1)))).toBe(true);
+  });
+
+  it('文字数が上限以内でも、行数が上限を超える本文を、長い本文とする', () => {
+    const lines = (count: number) => Array.from({ length: count }, (_, index) => `${index + 1}行目`).join('\n');
+    expect(isLongClaimContent(caretakerViewWith(lines(CLAIM_CONTENT_MAX_LINES)))).toBe(false);
+    expect(isLongClaimContent(caretakerViewWith(lines(CLAIM_CONTENT_MAX_LINES + 1)))).toBe(true);
+  });
+
+  it('メンションは、記法ではなく表示する「@名前」の文字数で数える', () => {
+    // 前提: 架空日報の証言は「@別荘の持ち主」で始まり、記法では人物の ID を含むため、表示より長い
+    const reportClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-report')!;
+    const view = buildTimeline(sampleFictionalCase).items.find((item) => item.view.claim.id === 'claim-report')!.view;
+    const displayedLength = view.contentSegments
+      .map((segment) => (segment.type === 'mention' ? `@${segment.label}` : segment.text))
+      .join('').length;
+    const padding = 'あ'.repeat(CLAIM_CONTENT_MAX_LENGTH - displayedLength);
+
+    expect(reportClaim.content.length).toBeGreaterThan(displayedLength);
+    const target: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-report' ? { ...claim, content: claim.content + padding } : claim
+      ),
+    };
+    const paddedView = buildTimeline(target).items.find((item) => item.view.claim.id === 'claim-report')!.view;
+    expect(isLongClaimContent(paddedView)).toBe(false);
   });
 });
 

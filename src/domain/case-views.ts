@@ -109,6 +109,22 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
   };
 }
 
+/** 省略せずに表示する証言の本文の、文字数の上限です。これを超える本文は、証言のカードで省略して表示します。 */
+export const CLAIM_CONTENT_MAX_LENGTH = 140;
+
+/** 省略せずに表示する証言の本文の、行数の上限です。これを超える本文は、証言のカードで省略して表示します。 */
+export const CLAIM_CONTENT_MAX_LINES = 4;
+
+/**
+ * 証言の本文が、カードで省略して表示するほど長いかどうかを返します。
+ * 文字数か行数のどちらかが上限を超える場合に長いとします。文字数は、メンションを記法ではなく表示する「@名前」で数えます。
+ * 注意: 描画後の高さではなく文字数と行数で判定するため、カードの幅によっては、省略しても隠れる行が無い場合があります。
+ */
+export function isLongClaimContent(view: ClaimView): boolean {
+  const text = view.contentSegments.map((segment) => (segment.type === 'mention' ? `@${segment.label}` : segment.text)).join('');
+  return text.length > CLAIM_CONTENT_MAX_LENGTH || text.split('\n').length > CLAIM_CONTENT_MAX_LINES;
+}
+
 /** 見出しの無い証言の名前として使う、本文の冒頭の文字数です。 */
 const CLAIM_LABEL_LENGTH = 20;
 

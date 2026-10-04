@@ -7,7 +7,8 @@
  * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
  * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
  * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
- * 見出しのある証言は、見出しを表示し、本文は「本文を表示」を開くまで折りたたみます（長い本文がボードを占めないようにするためです）。
+ * 見出しのある証言は、見出しを表示し、その下に本文を表示します。
+ * 長い本文（isLongClaimContent）は、ボードを占めないよう先頭の数行だけを見せ、「全文を表示」で展開、「折りたたむ」で省略に戻します。
  * カード全体が、証言の詳細ページへのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
  * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
@@ -20,7 +21,7 @@
  * 項目名は読み上げのために sr-only の文字として残し、マウスにはツールチップ（title）で示します。
  *
  * 注意: リンクの当たり判定をカード全体に広げています（リンクの after 疑似要素）。カードの中で操作できる要素
- * （メンション・言及のアイコン・「本文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
+ * （メンション・言及のアイコン・「全文を表示」）は、リンクより手前（ABOVE_CARD_LINK）に置いてください。
  * 本文も同じく手前に置いています。カード全体がリンクだと本文をドラッグして選択・コピーできないためで、
  * 本文の上での押下は詳細を開きません（詳細は、本文以外のどこを押しても開きます）。
  * 注意: 手前に置く要素の z-index がカードの外へ漏れないよう、カードには isolate を付けています。
@@ -30,8 +31,8 @@
 
 import { AtSign, BookMarked, ChevronRight, GitCompareArrows, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
+import { useId, useState, type ReactNode } from 'react';
+import { claimLabelOf, formatViaLabel, isLongClaimContent, type ClaimView } from '@/domain/case-views';
 import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
 import type { SegmentKind } from '@/domain/mention';
@@ -88,11 +89,17 @@ type ClaimCardProps = {
 export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, crossCheckCounts }: ClaimCardProps) {
   const { claim } = view;
   const caseId = useCaseId();
+  const contentId = useId();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isCollapsible = isLongClaimContent(view);
 
   const isUserSpeculation = claim.speaker.kind === 'user';
   const content = (
     // 本文はリンクの当たり判定より手前に置く（カード全体がリンクだと、本文をドラッグして選択・コピーできないため）
-    <p className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground`}>
+    <p
+      id={contentId}
+      className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground ${isCollapsible && !isExpanded ? 'line-clamp-4' : ''}`}
+    >
       {view.contentSegments.map((segment, index) =>
         segment.type !== 'mention' ? (
           segment.text
@@ -156,16 +163,18 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
         </Link>
       </div>
 
-      {claim.title ? (
-        <>
-          <p className="font-semibold">{claim.title}</p>
-          <details className={`${ABOVE_CARD_LINK} mt-1`}>
-            <summary className="cursor-pointer text-xs text-muted-foreground">本文を表示</summary>
-            <div className="mt-1">{content}</div>
-          </details>
-        </>
-      ) : (
-        content
+      {claim.title && <p className="mb-1 font-semibold">{claim.title}</p>}
+      {content}
+      {isCollapsible && (
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls={contentId}
+          onClick={() => setIsExpanded((current) => !current)}
+          className={`${ABOVE_CARD_LINK} mt-1 text-xs text-muted-foreground hover:text-foreground hover:underline`}
+        >
+          {isExpanded ? '折りたたむ' : '全文を表示'}
+        </button>
       )}
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
