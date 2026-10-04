@@ -46,7 +46,7 @@ export function InterviewSection({ personId, tab }: InterviewSectionProps) {
         <ol className="space-y-2">
           {interviews.map((view) => (
             <li key={view.interview.id}>
-              <InterviewCard view={view} tab={tab} speakerPersonId={personId} />
+              <InterviewCard view={view} tab={tab} speakerPersonId={personId} collapsesLongTranscript />
             </li>
           ))}
         </ol>

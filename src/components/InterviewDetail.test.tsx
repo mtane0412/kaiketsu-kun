@@ -72,6 +72,20 @@ describe('InterviewDetail', () => {
     expect(screen.getByRole('region', { name: '1998年8月14日の資料の本文' })).toHaveTextContent('あの夜は別荘が真っ暗でした');
   });
 
+  it('長い本文でも省略せず、「全文を表示」を置かない（資料の詳細は本文を読むための画面のため）', () => {
+    const longTranscript = Array.from({ length: 20 }, (_, index) => `記者の記事の${index + 1}段落目です。`).join('\n');
+    openTestCase({
+      ...openedCase(),
+      interviews: openedCase().interviews.map((interview) =>
+        interview.id === 'interview-press' ? { ...interview, transcript: longTranscript } : interview
+      ),
+    });
+    render(<InterviewDetail interviewId="interview-press" />);
+
+    expect(screen.getByRole('region', { name: '1998年8月14日の資料の本文' })).toHaveTextContent('記者の記事の20段落目です。');
+    expect(screen.queryByRole('button', { name: '全文を表示' })).not.toBeInTheDocument();
+  });
+
   it('本文の無い資料では、本文を貼り付けると証言を書き起こせることを示す', () => {
     render(<InterviewDetail interviewId="interview-book" />);
 

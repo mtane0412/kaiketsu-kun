@@ -1,7 +1,11 @@
 /**
  * 聴取の本文（記事の本文・動画の文字起こし）の表示と、本文の範囲からの証言の書き起こし
  *
- * 人物の詳細の「供述の変遷」（InterviewSection）で、本文を持つ聴取の下に開きます。
+ * 資料のカード（InterviewCard）で、本文を持つ聴取の下に表示します。
+ * - collapsesLongText を渡すと（人物の詳細の「供述の変遷」）、長い本文（isLongTranscript）の見た目を省略し、
+ *   「全文を表示」で展開、「折りたたむ」で省略に戻します。展開した本文は、高さを制限せずに全文を並べます。
+ *   渡さない場合（資料の詳細）は、本文を省略せず、高さを制限した枠の中でスクロールして読みます
+ *   （埋め込みプレーヤーを画面に残したまま、本文の時刻の行を押せるようにするためです）。
  * - 本文のうち、証言として書き起こした範囲（証言の引用）を、その証言へのリンクとして示します。
  *   重なり合う引用は、重なった範囲から最初の証言へ移ります（区切り方は src/domain/transcript.ts の buildTranscriptSegments）。
  * - 本文の範囲を選んで「選んだ範囲を証言にする」を押すと、選んだ範囲を引用として onQuote に渡します。
@@ -18,9 +22,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { claimLabelOf, type ClaimView } from '@/domain/case-views';
-import { buildTranscriptSegments, formatQuoteSeconds, quoteSecondsAt, splitTimestampLines } from '@/domain/transcript';
+import { buildTranscriptSegments, formatQuoteSeconds, isLongTranscript, quoteSecondsAt, splitTimestampLines } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
 import { ClaimExtraction, type ExtractionSource } from './ClaimExtraction';
@@ -42,7 +46,21 @@ type InterviewTranscriptProps = {
   onQuote: (quote: ClaimQuote) => void;
   /** 本文の時刻の行を押したときに、その秒数で呼び出します。渡さない場合は、時刻の行をボタンにしません。 */
   onSeek?: (seconds: number) => void;
+  /** 長い本文の見た目を省略し、「全文を表示」で展開できるようにするかどうかです。省略すると、省略せずに枠の中でスクロールします。 */
+  collapsesLongText?: boolean;
 };
+
+/**
+ * 本文の枠の高さの指定です。
+ * - scroll: 省略しない本文。高さを制限し、枠の中でスクロールします。
+ * - collapsed: 省略中の長い本文。先頭の数行だけを見せます。
+ * - full: 短い本文と、展開した長い本文。高さを制限しません。
+ */
+const TEXT_HEIGHT_CLASSES = {
+  scroll: 'max-h-80 overflow-y-auto',
+  collapsed: 'max-h-40 overflow-hidden',
+  full: '',
+} as const;
 
 /** 動画を seconds 秒目から再生するボタンの、読み上げのための名前です（例「0:05から動画を再生」）。 */
 export function seekLabelOf(seconds: number): string {
@@ -74,9 +92,22 @@ function quoteFromSelection(container: HTMLElement, transcript: string): ClaimQu
   return { text, ...(seconds !== undefined && { seconds }) };
 }
 
-export function InterviewTranscript({ interviewId, transcript, claims, label, tab, onQuote, onSeek }: InterviewTranscriptProps) {
+export function InterviewTranscript({
+  interviewId,
+  transcript,
+  claims,
+  label,
+  tab,
+  onQuote,
+  onSeek,
+  collapsesLongText = false,
+}: InterviewTranscriptProps) {
   const caseId = useCaseId();
   const textRef = useRef<HTMLDivElement>(null);
+  const textId = useId();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isCollapsible = collapsesLongText && isLongTranscript(transcript);
+  const textHeight = !collapsesLongText ? 'scroll' : isCollapsible && !isExpanded ? 'collapsed' : 'full';
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
   /** 証言の候補の抽出に送る本文です。押すたびに作り直すため、何回目に押したかも持ちます。 */
   const [extraction, setExtraction] = useState<{ source: ExtractionSource; count: number } | null>(null);
@@ -129,28 +160,48 @@ export function InterviewTranscript({ interviewId, transcript, claims, label, ta
 
   return (
     <section aria-label={label} className="space-y-2">
-      <div
-        ref={textRef}
-        data-testid="transcript-text"
-        className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded border bg-background p-2 text-sm leading-relaxed"
-      >
-        {segments.map((segment, index) => {
-          const [firstClaimId] = segment.claimIds;
-          const view = firstClaimId === undefined ? undefined : viewOf(firstClaimId);
-          if (view === undefined) return renderPlainText(segment.text, index);
-          return (
-            <Link
-              key={index}
-              href={claimHref(caseId, view.claim.id, tab)}
-              aria-label={`書き起こした証言: ${claimLabelOf(view)}`}
-              className="rounded-sm bg-mention-place/40 underline decoration-dotted underline-offset-2"
-            >
-              {segment.text}
-            </Link>
-          );
-        })}
+      <div className="relative">
+        <div
+          ref={textRef}
+          id={textId}
+          data-testid="transcript-text"
+          className={`${TEXT_HEIGHT_CLASSES[textHeight]} whitespace-pre-wrap rounded border bg-background p-2 text-sm leading-relaxed`}
+        >
+          {segments.map((segment, index) => {
+            const [firstClaimId] = segment.claimIds;
+            const view = firstClaimId === undefined ? undefined : viewOf(firstClaimId);
+            if (view === undefined) return renderPlainText(segment.text, index);
+            return (
+              <Link
+                key={index}
+                href={claimHref(caseId, view.claim.id, tab)}
+                aria-label={`書き起こした証言: ${claimLabelOf(view)}`}
+                className="rounded-sm bg-mention-place/40 underline decoration-dotted underline-offset-2"
+              >
+                {segment.text}
+              </Link>
+            );
+          })}
+        </div>
+        {textHeight === 'collapsed' && (
+          // 続きがあることを示すため、省略した本文の下端を薄くする（本文の位置の計算に入らないよう、本文の要素の外に置く）
+          <div aria-hidden className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b bg-linear-to-t from-background" />
+        )}
       </div>
       <div className="flex flex-wrap justify-end gap-2">
+        {isCollapsible && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={isExpanded}
+            aria-controls={textId}
+            onClick={() => setIsExpanded((current) => !current)}
+            className="mr-auto"
+          >
+            {isExpanded ? '折りたたむ' : '全文を表示'}
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

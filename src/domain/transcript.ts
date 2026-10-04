@@ -35,6 +35,12 @@ const YOUTUBE_EMBED_URL_PREFIX = 'https://www.youtube-nocookie.com/embed/';
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
 
+/** 省略せずに表示する本文の、文字数の上限です。これを超える本文は、資料の一覧で省略して表示します。 */
+export const LONG_TRANSCRIPT_MAX_LENGTH = 300;
+
+/** 省略せずに表示する本文の、行数の上限です。これを超える本文は、資料の一覧で省略して表示します。 */
+export const LONG_TRANSCRIPT_MAX_LINES = 8;
+
 /**
  * http か https のURLかどうかを返します。
  * 聴取のURLはリンクとして表示するため、javascript: などの別の形式のURLを受け付けないようにします。
@@ -143,6 +149,15 @@ export function buildTranscriptSegments(transcript: string, quotes: { claimId: I
     start = end;
   }
   return segments;
+}
+
+/**
+ * 本文が、資料の一覧で省略して表示するほど長いかどうかを返します。
+ * 文字数か行数のどちらかが上限を超える場合に長いとします（動画の文字起こしは、1行が短く行数が多いためです）。
+ * 注意: 描画後の高さではなく文字数と行数で判定するため、画面の幅によっては、省略しても隠れる行が無い場合があります。
+ */
+export function isLongTranscript(transcript: string): boolean {
+  return transcript.length > LONG_TRANSCRIPT_MAX_LENGTH || transcript.split('\n').length > LONG_TRANSCRIPT_MAX_LINES;
 }
 
 /** 動画の位置を「分:秒」（1時間以上は「時:分:秒」）で表します。 */

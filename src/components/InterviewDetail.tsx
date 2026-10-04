@@ -83,7 +83,7 @@ export function InterviewDetail({ interviewId }: { interviewId: Id }) {
         view={view}
         tab={tab}
         showsSource={false}
-        opensTranscript
+        showsTranscriptHint
         embedsVideo
         // 削除した資料のURLへ「戻る」で戻らないよう、履歴を置き換える
         onDeleted={() => router.replace(boardHref(caseId, tab))}
