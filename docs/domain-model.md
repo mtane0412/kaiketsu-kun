@@ -16,6 +16,7 @@
 - 架空のケースによる記入例: `src/domain/sample-fictional-case.ts`（画面の「架空のサンプルを読み込む」で読み込めます）
 - 起動: `npm run dev`
 - 品質チェック: `npm run lint && npm run type-check && npm test`
+- ケースのJSONの検証: `npm run validate-case -- <JSONファイルのパス>`。アプリの外で作ったJSON（AIエージェントが資料から作ったものなど）を、読み込む前に確かめます。読み込めることに加えて、古い形式でないこと・本文のメンションと導出項目の一致・時系列の並び順・引用が資料の本文に含まれることを確かめます（`src/lib/case-file-validation.ts`）。AIエージェントに作らせる手順は `.claude/skills/case-json/SKILL.md` です
 
 UIは次の範囲に絞っています。
 
