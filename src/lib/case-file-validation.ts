@@ -8,6 +8,7 @@
  *    未知の項目は黙って捨てるため、読み込みの前後でデータが変わる場合は誤りとして扱います。
  *    書いた内容が読み込みで失われたり、書き換えられたりするのを防ぐためです。
  * 3. アプリの画面からの入力では起こらない状態でないこと。parseCase は次の状態を受け付けますが、画面では作れないため誤りとして扱います。
+ *    - 同じ一覧（人物・場所・証言など）の中で、IDが重複している
  *    - 証言の言及・場所・日時が、本文のメンションから導いたもの（deriveClaimLinks）と食い違う
  *    - 時系列の並び順（timelineOrder）に、証言が過不足なく1回ずつ載っていない
  *    - 時系列の並び順が、証言の日時と矛盾する（src/domain/timeline-order.ts の矛盾の定義）
@@ -52,7 +53,12 @@ export function validateCaseFile(text: string): CaseFileValidation {
   if (differences.length > 0) {
     return { ok: false, errors: differences };
   }
-  const inconsistencies = [...findLinkMismatches(parsed), ...findTimelineOrderProblems(parsed), ...findUnbackedQuotes(parsed)];
+  const inconsistencies = [
+    ...findDuplicateIds(parsed),
+    ...findLinkMismatches(parsed),
+    ...findTimelineOrderProblems(parsed),
+    ...findUnbackedQuotes(parsed),
+  ];
   if (inconsistencies.length > 0) {
     return { ok: false, errors: inconsistencies };
   }
@@ -71,6 +77,28 @@ function summarize(target: Case): string {
     `仮説 ${target.hypotheses.length}件`,
     `未了事項 ${target.tasks.length}件`,
   ].join(' / ');
+}
+
+/**
+ * 一覧ごとに、2回以上使われているIDを列挙します。
+ * parseCase はIDの重複を拒否しないため、重複したIDへの参照がどの要素を指すか定まらない状態を、ここで拒否します。
+ */
+function findDuplicateIds(target: Case): string[] {
+  const collections = {
+    persons: target.persons,
+    places: target.places,
+    claims: target.claims,
+    relationships: target.relationships,
+    interviews: target.interviews,
+    crossChecks: target.crossChecks,
+    hypotheses: target.hypotheses,
+    tasks: target.tasks,
+  };
+  return Object.entries(collections).flatMap(([name, items]) => {
+    const ids = items.map((item) => item.id);
+    const duplicated = new Set(ids.filter((id, index) => ids.indexOf(id) !== index));
+    return [...duplicated].map((id) => `${name}: ID ${id} が2回以上使われています`);
+  });
 }
 
 /** 証言の言及・場所・日時のうち、本文のメンションから導いたものと食い違う証言を列挙します。 */

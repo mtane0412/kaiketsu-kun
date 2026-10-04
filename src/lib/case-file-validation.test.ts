@@ -120,6 +120,41 @@ describe('validateCaseFile', () => {
     expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('claim-misquoted'));
   });
 
+  it('同じIDの証言が2件ある場合は、並び順に1回だけ載っていても誤りとして返す', () => {
+    // 前提: 登録済みの隣家の住人の証言（claim-neighbor）と同じIDで、内容の違う証言をもう1件書いている
+    const caseData = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-neighbor',
+          speaker: { kind: 'user' },
+          viaPersonIds: [],
+          content: '持ち主は夜10時に別荘を出たはずだ。',
+          mentionedPersonIds: [],
+        },
+      ],
+    };
+
+    const result = validateCaseFile(toJsonText(caseData));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('claims: ID claim-neighbor が2回以上使われています'));
+  });
+
+  it('同じIDの人物が2件ある場合は、誤りとして返す', () => {
+    // 前提: 別の人物に、登録済みの別荘の持ち主（person-owner）と同じIDを付けている
+    const caseData = {
+      ...sampleFictionalCase,
+      persons: [...sampleFictionalCase.persons, { id: 'person-owner', name: '別荘の持ち主の弟', kind: 'individual' }],
+    };
+
+    const result = validateCaseFile(toJsonText(caseData));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('persons: ID person-owner が2回以上使われています'));
+  });
+
   it('時系列の並び順に載っていない証言は、誤りとして返す', () => {
     // 前提: 並び順から最後の証言を落としている
     const caseData = { ...sampleFictionalCase, timelineOrder: sampleFictionalCase.timelineOrder.slice(0, -1) };
