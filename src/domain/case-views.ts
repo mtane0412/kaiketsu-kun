@@ -124,16 +124,22 @@ export function claimLabelOf(view: ClaimView): string {
   if (view.claim.title) return view.claim.title;
   const [first] = view.contentSegments;
   const startsWithDate = first?.type === 'mention' && first.kind === 'date';
-  const joined = view.contentSegments
-    .filter((segment) => segment.type !== 'mention' || segment.kind !== 'date')
-    .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
-    .join('');
-  const text = (startsWithDate ? joined.replace(LEADING_DATE_PARTICLES, '') : joined).trimStart();
+  const text = view.contentSegments
+    .map((segment, index) => {
+      if (segment.type === 'mention') return segment.kind === 'date' ? '' : segment.label;
+      // 日時に続く言葉は、先頭の日時の直後の文だけから除く（人物・場所の名前の頭を削らないため）
+      return startsWithDate && index === 1 ? segment.text.replace(LEADING_DATE_PARTICLES, '') : segment.text;
+    })
+    .join('')
+    .trimStart();
   return text.length > CLAIM_LABEL_LENGTH ? `${text.slice(0, CLAIM_LABEL_LENGTH)}…` : text;
 }
 
-/** 本文の先頭の日時に続く言葉（「ごろ、」「頃に」「に」「、」など）に一致する正規表現です。 */
-const LEADING_DATE_PARTICLES = /^\s*(?:ごろ|頃)?(?:に|には|、|,|，|\s)*/;
+/**
+ * 本文の先頭の日時に続く言葉（「ごろ、」「頃に」「には」「、」など）に一致する正規表現です。
+ * 「には」を「に」より先に並べ、長い言葉から一致させます（「に」だけを除いて「は」が残らないようにするためです）。
+ */
+const LEADING_DATE_PARTICLES = /^\s*(?:ごろ|頃)?(?:には|に|、|,|，|\s)*/;
 
 /**
  * 証言を、時系列ボードの並び順（resolveTimelineOrder）で並べます。

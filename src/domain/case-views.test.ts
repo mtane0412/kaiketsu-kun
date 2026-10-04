@@ -82,6 +82,42 @@ describe('claimLabelOf', () => {
 
     expect(claimLabelOf(reportClaim.view)).toBe('別荘の持ち主は12日夜から連絡が取れなく…');
   });
+
+  /** 隣家の住人の証言の本文だけを差し替えたケースで、その証言の名前を返します。 */
+  function labelOfNeighborClaimWith(content: string): string {
+    const target: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) => (claim.id === 'claim-neighbor' ? { ...claim, content } : claim)),
+    };
+    return claimLabelOf(buildTimeline(target).items.find((item) => item.view.claim.id === 'claim-neighbor')!.view);
+  }
+
+  it('日時に続く「には」は、「は」を残さずにまとめて除く', () => {
+    const label = labelOfNeighborClaimWith('@[1998年8月12日 21:00](date:1998-08-12T21:00)には別荘の明かりがついていた。');
+
+    expect(label).toBe('別荘の明かりがついていた。');
+  });
+
+  it('日時の直後が人物のメンションのときは、人物の名前を削らない', () => {
+    // 前提: 「西口」のように、日時に続く言葉と同じ文字で始まる名前もある。名前の頭の「に」は日時に続く言葉ではない
+    const target: Case = {
+      ...sampleFictionalCase,
+      persons: [...sampleFictionalCase.persons, { id: 'person-nishiguchi', name: 'にしぐち', kind: 'individual' }],
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-neighbor'
+          ? {
+              ...claim,
+              content: '@[1998年8月12日 21:00](date:1998-08-12T21:00)@[にしぐち](person:person-nishiguchi)が別荘にいた。',
+              mentionedPersonIds: ['person-nishiguchi'],
+              placeId: undefined,
+            }
+          : claim
+      ),
+    };
+    const view = buildTimeline(target).items.find((item) => item.view.claim.id === 'claim-neighbor')!.view;
+
+    expect(claimLabelOf(view)).toBe('にしぐちが別荘にいた。');
+  });
 });
 
 describe('groupClaimsBySpeaker', () => {
