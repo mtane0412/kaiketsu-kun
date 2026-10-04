@@ -115,14 +115,14 @@ describe('TimelineView', () => {
     render(<TimelineView target={sampleFictionalCase} />);
 
     // 見出しの無い証言は、本文の冒頭20文字を名前にする
-    expect(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '「管理人の証言は事件の20年後に初めて出た…」を動かす' })).toBeInTheDocument();
   });
 
   it('つまみは、環境のフォントに左右される文字ではなく、アイコンで描く', () => {
     // 前提: 以前のつまみは点字の記号（⠿ U+283F）1文字だったため、表示される形が環境のフォントに左右されていた
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const handle = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    const handle = screen.getByRole('button', { name: '「管理人の証言は事件の20年後に初めて出た…」を動かす' });
     expect(handle.querySelector('svg')).toBeInTheDocument();
     expect(handle).not.toHaveTextContent('⠿');
   });
@@ -145,7 +145,7 @@ describe('TimelineView', () => {
     // 検証: 読み上げにしか届かない aria-label とは別に、マウスの利用者にも操作方法を示す
     render(<TimelineView target={sampleFictionalCase} />);
 
-    const handle = screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」を動かす' });
+    const handle = screen.getByRole('button', { name: '「管理人の証言は事件の20年後に初めて出た…」を動かす' });
     expect(handle).toHaveAttribute('title', 'ドラッグ、またはスペースキーを押してから矢印キーで動かします');
   });
 
@@ -207,7 +207,7 @@ describe('TimelineView への書き足し', () => {
     const user = userEvent.setup();
     render(<StoreBoard />);
 
-    await user.click(screen.getByRole('button', { name: '「@管理人の証言は事件の20年後に初めて出…」の前に書き足す' }));
+    await user.click(screen.getByRole('button', { name: '「管理人の証言は事件の20年後に初めて出た…」の前に書き足す' }));
     await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
     await user.click(screen.getByRole('button', { name: '書き足す' }));
 
@@ -344,6 +344,7 @@ describe('SpeakerView', () => {
     render(<SpeakerView target={{ ...sampleFictionalCase, claims: [], relationships: [] }} />);
 
     expect(screen.getByText('証言がまだ登録されていません。時系列のボードから書き足してください。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '時系列のボードで書き足す' })).toHaveAttribute('href', '/cases/case-lakeside');
   });
 });
 
@@ -464,6 +465,7 @@ describe('PersonLaneView', () => {
     expect(
       screen.getByText('人物が登場する証言がまだありません。証言の発言者を選ぶか、本文で人物に言及してください。')
     ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '時系列のボードで書き足す' })).toHaveAttribute('href', '/cases/case-lakeside');
   });
 });
 

@@ -47,6 +47,7 @@ import {
   type TaskLinkTarget,
 } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** ひもづけの選択肢・一覧の1件です。 */
 type LinkOption = { id: Id; label: string };
@@ -55,11 +56,7 @@ type LinkOption = { id: Id; label: string };
 function CloseLink({ tab }: { tab: TabKey }) {
   const caseId = useCaseId();
   return (
-    <div className="flex justify-end">
-      <Link href={boardHref(caseId, tab)} aria-label="未了事項の詳細を閉じる" className="text-xs text-muted-foreground hover:underline">
-        閉じる
-      </Link>
-    </div>
+    <DetailCloseLink href={boardHref(caseId, tab)} label="未了事項の詳細を閉じる" />
   );
 }
 

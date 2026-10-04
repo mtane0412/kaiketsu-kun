@@ -11,6 +11,7 @@
  */
 'use client';
 
+import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { TASK_STATUS_LABELS } from '@/domain/labels';
@@ -80,6 +81,7 @@ export function TaskListView({ target }: TaskListViewProps) {
     <div className="space-y-6">
       <div className="flex justify-end">
         <Link href={newTaskHref(caseId, TAB)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <Plus aria-hidden="true" />
           未了事項を追加
         </Link>
       </div>

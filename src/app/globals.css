@@ -86,10 +86,12 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* 補足の文字は、薄い灰色の背景（muted・sidebar）の上でも 4.5:1 のコントラストを保つ濃さにします（WCAG 1.4.3）。 */
+  --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  /* 削除ボタンは淡い赤の背景に赤の文字を載せるため、文字が 4.5:1 のコントラストを保つ濃さにします（WCAG 1.4.3）。 */
+  --destructive: oklch(0.505 0.213 27.518);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);

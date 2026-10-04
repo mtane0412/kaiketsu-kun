@@ -23,16 +23,13 @@ import { InterviewForm } from './forms/InterviewForm';
 import { InterviewCard } from './InterviewCard';
 import { boardHref, interviewHref, parseTab, personHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** 詳細を閉じて、ボードへ戻るリンクです。 */
 function CloseLink({ tab }: { tab: TabKey }) {
   const caseId = useCaseId();
   return (
-    <div className="flex justify-end">
-      <Link href={boardHref(caseId, tab)} aria-label="資料の詳細を閉じる" className="text-xs text-muted-foreground hover:underline">
-        閉じる
-      </Link>
-    </div>
+    <DetailCloseLink href={boardHref(caseId, tab)} label="資料の詳細を閉じる" />
   );
 }
 

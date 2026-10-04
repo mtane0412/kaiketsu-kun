@@ -108,6 +108,8 @@ describe('GraphView', () => {
     render(<GraphView target={emptyCase} />);
 
     expect(screen.getByText(/人物も証言もまだ登録されていません/)).toBeInTheDocument();
+    // 前提: 案内には、書き足す場所（時系列のボード）へ移るリンクを添える
+    expect(screen.getByRole('link', { name: '時系列のボードで書き足す' })).toHaveAttribute('href', '/cases/case-lakeside');
     expect(screen.queryByRole('group', { name: '人物と証言のつながり' })).not.toBeInTheDocument();
   });
 

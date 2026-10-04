@@ -3,13 +3,13 @@
  *
  * ケースを開く処理は CaseGate が担うため、実際の画面と同じく CaseGate の中に描画します。
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { saveCase } from '@/lib/case-storage';
-import { resetMockNavigation } from '@/test/mock-navigation';
+import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { CaseBoard } from './CaseBoard';
 import { CaseGate } from './CaseGate';
 
@@ -270,5 +270,92 @@ describe('CaseBoard', () => {
       await switchView(user, '証言者別');
       expect(screen.queryByRole('region', { name: '証言の詳細' })).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('CaseBoard のキーボード操作', () => {
+  it('ページの先頭に、サイドバーを飛ばして本文へ移るリンクを置く', async () => {
+    renderBoard();
+
+    const skipLink = await screen.findByRole('link', { name: '本文へ移動' });
+    // 前提: リンク先は、ボード・詳細を表示するメインの領域
+    expect(skipLink).toHaveAttribute('href', '#board-main');
+    expect(document.getElementById('board-main')).toBeInTheDocument();
+  });
+
+  it('サイドバーを開閉するボタンの名前を日本語で読み上げる', async () => {
+    renderBoard();
+
+    expect(await screen.findByRole('button', { name: 'サイドバーを開閉' })).toBeInTheDocument();
+  });
+
+  it('詳細を開いているときに Esc キーを押すと、詳細を閉じて元の表示に戻る', async () => {
+    const user = userEvent.setup();
+    // 前提: グラフの表示から、証言の詳細を開いている
+    resetMockNavigation(`/cases/${sampleFictionalCase.id}/claims/claim-neighbor?tab=graph`);
+    renderBoard(<p>隣家の住人の証言の詳細</p>);
+    await screen.findByText('隣家の住人の証言の詳細');
+
+    await user.keyboard('{Escape}');
+
+    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}?tab=graph`);
+  });
+
+  it('入力欄で文字を書いている間は、Esc キーを押しても詳細を閉じない（書きかけの内容を失わないため）', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation(`/cases/${sampleFictionalCase.id}/claims/claim-neighbor`);
+    renderBoard(<textarea aria-label="証言の本文" />);
+
+    await user.click(await screen.findByRole('textbox', { name: '証言の本文' }));
+    await user.keyboard('{Escape}');
+
+    expect(mockRouter.push).not.toHaveBeenCalled();
+  });
+
+  it('「/」キーまたは ⌘K で、ボード全体の検索窓へ移る', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const searchBox = await screen.findByRole('searchbox', { name: 'ボード全体を検索' });
+
+    await user.keyboard('/');
+    expect(searchBox).toHaveFocus();
+    // 前提: 検索窓へ移るためのキーは、検索語として入力しない
+    expect(searchBox).toHaveValue('');
+
+    searchBox.blur();
+    await user.keyboard('{Meta>}k{/Meta}');
+    expect(searchBox).toHaveFocus();
+  });
+
+  it('画面の狭い端末では、閉じているサイドバーを開き、開き終えてから検索窓へ移る', async () => {
+    const user = userEvent.setup();
+    // 前提: 幅 390px の端末では、サイドバーは画面の上に重ねて開くシートになり、閉じている間は検索窓が描画されていない
+    const originalWidth = window.innerWidth;
+    window.innerWidth = 390;
+    try {
+      renderBoard();
+      await screen.findByRole('heading', { name: '時系列' });
+      expect(screen.queryByRole('searchbox', { name: 'ボード全体を検索' })).not.toBeInTheDocument();
+
+      await user.keyboard('/');
+
+      const searchBox = await screen.findByRole('searchbox', { name: 'ボード全体を検索' });
+      await waitFor(() => expect(searchBox).toHaveFocus());
+    } finally {
+      window.innerWidth = originalWidth;
+    }
+  });
+
+  it('入力欄で「/」を打ったときは、検索窓へ移らずにそのまま文字を入力する', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation(`/cases/${sampleFictionalCase.id}/claims/claim-neighbor`);
+    renderBoard(<input aria-label="資料番号" />);
+
+    const field = await screen.findByRole('textbox', { name: '資料番号' });
+    await user.click(field);
+    await user.keyboard('1/2');
+
+    expect(field).toHaveValue('1/2');
+    expect(field).toHaveFocus();
   });
 });

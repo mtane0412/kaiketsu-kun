@@ -1,7 +1,7 @@
 /**
  * ケースの一覧（CaseList）のテスト
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -33,6 +33,16 @@ describe('CaseList', () => {
     render(<CaseList />);
 
     expect(await screen.findByText(/保存されているケースはありません/)).toBeInTheDocument();
+  });
+
+  it('ケースが無い場合の案内から、架空のサンプルで使い方を試せる（初めて開いた人が最初の一歩に迷わないため）', async () => {
+    const user = userEvent.setup();
+    render(<CaseList />);
+
+    const emptyState = await screen.findByRole('region', { name: '保存されているケースはありません' });
+    await user.click(within(emptyState).getByRole('button', { name: 'サンプルで使い方を見る' }));
+
+    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}`);
   });
 
   it('新しいケースを作って、そのケースのボードへ移る', async () => {

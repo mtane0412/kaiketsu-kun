@@ -24,16 +24,21 @@
  * 保存済みのケースの復元は CaseGate が担います。このコンポーネントは CaseGate の中に置いてください。
  * 人物の動きのビューは人物の数だけ列が増えるため、そのタブのときだけボードの幅の上限を外します。
  * useSearchParams・usePathname を使うため、ページでは Suspense の中に置いてください。
+ *
+ * キーボードだけで操作できるよう、ページの先頭に「本文へ移動」のリンク（サイドバーを飛ばしてメインの領域へ移るリンク）を置き、
+ * Esc で詳細を閉じる・「/」と ⌘K で検索窓へ移るショートカットを受け付けます（useBoardShortcuts）。
  */
 'use client';
 
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useRef, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useCurrentCase } from '@/stores/useCaseStore';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { CaseSidebar } from './CaseSidebar';
+import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { BOARD_SEARCH_INPUT_ID, CaseSidebar } from './CaseSidebar';
 import { useBoardScrollRestoration } from './useBoardScrollRestoration';
-import { parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind } from './routes';
+import { useBoardShortcuts } from './useBoardShortcuts';
+import { useCaseId } from './useCaseId';
+import { boardHref, parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind, type TabKey } from './routes';
 import { GraphView } from './views/GraphView';
 import { HypothesisListView } from './views/HypothesisListView';
 import { MapView } from './views/MapView';
@@ -58,6 +63,56 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
   newInterview: '資料の登録',
 };
 
+/** 「本文へ移動」のリンクの移り先となる、メインの領域のIDです。 */
+const BOARD_MAIN_ID = 'board-main';
+
+/** ボード全体の検索窓へフォーカスを移します。検索窓が描画されていない場合は何もしません。 */
+function focusSearchInput() {
+  document.getElementById(BOARD_SEARCH_INPUT_ID)?.focus();
+}
+
+/**
+ * ボードのキーボードショートカットを受け付けます（useBoardShortcuts）。
+ * 検索窓はサイドバーの中にあるため、サイドバーを閉じているときは開いてからフォーカスを移します。
+ * 画面の狭い端末のサイドバー（シート）は、閉じている間は検索窓を描画しません。そのため、フォーカスの要求を覚えておき、
+ * シートが開いた（openMobile が true になった）あとに移ります。
+ * サイドバーの開閉の状態（useSidebar）を使うため、SidebarProvider の中に置いてください。
+ */
+function BoardShortcuts({ isDetailOpen, tab }: { isDetailOpen: boolean; tab: TabKey }) {
+  const caseId = useCaseId();
+  const router = useRouter();
+  const { isMobile, openMobile, setOpen, setOpenMobile } = useSidebar();
+  /** シートが開くのを待っている、検索窓へのフォーカスの要求があるかどうかです。 */
+  const isFocusPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!openMobile || !isFocusPendingRef.current) return;
+    isFocusPendingRef.current = false;
+    // シートは開いたときに中の要素へフォーカスを移すため、それが済んだ次の描画で検索窓へ移る
+    const frame = requestAnimationFrame(focusSearchInput);
+    return () => cancelAnimationFrame(frame);
+  }, [openMobile]);
+
+  const focusSearch = useCallback(() => {
+    if (isMobile && !openMobile) {
+      isFocusPendingRef.current = true;
+      setOpenMobile(true);
+      return;
+    }
+    if (!isMobile) setOpen(true);
+    // 広い画面のサイドバーは閉じていても描画されているが、開く途中で隠れていることがあるため、次の描画でも移り直す
+    focusSearchInput();
+    requestAnimationFrame(focusSearchInput);
+  }, [isMobile, openMobile, setOpen, setOpenMobile]);
+
+  useBoardShortcuts({
+    closeHref: isDetailOpen ? boardHref(caseId, tab) : undefined,
+    onClose: router.push,
+    onFocusSearch: focusSearch,
+  });
+  return null;
+}
+
 type CaseBoardProps = {
   /** ボードと入れ替えて表示する、証言・人物・場所の詳細（または登録フォーム）です。該当するルートでだけ表示します。 */
   children?: ReactNode;
@@ -75,23 +130,32 @@ export function CaseBoard({ children }: CaseBoardProps) {
 
   return (
     <SidebarProvider>
+      <a
+        href={`#${BOARD_MAIN_ID}`}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:ring-2 focus:ring-ring"
+      >
+        本文へ移動
+      </a>
+      <BoardShortcuts isDetailOpen={detailKind !== undefined} tab={activeTab} />
       <CaseSidebar />
 
       {/* 人物の動きの表のように幅の広い中身があっても、サイドバーの幅ぶん画面の外へはみ出さないよう、縮められるようにする */}
       <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />
-          <h1 className="truncate text-sm font-semibold">{currentCase.name}</h1>
-          <span aria-hidden="true" className="text-muted-foreground">
+          <h1 className="min-w-0 truncate text-sm font-semibold">{currentCase.name}</h1>
+          <span aria-hidden="true" className="shrink-0 text-muted-foreground">
             /
           </span>
-          {/* いまメインのカラムに出ているものを見出しにする。詳細を開いている間、ボードは見えていない */}
-          <h2 className="text-sm text-muted-foreground">
+          {/* いまメインのカラムに出ているものを見出しにする。詳細を開いている間、ボードは見えていない。
+              ケースの名前が長くても折り返さないよう、こちらは縮めない */}
+          <h2 className="shrink-0 text-sm whitespace-nowrap text-muted-foreground">
             {detailKind ? DETAIL_LABELS[detailKind] : activeTabLabel}
           </h2>
         </header>
 
-        <div className="flex-1 p-4">
+        {/* 「本文へ移動」のリンクでフォーカスを受け取れるよう、tabIndex を -1 にする */}
+        <div id={BOARD_MAIN_ID} tabIndex={-1} className="flex-1 p-4 outline-none">
           {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画し、隠すだけにする */}
           <div
             ref={boardRef}

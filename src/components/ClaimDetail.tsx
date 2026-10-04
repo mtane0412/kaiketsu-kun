@@ -42,6 +42,7 @@ import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { boardHref, mentionHref, parseTab, TAB_SEARCH_PARAM } from './routes';
 import { useCaseId } from './useCaseId';
+import { DetailCloseLink } from './DetailCloseLink';
 
 /** この証言が触れている人物・場所を並べる欄の見出しです。 */
 const MENTIONED_ENTITIES_LABEL = 'この証言が触れている人物・場所';
@@ -76,11 +77,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const closeLink = (
-    <div className="flex justify-end">
-      <Link href={boardHref(caseId, tab)} aria-label="証言の詳細を閉じる" className="text-xs text-muted-foreground hover:underline">
-        閉じる
-      </Link>
-    </div>
+    <DetailCloseLink href={boardHref(caseId, tab)} label="証言の詳細を閉じる" />
   );
 
   if (!detail) {

@@ -43,7 +43,9 @@ describe('CaseGate', () => {
     renderInFrame('case-unknown');
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('ケースを開けませんでした');
+    expect(alert).toHaveTextContent('ケースが見つかりません');
+    // 前提: 退避したデータは無いため、退避先の案内は出さない（誤った対処へ誘導しないため）
+    expect(alert).not.toHaveTextContent('退避しました');
     expect(screen.getByRole('link', { name: 'ケースの一覧へ' })).toHaveAttribute('href', '/');
   });
 
@@ -53,6 +55,7 @@ describe('CaseGate', () => {
     renderInFrame('case-broken');
 
     const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('ケースを開けませんでした');
     expect(alert).toHaveTextContent('ケースデータの形式が正しくありません');
     expect(alert).toHaveTextContent('testimony-board-case-backup');
   });

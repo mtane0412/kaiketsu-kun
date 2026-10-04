@@ -19,9 +19,11 @@ type ClaimLinkProps = {
   tab: TabKey;
   /** 証言の並びの中での位置づけを示す、先頭に添える短い文字列です（「前の証言」など）。 */
   prefix?: string;
+  /** リンクの2行目に添える補足です（検索結果で「本文に一致」のように、一致した項目を示すときに使います）。 */
+  note?: string;
 };
 
-export function ClaimLink({ view, tab, prefix }: ClaimLinkProps) {
+export function ClaimLink({ view, tab, prefix, note }: ClaimLinkProps) {
   const caseId = useCaseId();
 
   return (
@@ -36,6 +38,7 @@ export function ClaimLink({ view, tab, prefix }: ClaimLinkProps) {
       </span>
       <span>{claimLabelOf(view)}</span>
       {view.claim.when && <span className="ml-2 text-xs text-muted-foreground">{formatTimeRef(view.claim.when)}</span>}
+      {note && <span className="mt-0.5 block text-xs text-muted-foreground">{note}</span>}
     </Link>
   );
 }

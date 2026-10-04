@@ -33,13 +33,14 @@ export function PersonKindFilter({ value, onChange, disabled = false }: PersonKi
   };
 
   return (
-    <fieldset aria-label="表示する人物の種別" disabled={disabled} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs disabled:opacity-50">
+    <fieldset aria-label="表示する人物の種別" disabled={disabled} className="flex flex-wrap items-center gap-x-4 text-xs disabled:opacity-50">
       <legend className="float-left mr-3 font-medium text-foreground">種別</legend>
       {PERSON_KINDS.map((kind) => (
-        <div key={kind} className="flex items-center gap-1.5">
+        <div key={kind} className="flex min-h-6 items-center gap-1.5">
           <input
             id={`${idPrefix}-${kind}`}
             type="checkbox"
+            className="size-4 accent-foreground"
             checked={value.has(kind)}
             onChange={(event) => toggle(kind, event.target.checked)}
           />

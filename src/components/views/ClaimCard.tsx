@@ -105,7 +105,7 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
           <Link
             key={index}
             href={mentionHref(caseId, segment.kind, segment.id, tab)}
-            className={`${ABOVE_CARD_LINK} rounded px-0.5 hover:underline ${MENTION_STYLES[segment.kind]}`}
+            className={`${ABOVE_CARD_LINK} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
           </Link>
