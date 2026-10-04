@@ -3,7 +3,7 @@
  *
  * ケースを開く処理は CaseGate が担うため、実際の画面と同じく CaseGate の中に描画します。
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -325,6 +325,25 @@ describe('CaseBoard のキーボード操作', () => {
     searchBox.blur();
     await user.keyboard('{Meta>}k{/Meta}');
     expect(searchBox).toHaveFocus();
+  });
+
+  it('画面の狭い端末では、閉じているサイドバーを開き、開き終えてから検索窓へ移る', async () => {
+    const user = userEvent.setup();
+    // 前提: 幅 390px の端末では、サイドバーは画面の上に重ねて開くシートになり、閉じている間は検索窓が描画されていない
+    const originalWidth = window.innerWidth;
+    window.innerWidth = 390;
+    try {
+      renderBoard();
+      await screen.findByRole('heading', { name: '時系列' });
+      expect(screen.queryByRole('searchbox', { name: 'ボード全体を検索' })).not.toBeInTheDocument();
+
+      await user.keyboard('/');
+
+      const searchBox = await screen.findByRole('searchbox', { name: 'ボード全体を検索' });
+      await waitFor(() => expect(searchBox).toHaveFocus());
+    } finally {
+      window.innerWidth = originalWidth;
+    }
   });
 
   it('入力欄で「/」を打ったときは、検索窓へ移らずにそのまま文字を入力する', async () => {

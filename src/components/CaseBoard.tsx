@@ -31,7 +31,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { BOARD_SEARCH_INPUT_ID, CaseSidebar } from './CaseSidebar';
@@ -66,24 +66,44 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
 /** 「本文へ移動」のリンクの移り先となる、メインの領域のIDです。 */
 const BOARD_MAIN_ID = 'board-main';
 
+/** ボード全体の検索窓へフォーカスを移します。検索窓が描画されていない場合は何もしません。 */
+function focusSearchInput() {
+  document.getElementById(BOARD_SEARCH_INPUT_ID)?.focus();
+}
+
 /**
  * ボードのキーボードショートカットを受け付けます（useBoardShortcuts）。
  * 検索窓はサイドバーの中にあるため、サイドバーを閉じているときは開いてからフォーカスを移します。
+ * 画面の狭い端末のサイドバー（シート）は、閉じている間は検索窓を描画しません。そのため、フォーカスの要求を覚えておき、
+ * シートが開いた（openMobile が true になった）あとに移ります。
  * サイドバーの開閉の状態（useSidebar）を使うため、SidebarProvider の中に置いてください。
  */
 function BoardShortcuts({ isDetailOpen, tab }: { isDetailOpen: boolean; tab: TabKey }) {
   const caseId = useCaseId();
   const router = useRouter();
-  const { isMobile, setOpen, setOpenMobile } = useSidebar();
+  const { isMobile, openMobile, setOpen, setOpenMobile } = useSidebar();
+  /** シートが開くのを待っている、検索窓へのフォーカスの要求があるかどうかです。 */
+  const isFocusPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!openMobile || !isFocusPendingRef.current) return;
+    isFocusPendingRef.current = false;
+    // シートは開いたときに中の要素へフォーカスを移すため、それが済んだ次の描画で検索窓へ移る
+    const frame = requestAnimationFrame(focusSearchInput);
+    return () => cancelAnimationFrame(frame);
+  }, [openMobile]);
 
   const focusSearch = useCallback(() => {
-    const focusInput = () => document.getElementById(BOARD_SEARCH_INPUT_ID)?.focus();
-    if (isMobile) setOpenMobile(true);
-    else setOpen(true);
-    // サイドバーを開いた直後は、検索窓がまだ描画されていない（または隠れている）ことがあるため、次の描画を待ってから移る
-    focusInput();
-    requestAnimationFrame(focusInput);
-  }, [isMobile, setOpen, setOpenMobile]);
+    if (isMobile && !openMobile) {
+      isFocusPendingRef.current = true;
+      setOpenMobile(true);
+      return;
+    }
+    if (!isMobile) setOpen(true);
+    // 広い画面のサイドバーは閉じていても描画されているが、開く途中で隠れていることがあるため、次の描画でも移り直す
+    focusSearchInput();
+    requestAnimationFrame(focusSearchInput);
+  }, [isMobile, openMobile, setOpen, setOpenMobile]);
 
   useBoardShortcuts({
     closeHref: isDetailOpen ? boardHref(caseId, tab) : undefined,
