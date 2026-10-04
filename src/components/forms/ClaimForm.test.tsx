@@ -210,6 +210,39 @@ describe('ClaimForm', () => {
     expect(screen.queryByLabelText('本文から読み取った参照')).not.toBeInTheDocument();
   });
 
+  describe('書き方の案内', () => {
+    it('常に表示する案内は1行の短い文で、「@」で人物・場所・日時を書けることを示す', () => {
+      render(<ClaimForm onDone={() => {}} />);
+
+      // 検証: 開いてすぐ「@」の使い方に気づける1行の案内がある
+      expect(screen.getByText('「@」で人物・場所・日時を書けます。誰の発言かは「発言者」で選びます。')).toBeVisible();
+      // 検証: 本文の入力欄のプレースホルダーでも「@」の使い方を示す
+      expect(screen.getByLabelText('内容')).toHaveAttribute('placeholder', expect.stringContaining('「@」'));
+    });
+
+    it('詳しい書き方は「書き方のヒント」に折りたたみ、開くと日時の書き方の例を示す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm onDone={() => {}} />);
+
+      // 前提: 折りたたまれている間は、日時の書き方の例が見えない
+      const hintToggle = screen.getByText('書き方のヒント');
+      expect(screen.getByText(/@1998年8月12日19時/)).not.toBeVisible();
+
+      await user.click(hintToggle);
+
+      // 検証: 開くと、未登録の名前の作成と日時の書き方の例が見える
+      expect(screen.getByText(/@1998年8月12日19時/)).toBeVisible();
+      expect(screen.getByText(/未登録の名前/)).toBeVisible();
+    });
+
+    it('ボード上の入力欄（compact）では、案内も「書き方のヒント」も表示しない', () => {
+      render(<ClaimForm onDone={() => {}} compact />);
+
+      expect(screen.queryByText('書き方のヒント')).not.toBeInTheDocument();
+      expect(screen.queryByText(/誰の発言かは「発言者」で選びます。$/)).not.toBeInTheDocument();
+    });
+  });
+
   it('発言者を選ばない証言は、ユーザーの推測として保存する', async () => {
     const user = userEvent.setup();
     render(<ClaimForm onDone={vi.fn()} />);
