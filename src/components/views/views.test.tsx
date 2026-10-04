@@ -1,7 +1,7 @@
 /**
  * 時系列ビューと証言者別ビューの表示のテスト
  */
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -9,6 +9,7 @@ import type { Case, Claim } from '@/domain/types';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { openedCase, openTestCase } from '@/test/open-case';
+import { placeVertically } from '@/test/layout';
 import { PersonLaneView } from './PersonLaneView';
 import { SpeakerView } from './SpeakerView';
 import { TimelineView } from './TimelineView';
@@ -179,9 +180,9 @@ describe('TimelineView', () => {
     expect(within(claim).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('省略中の本文のメンションは、隠れている場合があるため Tab キーで移らず、展開すると移れる', async () => {
-    const user = userEvent.setup();
-    const longStatement: Claim = {
+  describe('省略中の本文のメンションへのフォーカス', () => {
+    /** 最後の行に、別荘の持ち主へのメンションを置いた、長い本文の証言です。 */
+    const longStatementWithMention: Claim = {
       ...statementWithHeading,
       content: [
         ...Array.from({ length: 6 }, (_, index) => `Zは被害者の自宅を${index + 1}回目に訪れた。`),
@@ -189,14 +190,37 @@ describe('TimelineView', () => {
       ].join('\n'),
       mentionedPersonIds: ['person-owner'],
     };
-    render(<TimelineView target={{ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, longStatement] }} />);
 
-    const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
-    const mention = () => within(claim).getByRole('link', { name: /@別荘の持ち主/ });
-    expect(mention()).toHaveAttribute('tabindex', '-1');
+    /** 証言を時系列に並べ、そのカードと、本文のメンションと、本文の要素を返します。 */
+    function renderLongStatement() {
+      render(<TimelineView target={{ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, longStatementWithMention] }} />);
+      const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+      const mention = within(claim).getByRole('link', { name: /@別荘の持ち主/ });
+      return { claim, mention, body: mention.closest('p')! };
+    }
 
-    await user.click(within(claim).getByRole('button', { name: '全文を表示' }));
-    expect(mention()).not.toHaveAttribute('tabindex');
+    it('見えている行のメンションには Tab キーで移れ、移っても省略したままにする', () => {
+      const { claim, mention, body } = renderLongStatement();
+      // 前提: メンションは本文の枠の中に収まって見えている（jsdom はレイアウトを計算しないため、位置を与える）
+      placeVertically(body, 0, 100);
+      placeVertically(mention, 20, 40);
+
+      expect(mention).not.toHaveAttribute('tabindex');
+      act(() => mention.focus());
+
+      expect(within(claim).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('省略で隠れている行のメンションに移ると、本文を展開して見えるようにする', () => {
+      const { claim, mention, body } = renderLongStatement();
+      // 前提: メンションは本文の枠の下端より下にあり、省略で隠れている
+      placeVertically(body, 0, 100);
+      placeVertically(mention, 120, 140);
+
+      act(() => mention.focus());
+
+      expect(within(claim).getByRole('button', { name: '折りたたむ' })).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 
   it('短い本文は省略せず、「全文を表示」を置かない', () => {

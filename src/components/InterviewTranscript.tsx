@@ -4,6 +4,7 @@
  * 資料のカード（InterviewCard）で、本文を持つ聴取の下に表示します。
  * - collapsesLongTranscript を渡すと（人物の詳細の「供述の変遷」）、長い本文（isLongTranscript）の見た目を省略し、
  *   「全文を表示」で展開、「折りたたむ」で省略に戻します。展開した本文は、高さを制限せずに全文を並べます。
+ *   省略中も本文のリンク・ボタンには Tab キーで移れ、省略で隠れている要素に移ったときは本文を展開します（isClippedBelow）。
  *   渡さない場合（資料の詳細）は、本文を省略せず、高さを制限した枠の中でスクロールして読みます
  *   （埋め込みプレーヤーを画面に残したまま、本文の時刻の行を押せるようにするためです）。
  * - 本文のうち、証言として書き起こした範囲（証言の引用）を、その証言へのリンクとして示します。
@@ -28,6 +29,7 @@ import { buildTranscriptSegments, formatQuoteSeconds, isLongTranscript, quoteSec
 import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
 import { ClaimExtraction, type ExtractionSource } from './ClaimExtraction';
+import { isClippedBelow } from './clipping';
 import { claimHref, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 
@@ -108,9 +110,6 @@ export function InterviewTranscript({
   const [isExpanded, setIsExpanded] = useState(false);
   const isCollapsible = collapsesLongTranscript && isLongTranscript(transcript);
   const textHeight = !collapsesLongTranscript ? 'scroll' : isCollapsible && !isExpanded ? 'collapsed' : 'full';
-  // 省略中は、見えない行のリンクやボタンに Tab キーで移らないよう、本文の中の操作できる要素をすべてフォーカスの順から外す。
-  // 見えている先頭の行の要素も外れるが、どの行が見えているかは描画後の高さに依存するため、行ごとには判定しない（「全文を表示」で展開すると移れる）
-  const focusableTabIndex = textHeight === 'collapsed' ? -1 : undefined;
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
   /** 証言の候補の抽出に送る本文です。押すたびに作り直すため、何回目に押したかも持ちます。 */
   const [extraction, setExtraction] = useState<{ source: ExtractionSource; count: number } | null>(null);
@@ -150,7 +149,6 @@ export function InterviewTranscript({
               key={partIndex}
               type="button"
               aria-label={seekLabelOf(seconds)}
-              tabIndex={focusableTabIndex}
               onClick={() => onSeek(seconds)}
               className="text-primary underline underline-offset-2 hover:no-underline"
             >
@@ -169,6 +167,10 @@ export function InterviewTranscript({
           ref={textRef}
           id={textId}
           data-testid="transcript-text"
+          // 省略で隠れているリンク・ボタンに Tab キーで移ったときは、移った先が見えるよう本文を展開する
+          onFocus={(event) => {
+            if (textHeight === 'collapsed' && isClippedBelow(event.target, event.currentTarget)) setIsExpanded(true);
+          }}
           className={`${TEXT_HEIGHT_CLASSES[textHeight]} whitespace-pre-wrap rounded border bg-background p-2 text-sm leading-relaxed`}
         >
           {segments.map((segment, index) => {
@@ -180,7 +182,6 @@ export function InterviewTranscript({
                 key={index}
                 href={claimHref(caseId, view.claim.id, tab)}
                 aria-label={`書き起こした証言: ${claimLabelOf(view)}`}
-                tabIndex={focusableTabIndex}
                 className="rounded-sm bg-mention-place/40 underline decoration-dotted underline-offset-2"
               >
                 {segment.text}
