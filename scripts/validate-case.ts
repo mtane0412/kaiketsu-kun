@@ -18,7 +18,16 @@ if (paths.length === 0) {
 
 let hasFailure = false;
 for (const path of paths) {
-  const result = validateCaseFile(readFileSync(path, 'utf8'));
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    // 読めないファイルがあっても、残りのファイルの検証は続ける
+    hasFailure = true;
+    console.error(`NG ${path}\n  ファイルを読めません: ${(error as Error).message}`);
+    continue;
+  }
+  const result = validateCaseFile(text);
   if (result.ok) {
     console.log(`OK ${path}\n  ${result.summary}`);
   } else {
