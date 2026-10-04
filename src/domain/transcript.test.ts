@@ -11,6 +11,7 @@ import {
   isHttpUrl,
   isYoutubeUrl,
   quoteSecondsAt,
+  splitTimestampLines,
   stripTimestampLines,
   youtubeEmbedUrl,
   youtubeUrlAt,
@@ -146,6 +147,25 @@ describe('isYoutubeUrl', () => {
   });
 });
 
+describe('splitTimestampLines', () => {
+  it('時刻だけの行を、秒数を持つ区切りとして切り出す（区切りをつなぐと元の文字列に戻る）', () => {
+    const parts = splitTimestampLines(youtubeTranscript);
+    expect(parts).toEqual([
+      { text: '0:00', seconds: 0 },
+      { text: '\nこんばんは、管理人です\n' },
+      { text: '0:05', seconds: 5 },
+      { text: '\nあの夜は別荘が真っ暗でした\n' },
+      { text: '1:02:03', seconds: 3723 },
+      { text: '\n車もありませんでした' },
+    ]);
+    expect(parts.map((part) => part.text).join('')).toBe(youtubeTranscript);
+  });
+
+  it('時刻だけの行の無い文字列は、1つの区切りのまま返す', () => {
+    expect(splitTimestampLines('管理人は「真っ暗でした」と話した。')).toEqual([{ text: '管理人は「真っ暗でした」と話した。' }]);
+  });
+});
+
 describe('youtubeEmbedUrl', () => {
   it('YouTube の動画のURLから、埋め込みプレーヤーのURLを作る', () => {
     const embedUrl = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ';
@@ -155,6 +175,12 @@ describe('youtubeEmbedUrl', () => {
     expect(youtubeEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toBe(embedUrl);
     expect(youtubeEmbedUrl('https://www.youtube.com/live/dQw4w9WgXcQ')).toBe(embedUrl);
     expect(youtubeEmbedUrl('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe(embedUrl);
+  });
+
+  it('再生を始める秒数を渡すと、その位置から自動で再生する指定（start・autoplay）を付ける', () => {
+    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ', 754)).toBe(
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=754&autoplay=1'
+    );
   });
 
   it('動画を特定できない YouTube のURLと、YouTube 以外のURLでは undefined を返す', () => {

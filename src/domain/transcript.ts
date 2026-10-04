@@ -67,6 +67,33 @@ export function quoteSecondsAt(transcript: string, offset: number): number | und
   return undefined;
 }
 
+/** splitTimestampLines で切り出した区切りです。時刻だけの行の区切りは、その時刻の秒数（seconds）を持ちます。 */
+export type TimestampPart = { text: string; seconds?: number };
+
+/**
+ * 文字列を、時刻だけの行（行末の改行を除く）と、それ以外の部分に切り分けます。
+ * 本文の時刻の行を、動画をその位置から再生するボタンとして描くために使います。
+ * 区切りの text をつなぐと、元の文字列に戻ります（本文の中の位置を、描いた文字数で求めるためです）。
+ */
+export function splitTimestampLines(text: string): TimestampPart[] {
+  const parts: TimestampPart[] = [];
+  let plain = '';
+  text.split('\n').forEach((line, index) => {
+    // 2行目以降は、前の行との間の改行を、時刻の行でない部分に含める
+    if (index > 0) plain += '\n';
+    const seconds = timestampLineToSeconds(line);
+    if (seconds === undefined) {
+      plain += line;
+      return;
+    }
+    if (plain !== '') parts.push({ text: plain });
+    parts.push({ text: line, seconds });
+    plain = '';
+  });
+  if (plain !== '') parts.push({ text: plain });
+  return parts;
+}
+
 /**
  * 時刻だけの行を取り除き、前後の空白を整えた文字列を返します。
  * 動画の文字起こしから選んだ引用を、証言の本文の初期値にするときに使います。
@@ -166,11 +193,14 @@ function youtubeVideoIdOf(url: string): string | undefined {
 /**
  * YouTube の動画のURLから、埋め込みプレーヤー（iframe）のURLを返します。
  * 資料の詳細で、動画を別のタブで開かずに見られるようにするために使います。
+ * startSeconds を渡すと、その秒数から自動で再生する指定（start・autoplay）を付けます。引用の時刻から再生するときに使います。
  * 動画を特定できない YouTube のURLと、YouTube 以外のURLでは undefined です。
  */
-export function youtubeEmbedUrl(url: string): string | undefined {
+export function youtubeEmbedUrl(url: string, startSeconds?: number): string | undefined {
   const videoId = youtubeVideoIdOf(url);
-  return videoId === undefined ? undefined : `${YOUTUBE_EMBED_URL_PREFIX}${videoId}`;
+  if (videoId === undefined) return undefined;
+  const embedUrl = `${YOUTUBE_EMBED_URL_PREFIX}${videoId}`;
+  return startSeconds === undefined ? embedUrl : `${embedUrl}?start=${startSeconds}&autoplay=1`;
 }
 
 /**
