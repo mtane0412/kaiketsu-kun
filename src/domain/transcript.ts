@@ -20,6 +20,18 @@ const TIMESTAMP_LINE_PATTERN = /^\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*$/;
 /** 再生位置の指定（t）を付けられる、YouTube の動画のURLのホスト名です。 */
 const YOUTUBE_HOSTS = new Set(['www.youtube.com', 'youtube.com', 'm.youtube.com', 'youtu.be']);
 
+/** YouTube の動画ID（英数字・「-」・「_」の11文字）です。 */
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+/** 動画IDをパスの2つ目の区切りに持つ、YouTube のURLのパスの種類です（例「/shorts/動画ID」）。 */
+const YOUTUBE_VIDEO_PATH_PREFIXES = new Set(['shorts', 'live', 'embed']);
+
+/**
+ * YouTube の埋め込みプレーヤーのURLの接頭辞です。
+ * 再生するまで閲覧者の Cookie を保存しない、プライバシー強化モード（youtube-nocookie.com）を使います。
+ */
+const YOUTUBE_EMBED_URL_PREFIX = 'https://www.youtube-nocookie.com/embed/';
+
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
 
@@ -133,6 +145,32 @@ export function youtubeUrlAt(url: string, seconds: number): string | undefined {
   const parsed = new URL(url);
   parsed.searchParams.set('t', `${seconds}s`);
   return parsed.toString();
+}
+
+/** YouTube のURLから動画IDを取り出します。動画を特定できないURL（チャンネル・再生リストなど）では undefined です。 */
+function youtubeVideoIdOf(url: string): string | undefined {
+  if (!isYoutubeUrl(url)) return undefined;
+  const parsed = new URL(url);
+  const [first, second] = parsed.pathname.split('/').filter(Boolean);
+  const candidate =
+    parsed.hostname === 'youtu.be'
+      ? first
+      : first === 'watch'
+        ? parsed.searchParams.get('v')
+        : first !== undefined && YOUTUBE_VIDEO_PATH_PREFIXES.has(first)
+          ? second
+          : undefined;
+  return candidate && YOUTUBE_VIDEO_ID_PATTERN.test(candidate) ? candidate : undefined;
+}
+
+/**
+ * YouTube の動画のURLから、埋め込みプレーヤー（iframe）のURLを返します。
+ * 資料の詳細で、動画を別のタブで開かずに見られるようにするために使います。
+ * 動画を特定できない YouTube のURLと、YouTube 以外のURLでは undefined です。
+ */
+export function youtubeEmbedUrl(url: string): string | undefined {
+  const videoId = youtubeVideoIdOf(url);
+  return videoId === undefined ? undefined : `${YOUTUBE_EMBED_URL_PREFIX}${videoId}`;
 }
 
 /**

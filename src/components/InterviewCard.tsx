@@ -14,6 +14,8 @@
  *   本文から LLM で証言の候補を抽出する画面（ClaimExtraction）も、本文の下に開きます（InterviewTranscript の「証言の候補を抽出」）。
  * - 編集（InterviewForm）と削除。
  * URLを持つ資料には、URLを新しいタブで開くリンクを置きます。
+ * YouTube の動画の資料では、embedsVideo を渡すと、動画を埋め込みプレーヤーで表示します（資料の詳細で指定します）。
+ * 人物の詳細の「供述の変遷」では、資料が並ぶたびにプレーヤーを読み込むと重くなるため、埋め込みません。
  * 人物の詳細の「供述の変遷」では、資料の詳細へのリンクを資料の名前（タイトルかURL）で置き、発言者が複数の資料には発言者の全員を示します
  * （資料の詳細では、見出しと「発言者」の欄で示すため、showsSource に false を渡して省きます）。
  *
@@ -26,6 +28,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
 import { formatTimeRef } from '@/domain/time-ref';
+import { youtubeEmbedUrl } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -70,11 +73,13 @@ type InterviewCardProps = {
   showsSource?: boolean;
   /** 本文を最初から開いておくかどうかです。資料の詳細で指定します。 */
   opensTranscript?: boolean;
+  /** YouTube の動画の資料で、動画を埋め込みプレーヤーで表示するかどうかです。資料の詳細で指定します。 */
+  embedsVideo?: boolean;
   /** 資料を削除できたときに呼び出します。 */
   onDeleted?: () => void;
 };
 
-export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, opensTranscript = false, onDeleted }: InterviewCardProps) {
+export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, opensTranscript = false, embedsVideo = false, onDeleted }: InterviewCardProps) {
   const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const [form, setForm] = useState<FormState>(CLOSED);
@@ -84,6 +89,7 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
   const { interview } = view;
   const timeLabel = timeLabelOf(view);
   const description = describeInterview(view);
+  const embedUrl = embedsVideo && interview.url !== undefined ? youtubeEmbedUrl(interview.url) : undefined;
   const close = () => setForm(CLOSED);
 
   const handleDelete = () => {
@@ -119,6 +125,16 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
         >
           {interview.url}
         </a>
+      )}
+      {embedUrl !== undefined && (
+        <iframe
+          src={embedUrl}
+          title={`${timeLabel}の資料の動画`}
+          className="aspect-video w-full rounded-md border"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+        />
       )}
       {interview.transcript === undefined && opensTranscript && (
         <p className="text-xs text-muted-foreground">
