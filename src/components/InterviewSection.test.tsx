@@ -279,6 +279,24 @@ describe('InterviewSection', () => {
       expect(within(history).queryByRole('button', { name: '全文を表示' })).not.toBeInTheDocument();
     });
 
+    it('省略中の本文の、証言へのリンクは、隠れている場合があるため Tab キーで移らず、展開すると移れる', async () => {
+      const user = userEvent.setup();
+      const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');
+      openTestCase({
+        ...withTranscript(longTranscript),
+        claims: caseWithInterviews.claims.map((claim) =>
+          claim.id === firstStatement.id ? { ...claim, quote: { text: '管理人の話の20段落目です。' } } : claim
+        ),
+      });
+      const history = renderCaretakerStatementHistory();
+      const transcriptRegion = within(history).getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
+      const quoted = () => within(transcriptRegion).getByRole('link', { name: /^書き起こした証言:/ });
+      expect(quoted()).toHaveAttribute('tabindex', '-1');
+
+      await user.click(within(transcriptRegion).getByRole('button', { name: '全文を表示' }));
+      expect(quoted()).not.toHaveAttribute('tabindex');
+    });
+
     it('長い本文は省略して表示し、「全文を表示」で展開、「折りたたむ」で省略に戻せる', async () => {
       const user = userEvent.setup();
       const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');

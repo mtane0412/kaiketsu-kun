@@ -108,6 +108,8 @@ export function InterviewTranscript({
   const [isExpanded, setIsExpanded] = useState(false);
   const isCollapsible = collapsesLongText && isLongTranscript(transcript);
   const textHeight = !collapsesLongText ? 'scroll' : isCollapsible && !isExpanded ? 'collapsed' : 'full';
+  // 省略中は、見えない行のリンクやボタンに Tab キーで移らないよう、本文の中の操作できる要素をフォーカスの順から外す（展開すると移れる）
+  const focusableTabIndex = textHeight === 'collapsed' ? -1 : undefined;
   const [selectedQuote, setSelectedQuote] = useState<ClaimQuote | undefined>(undefined);
   /** 証言の候補の抽出に送る本文です。押すたびに作り直すため、何回目に押したかも持ちます。 */
   const [extraction, setExtraction] = useState<{ source: ExtractionSource; count: number } | null>(null);
@@ -147,6 +149,7 @@ export function InterviewTranscript({
               key={partIndex}
               type="button"
               aria-label={seekLabelOf(seconds)}
+              tabIndex={focusableTabIndex}
               onClick={() => onSeek(seconds)}
               className="text-primary underline underline-offset-2 hover:no-underline"
             >
@@ -176,6 +179,7 @@ export function InterviewTranscript({
                 key={index}
                 href={claimHref(caseId, view.claim.id, tab)}
                 aria-label={`書き起こした証言: ${claimLabelOf(view)}`}
+                tabIndex={focusableTabIndex}
                 className="rounded-sm bg-mention-place/40 underline decoration-dotted underline-offset-2"
               >
                 {segment.text}
