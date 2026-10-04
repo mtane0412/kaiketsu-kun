@@ -25,7 +25,7 @@ describe('POST /api/extract-claims', () => {
       postRequest(
         JSON.stringify({
           text: '庭に黒い車が止まっていた',
-          subjectName: '湖畔新聞',
+          sourceName: '別荘の事件の記事・1998年8月13日・湖畔新聞',
           personNames: [],
           placeNames: [],
           apiKey: '',

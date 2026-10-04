@@ -18,9 +18,9 @@ const articleTranscript = [
   '近くに住む山田花子さんは「庭に黒い車が止まっていた」と話した。',
 ].join('\n');
 
-/** 新聞（資料の相手）・県警・山田花子・別荘を登録したケースです。 */
+/** 新聞（資料の媒体）・県警・山田花子・別荘を登録したケースです。 */
 function createCase(overrides: Partial<Case> = {}): Case {
-  const interview: Interview = { id: 'interview-article', subjectPersonIds: ['person-newspaper'], transcript: articleTranscript };
+  const interview: Interview = { id: 'interview-article', interviewerPersonId: 'person-newspaper', transcript: articleTranscript };
   return {
     id: 'case-1',
     name: '湖畔の別荘の事件',
@@ -98,7 +98,7 @@ describe('buildClaimCandidates', () => {
 
   it('動画の文字起こしでは、引用の位置から動画の位置（秒数）を補う', () => {
     const videoTranscript = ['0:00', 'こんばんは、管理人です', '1:05', 'あの夜は別荘が真っ暗でした'].join('\n');
-    const target = createCase({ interviews: [{ id: 'interview-video', subjectPersonIds: ['person-hanako'], transcript: videoTranscript }] });
+    const target = createCase({ interviews: [{ id: 'interview-video', transcript: videoTranscript }] });
 
     const result = buildClaimCandidates(target, 'interview-video', [extracted({ quote: 'あの夜は別荘が真っ暗でした' })]);
 
@@ -156,7 +156,7 @@ describe('buildClaimCandidates', () => {
   });
 
   it('本文の無い聴取は照らし合わせられないため、エラーにする', () => {
-    const target = createCase({ interviews: [{ id: 'interview-empty', subjectPersonIds: ['person-hanako'] }] });
+    const target = createCase({ interviews: [{ id: 'interview-empty' }] });
     expect(() => buildClaimCandidates(target, 'interview-empty', [])).toThrow('本文');
   });
 });
@@ -202,7 +202,7 @@ describe('candidateToClaimDraft', () => {
     expect(result.draft.mentions).toEqual([{ kind: 'person', id: 'person-police', label: '県警' }]);
   });
 
-  it('聴取の相手が発言者でない場合は、経由の最後に聴取の相手を足す', () => {
+  it('媒体が発言者でも経由でもない場合は、経由の最後に媒体を足す（媒体を通じて伝わった発言のため）', () => {
     const target = createCase();
     const [candidate] = buildClaimCandidates(target, 'interview-article', [extracted({ speakerName: '県警', quote: '県警によると' })])
       .candidates;
@@ -212,7 +212,7 @@ describe('candidateToClaimDraft', () => {
     expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper'] });
   });
 
-  it('発言者の分からない候補（記者の地の文など）は、聴取の相手を発言者にする', () => {
+  it('発言者の分からない候補（記者の地の文など）は、媒体を発言者にする', () => {
     const target = createCase();
     const [candidate] = buildClaimCandidates(target, 'interview-article', [
       extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
@@ -223,22 +223,18 @@ describe('candidateToClaimDraft', () => {
     expect(result.speaker).toEqual({ personIds: ['person-newspaper'], viaPersonIds: [] });
   });
 
-  it('相手が複数の資料では、相手の一人が発言者なら経由を足さず、発言者の分からない候補は最初の相手を発言者にする', () => {
-    // 前提: 記事に、新聞の地の文と、取材に応じた山田花子の話が載っている（相手は新聞と山田花子）
-    const target = createCase({
-      interviews: [{ id: 'interview-article', subjectPersonIds: ['person-newspaper', 'person-hanako'], transcript: articleTranscript }],
-    });
+  it('媒体の無い資料では、経由を足さず、発言者の分からない候補は発言者を選ばずにおく', () => {
+    // 前提: URLと本文だけを登録した資料で、媒体をまだ選んでいない
+    const target = createCase({ interviews: [{ id: 'interview-article', transcript: articleTranscript }] });
     const { candidates } = buildClaimCandidates(target, 'interview-article', [
-      extracted({ speakerName: '山田 花子', quote: '庭に黒い車が止まっていた' }),
-      extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
       extracted({ speakerName: '県警', quote: '県警によると' }),
+      extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
     ]);
 
-    const [hanako, narration, police] = candidates.map((candidate) => candidateToClaimDraft(target, 'interview-article', candidate, sequentialIds()));
+    const [police, narration] = candidates.map((candidate) => candidateToClaimDraft(target, 'interview-article', candidate, sequentialIds()));
 
-    expect(hanako?.speaker).toEqual({ personIds: ['person-hanako'], viaPersonIds: [] });
-    expect(narration?.speaker).toEqual({ personIds: ['person-newspaper'], viaPersonIds: [] });
-    expect(police?.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper'] });
+    expect(police?.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: [] });
+    expect(narration?.speaker).toEqual({ personIds: [], viaPersonIds: [] });
   });
 
   it('一致しない名前は、同じ名前ごとに1件だけ新規作成し、発言者・言及で同じIDを使う', () => {

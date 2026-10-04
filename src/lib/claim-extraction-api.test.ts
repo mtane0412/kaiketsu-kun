@@ -8,7 +8,7 @@ import { ExtractionRequestSchema, MAX_EXTRACTION_TEXT_LENGTH, requestClaimExtrac
 
 const request: ExtractionRequest = {
   text: '近くに住む山田花子さんは「庭に黒い車が止まっていた」と話した。',
-  subjectName: '湖畔新聞',
+  sourceName: '別荘の事件の記事・1998年8月13日・湖畔新聞',
   personNames: ['山田 花子'],
   placeNames: [],
   apiKey: 'sk-or-テスト用のキー',

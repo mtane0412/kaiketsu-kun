@@ -29,10 +29,11 @@ import {
   type ExtractedClaim,
   type ResolvedName,
 } from '@/domain/claim-extraction';
+import { formatInterviewLabel } from '@/domain/interviews';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import type { Id } from '@/domain/types';
-import { MAX_EXTRACTION_TEXT_LENGTH, requestClaimExtraction } from '@/lib/claim-extraction-api';
+import { MAX_EXTRACTION_TEXT_LENGTH, MAX_SOURCE_NAME_LENGTH, requestClaimExtraction } from '@/lib/claim-extraction-api';
 import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -67,14 +68,24 @@ function nameWithStatus(name: ResolvedName): string {
   return `${name.name}（${name.status === 'registered' ? '登録済み' : '新規'}）`;
 }
 
+/**
+ * 候補の発言者を示す文を返します。
+ * 発言者の分からない候補は、資料の媒体の発言として書き起こします（src/domain/claim-extraction.ts の candidateToClaimDraft）。
+ * 媒体の無い資料では、発言者を選ばずに入力欄を開くため、その旨を示します。
+ */
+function describeSpeaker(candidate: ClaimCandidate, mediaName: string | undefined): string {
+  if (candidate.speaker) return nameWithStatus(candidate.speaker);
+  return mediaName === undefined ? '不明（書き足すときに選んでください）' : `${mediaName}（資料の媒体）`;
+}
+
 /** 候補の各項目を「項目名: 値」の行にします。値の無い項目は含めません。 */
-function describeCandidate(candidate: ClaimCandidate, subjectName: string): { term: string; description: string }[] {
+function describeCandidate(candidate: ClaimCandidate, mediaName: string | undefined): { term: string; description: string }[] {
   const whenDescription =
     candidate.when !== undefined
       ? formatTimeRef(candidate.when)
       : candidate.whenText && `「${candidate.whenText}」（日時の表記として読めないため、日時なしで書き起こします）`;
   return [
-    { term: '発言者', description: candidate.speaker ? nameWithStatus(candidate.speaker) : `${subjectName}（資料の相手）` },
+    { term: '発言者', description: describeSpeaker(candidate, mediaName) },
     { term: '経由', description: candidate.via.map(nameWithStatus).join(' → ') },
     { term: '日時', description: whenDescription ?? '' },
     { term: '場所', description: candidate.place ? nameWithStatus(candidate.place) : '' },
@@ -94,10 +105,10 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
 
   const interview = currentCase.interviews.find((item) => item.id === interviewId);
   if (interview === undefined) throw new Error(`資料が見つかりません: ${interviewId}`);
-  // 発言者の分からない候補は最初の相手の発言として扱うため（candidateToClaimDraft）、LLM にも最初の相手を資料の主として伝える
-  const [primarySubjectId] = interview.subjectPersonIds;
-  const subjectName = currentCase.persons.find((person) => person.id === primarySubjectId)?.name;
-  if (subjectName === undefined) throw new Error(`資料の相手が見つかりません: ${primarySubjectId}`);
+  // 発言者の分からない候補は媒体の発言として扱うため（candidateToClaimDraft）、候補の一覧で媒体の名前を示す
+  const mediaName = currentCase.persons.find((person) => person.id === interview.interviewerPersonId)?.name;
+  // LLM に本文がどの資料のものかを伝える。上限を超える長い名前（長いURLなど）は、上限の文字数で切り詰めて送る
+  const sourceName = formatInterviewLabel(currentCase, interview).slice(0, MAX_SOURCE_NAME_LENGTH);
   const tooLong = source.text.length > MAX_EXTRACTION_TEXT_LENGTH;
 
   const handleSend = async (event: FormEvent) => {
@@ -119,7 +130,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
     try {
       const extracted = await requestClaimExtraction({
         text: source.text,
-        subjectName,
+        sourceName,
         personNames: currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
         placeNames: currentCase.places.map((place) => place.name),
         ...trimmed,
@@ -186,7 +197,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
           interviewId={interviewId}
           extracted={phase.extracted}
           settledKeys={phase.settledKeys}
-          subjectName={subjectName}
+          mediaName={mediaName}
           adopting={adopting}
           onAdopt={adopt}
           onCancelAdopt={() => setAdopting(null)}
@@ -201,7 +212,8 @@ type CandidateListProps = {
   interviewId: Id;
   extracted: ExtractedClaim[];
   settledKeys: ReadonlySet<string>;
-  subjectName: string;
+  /** 資料の媒体の名前です。媒体の無い資料では undefined です。 */
+  mediaName: string | undefined;
   adopting: Adopting | null;
   onAdopt: (candidate: ClaimCandidate) => void;
   onCancelAdopt: () => void;
@@ -209,7 +221,7 @@ type CandidateListProps = {
 };
 
 /** 原文とケースに照らし合わせた候補の一覧です。確かめ終えた候補は示しません。 */
-function CandidateList({ interviewId, extracted, settledKeys, subjectName, adopting, onAdopt, onCancelAdopt, onSettle }: CandidateListProps) {
+function CandidateList({ interviewId, extracted, settledKeys, mediaName, adopting, onAdopt, onCancelAdopt, onSettle }: CandidateListProps) {
   const currentCase = useCurrentCase();
   const { candidates, discardedCount } = buildClaimCandidates(currentCase, interviewId, extracted);
   const remaining = candidates.filter((candidate) => !settledKeys.has(candidate.key));
@@ -233,7 +245,7 @@ function CandidateList({ interviewId, extracted, settledKeys, subjectName, adopt
                 {stripTimestampLines(candidate.quote.text)}
               </blockquote>
               <dl className="grid gap-0.5 text-xs">
-                {describeCandidate(candidate, subjectName).map(({ term, description }) => (
+                {describeCandidate(candidate, mediaName).map(({ term, description }) => (
                   <div key={term} className="flex gap-1">
                     <dt className="shrink-0 text-muted-foreground">{`${term}: `}</dt>
                     <dd>{description}</dd>

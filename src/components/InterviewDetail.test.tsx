@@ -1,5 +1,5 @@
 /**
- * 資料（聴取）の詳細・登録ページ（相手の人物と証言の一覧、資料の編集・削除、サイドバーの「＋」から開く登録）のテスト
+ * 資料（聴取）の詳細・登録ページ（発言者と証言の一覧、本文、資料の編集・削除、サイドバーの「＋」から開くURLだけでの登録）のテスト
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,16 +15,17 @@ vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 /** 20年後の、書籍の著者による管理人への取材です（管理人の証言をひもづけています）。 */
 const bookInterview: Interview = {
   id: 'interview-book',
-  subjectPersonIds: ['person-caretaker'],
+  title: '湖畔の夏 第3章',
   interviewerPersonId: 'person-book',
   at: '2018-05',
 };
 
-/** 管理人と隣家の住人がそろって応じた記者会見です（証言はまだひもづけていません）。 */
+/** 記者会見の記事です。URLと本文だけを登録し、証言はまだひもづけていません。 */
 const pressConference: Interview = {
   id: 'interview-press',
-  subjectPersonIds: ['person-caretaker', 'person-neighbor'],
+  url: 'https://news.example.com/press',
   at: '1998-08-14',
+  transcript: '管理人は「あの夜は別荘が真っ暗でした」と話した。',
 };
 
 /** 2件の資料を登録し、書籍の取材に管理人の証言をひもづけたケースです。 */
@@ -43,12 +44,12 @@ beforeEach(() => {
 });
 
 describe('InterviewDetail', () => {
-  it('資料の名前を見出しにし、相手の人物を人物の詳細へのリンクで、ひもづく証言を証言の詳細へのリンクで並べる', () => {
+  it('資料の名前を見出しにし、証言の発言者を人物の詳細へのリンクで、ひもづく証言を証言の詳細へのリンクで並べる', () => {
     render(<InterviewDetail interviewId="interview-book" />);
 
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('管理人・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
-    const subjects = screen.getByRole('region', { name: '相手' });
-    expect(within(subjects).getByRole('link', { name: '管理人' })).toHaveAttribute(
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('湖畔の夏 第3章・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
+    const speakers = screen.getByRole('region', { name: '発言者' });
+    expect(within(speakers).getByRole('link', { name: '管理人' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-caretaker?tab=graph'
     );
@@ -57,28 +58,37 @@ describe('InterviewDetail', () => {
     ).toBe(true);
   });
 
-  it('相手が複数の資料では、相手の全員を並べる', () => {
+  it('証言の無い資料では、発言者の代わりに、証言を書き起こすと発言者が並ぶことを示す', () => {
     render(<InterviewDetail interviewId="interview-press" />);
 
-    const subjects = screen.getByRole('region', { name: '相手' });
-    expect(within(subjects).getAllByRole('link').map((link) => link.textContent)).toEqual(['管理人', '隣家の住人']);
-    // 検証: 相手は「相手」の欄に並べるため、資料のカードでは繰り返さない
-    expect(screen.queryByText('相手: 管理人、隣家の住人')).not.toBeInTheDocument();
+    const speakers = screen.getByRole('region', { name: '発言者' });
+    expect(within(speakers).queryByRole('link')).not.toBeInTheDocument();
+    expect(speakers).toHaveTextContent('証言を書き起こすと、その発言者がここに並びます');
   });
 
-  it('資料を編集して、相手を足せる', async () => {
+  it('本文を持つ資料では、本文を最初から開いておく（読みながら証言を拾えるようにするため）', () => {
+    render(<InterviewDetail interviewId="interview-press" />);
+
+    expect(screen.getByRole('region', { name: '1998年8月14日の資料の本文' })).toHaveTextContent('あの夜は別荘が真っ暗でした');
+  });
+
+  it('本文の無い資料では、本文を貼り付けると証言を書き起こせることを示す', () => {
+    render(<InterviewDetail interviewId="interview-book" />);
+
+    expect(screen.getByText(/「編集」から記事の本文や動画の文字起こしを貼り付けると/)).toBeInTheDocument();
+  });
+
+  it('資料を編集して、タイトルを変えられる', async () => {
     const user = userEvent.setup();
     render(<InterviewDetail interviewId="interview-book" />);
 
     await user.click(screen.getByRole('button', { name: '2018年5月の資料を編集' }));
     const editSection = screen.getByRole('region', { name: '資料の編集' });
-    await user.click(within(within(editSection).getByRole('group', { name: '相手' })).getByRole('checkbox', { name: '隣家の住人' }));
+    await user.clear(within(editSection).getByLabelText('タイトル（任意）'));
+    await user.type(within(editSection).getByLabelText('タイトル（任意）'), '湖畔の夏 第4章');
     await user.click(within(editSection).getByRole('button', { name: '資料を保存' }));
 
-    expect(openedCase().interviews.find((interview) => interview.id === bookInterview.id)?.subjectPersonIds).toEqual([
-      'person-caretaker',
-      'person-neighbor',
-    ]);
+    expect(openedCase().interviews.find((interview) => interview.id === bookInterview.id)?.title).toBe('湖畔の夏 第4章');
   });
 
   it('資料を削除すると、ケースから取り除き、ボードへ戻る', async () => {
@@ -104,17 +114,16 @@ describe('NewInterviewDetail', () => {
     resetMockNavigation('/cases/case-lakeside/interviews/new?tab=graph');
   });
 
-  it('相手を選んで保存すると、資料をケースに追加し、その資料の詳細へ移る', async () => {
+  it('URLだけを入れて保存すると、資料をケースに追加し、その資料の詳細へ移る', async () => {
     const user = userEvent.setup();
     render(<NewInterviewDetail />);
 
     const registerSection = screen.getByRole('region', { name: '資料の登録' });
-    await user.click(within(within(registerSection).getByRole('group', { name: '相手' })).getByRole('checkbox', { name: '隣家の住人' }));
-    await user.type(within(registerSection).getByLabelText('日時（任意）'), '1998-08-20');
+    await user.type(within(registerSection).getByLabelText('URL（任意）'), 'https://www.youtube.com/watch?v=abc');
     await user.click(within(registerSection).getByRole('button', { name: '資料を保存' }));
 
     const added = openedCase().interviews.at(-1);
-    expect(added).toEqual({ id: expect.any(String), subjectPersonIds: ['person-neighbor'], at: '1998-08-20' });
+    expect(added).toEqual({ id: expect.any(String), url: 'https://www.youtube.com/watch?v=abc' });
     // 検証: 登録のURLへ「戻る」で戻ると二重に登録しかねないため、履歴は置き換える
     expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/interviews/${added?.id}?tab=graph`);
   });

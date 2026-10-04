@@ -6,21 +6,25 @@
  * - 「この資料の証言を書き足す」: 資料を選んだ状態の証言の入力欄（ClaimForm の compact）を開きます。
  *   同じ資料の証言を続けて書くときに、資料と発言者を選び直す手間を省くためです。
  *   speakerPersonId を渡した場合（人物の詳細から開いた場合）は、その人物を発言者に選んでおきます。
- *   渡さない場合は、資料の相手が1人ならその相手を、複数ならだれも選ばずにおきます（ClaimForm）。
+ *   渡さない場合は、発言者を選ばずにおきます（資料には何人もの発言が載る場合があるためです）。
  * - 本文を持つ資料は、「本文を開く」で本文を表示し、範囲を選んで証言を書き起こせます（InterviewTranscript）。
+ *   資料の詳細では、読みながら証言を拾えるよう、本文を最初から開いておきます（opensTranscript）。
+ *   本文の無い資料では、資料の詳細に、本文を貼り付けると証言を書き起こせることを示します。
  *   書き起こしの入力欄は、「この資料の証言を書き足す」と同じ入力欄に、選んだ範囲を引用として渡して開きます。
  *   本文から LLM で証言の候補を抽出する画面（ClaimExtraction）も、本文の下に開きます（InterviewTranscript の「証言の候補を抽出」）。
  * - 編集（InterviewForm）と削除。
- * URLを持つ資料には、URLを新しいタブで開くリンクを置きます。相手が複数の資料には、相手の全員を示します
- * （資料の詳細のように、相手を別の欄に並べる画面では showsSubjects に false を渡して省きます）。
+ * URLを持つ資料には、URLを新しいタブで開くリンクを置きます。
+ * 人物の詳細の「供述の変遷」では、資料の詳細へのリンクを資料の名前（タイトルかURL）で置き、発言者が複数の資料には発言者の全員を示します
+ * （資料の詳細では、見出しと「発言者」の欄で示すため、showsSource に false を渡して省きます）。
  *
  * 注意: 証言がひもづいている資料は削除できません（参照の整合性の検証で拒否され、理由を表示します）。
  * 入力欄（編集・書き足し）は、カードの中で同時に1つだけ開きます。
  */
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { UNKNOWN_INTERVIEW_TIME_LABEL, type InterviewView } from '@/domain/interviews';
+import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
 import { formatTimeRef } from '@/domain/time-ref';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
@@ -31,7 +35,8 @@ import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
 import { InterviewForm } from './forms/InterviewForm';
 import { InterviewTranscript } from './InterviewTranscript';
-import type { TabKey } from './routes';
+import { interviewHref, type TabKey } from './routes';
+import { useCaseId } from './useCaseId';
 
 /** 入力欄の状態です。本文から書き起こす場合は、選んだ引用も持ちます。 */
 type FormState = { kind: 'closed' } | { kind: 'edit' } | { kind: 'compose'; quote?: ClaimQuote };
@@ -61,16 +66,19 @@ type InterviewCardProps = {
   tab: TabKey;
   /** 「この資料の証言を書き足す」で、発言者に選んでおく人物です。人物の詳細から開いた場合の、開いている人物です。 */
   speakerPersonId?: Id;
-  /** 相手が複数の資料で、相手の全員を示すかどうかです。省略すると示します。 */
-  showsSubjects?: boolean;
+  /** 資料の詳細へのリンクと、発言者が複数の資料の発言者の全員を示すかどうかです。省略すると示します。 */
+  showsSource?: boolean;
+  /** 本文を最初から開いておくかどうかです。資料の詳細で指定します。 */
+  opensTranscript?: boolean;
   /** 資料を削除できたときに呼び出します。 */
   onDeleted?: () => void;
 };
 
-export function InterviewCard({ view, tab, speakerPersonId, showsSubjects = true, onDeleted }: InterviewCardProps) {
+export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, opensTranscript = false, onDeleted }: InterviewCardProps) {
+  const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const [form, setForm] = useState<FormState>(CLOSED);
-  const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
+  const [isTranscriptOpen, setIsTranscriptOpen] = useState(opensTranscript);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { interview } = view;
@@ -92,8 +100,13 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSubjects = true
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3">
       <h4 className="text-sm font-medium">{timeLabel}</h4>
-      {showsSubjects && view.subjects.length > 1 && (
-        <p className="text-xs text-muted-foreground">相手: {view.subjects.map((person) => person.name).join('、')}</p>
+      {showsSource && (
+        <Link href={interviewHref(caseId, interview.id, tab)} className="block truncate text-xs underline underline-offset-2 hover:no-underline">
+          資料: {interview.title ?? interview.url ?? UNTITLED_INTERVIEW_LABEL}
+        </Link>
+      )}
+      {showsSource && view.speakers.length > 1 && (
+        <p className="text-xs text-muted-foreground">発言者: {view.speakers.map((person) => person.name).join('、')}</p>
       )}
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
       {interview.url && (
@@ -106,6 +119,11 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSubjects = true
         >
           {interview.url}
         </a>
+      )}
+      {interview.transcript === undefined && opensTranscript && (
+        <p className="text-xs text-muted-foreground">
+          「編集」から記事の本文や動画の文字起こしを貼り付けると、範囲を選んで証言を書き起こせます。
+        </p>
       )}
       {interview.transcript !== undefined && isTranscriptOpen && (
         <InterviewTranscript

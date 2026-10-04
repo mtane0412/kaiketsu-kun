@@ -21,6 +21,9 @@ export const MAX_EXTRACTION_NAMES = 500;
 /** プロンプトに含める名前1件の上限の文字数です。 */
 const MAX_NAME_LENGTH = 200;
 
+/** プロンプトに含める資料の名前の上限の文字数です。資料の名前は、タイトルやURLを含むため、人物・場所の名前より長くとります。 */
+export const MAX_SOURCE_NAME_LENGTH = 500;
+
 /** 空白だけではない文字列です。 */
 const nonBlank = z.string().refine((value) => value.trim() !== '');
 
@@ -30,8 +33,8 @@ const names = z.array(z.string().max(MAX_NAME_LENGTH)).max(MAX_EXTRACTION_NAMES)
 export const ExtractionRequestSchema = z.object({
   /** 証言の候補を抽出する本文（聴取の本文の全文か、選んだ範囲）です。 */
   text: nonBlank.pipe(z.string().max(MAX_EXTRACTION_TEXT_LENGTH)),
-  /** 聴取の相手の名前です。発言者の分からない記述を、聴取の相手の記述として扱うよう LLM に伝えます。 */
-  subjectName: z.string().max(MAX_NAME_LENGTH),
+  /** 資料の名前（タイトル・日時・媒体。src/domain/interviews.ts の formatInterviewLabel）です。本文がどの資料のものかを LLM に伝えます。 */
+  sourceName: z.string().max(MAX_SOURCE_NAME_LENGTH),
   /** 登録済みの人物の名前と別名です。LLM に同じ表記を使うよう促します。 */
   personNames: names,
   /** 登録済みの場所の名前です。 */

@@ -106,8 +106,8 @@ describe('CaseSidebar', () => {
       openTestCase({
         ...sampleFictionalCase,
         interviews: [
-          { id: 'interview-book', subjectPersonIds: ['person-caretaker'], interviewerPersonId: 'person-book', at: '2018-05' },
-          { id: 'interview-press', subjectPersonIds: ['person-caretaker', 'person-neighbor'], at: '1998-08-14' },
+          { id: 'interview-book', title: '管理人', interviewerPersonId: 'person-book', at: '2018-05' },
+          { id: 'interview-press', title: '管理人、隣家の住人', at: '1998-08-14' },
         ],
       });
       renderSidebar();

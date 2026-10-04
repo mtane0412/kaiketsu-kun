@@ -565,7 +565,7 @@ describe('parseCase（人物のアイコンの文字）', () => {
 /** 管理人が、書籍の著者の取材に応じた機会です（管理人の証言は書籍を経由して伝わっています）。 */
 const bookInterview = {
   id: 'interview-caretaker-book',
-  subjectPersonIds: ['person-caretaker'],
+  title: '湖畔の夏 第3章',
   interviewerPersonId: 'person-book',
   at: '2018-05',
   placeId: 'place-villa',
@@ -587,6 +587,18 @@ describe('parseCase（聴取）', () => {
     expect(parseCase(toJsonData(caseWithInterviews))).toEqual(caseWithInterviews);
   });
 
+  it('IDだけの聴取を受け付ける（URLを見つけた時点で、ほかの項目を後から補えるようにするため）', () => {
+    const caseData = { ...sampleFictionalCase, interviews: [{ id: 'interview-blank' }] };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([{ id: 'interview-blank' }]);
+  });
+
+  it('空白だけのタイトルを持つ聴取は拒否する（資料の名前が空になり、一覧で見分けられなくなるため）', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, title: '  ' }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.title/);
+  });
+
   it('聴取を持たない頃に保存したデータは、聴取を空として受け付ける', () => {
     const { interviews: _interviews, ...caseWithoutInterviews } = sampleFictionalCase;
 
@@ -599,16 +611,14 @@ describe('parseCase（聴取）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない資料を参照しています: interview-caretaker-book/);
   });
 
-  it('聴取の相手・聴取者・場所が存在しない場合は拒否する', () => {
+  it('聴取の聴取者・場所が存在しない場合は拒否する', () => {
     const caseData = {
       ...sampleFictionalCase,
-      interviews: [
-        { id: 'interview-broken', subjectPersonIds: ['person-unknown'], interviewerPersonId: 'person-gone', placeId: 'place-gone' },
-      ],
+      interviews: [{ id: 'interview-broken', interviewerPersonId: 'person-gone', placeId: 'place-gone' }],
     };
 
     expect(() => parseCase(toJsonData(caseData))).toThrow(
-      /存在しない人物を参照しています: person-unknown[\s\S]*存在しない人物を参照しています: person-gone[\s\S]*存在しない場所を参照しています: place-gone/
+      /存在しない人物を参照しています: person-gone[\s\S]*存在しない場所を参照しています: place-gone/
     );
   });
 
@@ -618,8 +628,8 @@ describe('parseCase（聴取）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.at/);
   });
 
-  it('聴取の相手が、証言の発言者にも経由にも含まれない場合は拒否する', () => {
-    // 前提: 隣家の住人の証言は、隣家の住人が述べ、新聞を経由して伝わったもので、管理人は関わっていない
+  it('どの人物の証言でも、聴取にひもづけられる（記事には何人もの発言が載るため）', () => {
+    // 前提: 隣家の住人の証言を、書籍の取材にひもづける
     const caseData = {
       ...caseWithInterviews,
       claims: caseWithInterviews.claims.map((claim) =>
@@ -627,53 +637,41 @@ describe('parseCase（聴取）', () => {
       ),
     };
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(
-      /資料の相手が、証言の発言者にも経由にも含まれていません: claim-neighbor/
-    );
-  });
-
-  it('聴取の相手が経由の一段である証言は、ひもづけを受け付ける（伝聞のその段が述べた機会として扱う）', () => {
-    // 前提: 県警の発表（防犯カメラの記録を伝えた）を、聴取として記録している
-    const policeAnnouncement = { id: 'interview-police-press', subjectPersonIds: ['person-police'], at: '1998-08-13' };
-    const caseData = {
-      ...sampleFictionalCase,
-      interviews: [policeAnnouncement],
-      claims: sampleFictionalCase.claims.map((claim) =>
-        claim.id === 'claim-police-camera' ? { ...claim, interviewId: policeAnnouncement.id } : claim
-      ),
-    };
-
-    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-police-camera')?.interviewId).toBe(
-      'interview-police-press'
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-neighbor')?.interviewId).toBe(
+      bookInterview.id
     );
   });
 });
 
-describe('parseCase（資料の相手が複数）', () => {
-  it('相手を1人だけ持っていた頃のデータ（subjectPersonId）は、相手の一覧（subjectPersonIds）に直して受け付ける', () => {
-    const { subjectPersonIds: _subjectPersonIds, ...legacyInterview } = bookInterview;
-    const caseData = { ...caseWithInterviews, interviews: [{ ...legacyInterview, subjectPersonId: 'person-caretaker' }] };
+describe('parseCase（資料の相手を持っていた頃のデータ）', () => {
+  /** 相手を持っていた頃の、タイトルの無い資料です。 */
+  const { title: _title, ...untitledBookInterview } = bookInterview;
+
+  it('相手の一覧（subjectPersonIds）は取り除き、タイトルが無ければ相手の名前を「、」でつないでタイトルにする', () => {
+    const caseData = {
+      ...caseWithInterviews,
+      interviews: [{ ...untitledBookInterview, subjectPersonIds: ['person-caretaker', 'person-neighbor'] }],
+    };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([{ ...untitledBookInterview, title: '管理人、隣家の住人' }]);
+  });
+
+  it('相手を1人だけ持っていた頃のデータ（subjectPersonId）も、同じように直す', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...untitledBookInterview, subjectPersonId: 'person-caretaker' }] };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([{ ...untitledBookInterview, title: '管理人' }]);
+  });
+
+  it('タイトルを持つ資料は、相手を取り除くだけでタイトルを変えない', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: ['person-caretaker'] }] };
 
     expect(parseCase(toJsonData(caseData)).interviews).toEqual([bookInterview]);
   });
 
-  it('相手が1人もいない資料は拒否する', () => {
-    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: [] }] };
+  it('相手が存在しない人物の場合は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...untitledBookInterview, subjectPersonIds: ['person-unknown'] }] };
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.subjectPersonIds/);
-  });
-
-  it('同じ人物を相手に2回選んだ資料は拒否する', () => {
-    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: ['person-caretaker', 'person-caretaker'] }] };
-
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/資料の相手に同じ人物が重なっています: interview-caretaker-book/);
-  });
-
-  it('相手のうち1人でも証言の発言者か経由に含まれていれば、ひもづけを受け付ける', () => {
-    // 前提: 書籍の取材には、管理人と隣家の住人がそろって応じた
-    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, subjectPersonIds: ['person-neighbor', 'person-caretaker'] }] };
-
-    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(bookInterview.id);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない人物を参照しています: person-unknown/);
   });
 });
 
