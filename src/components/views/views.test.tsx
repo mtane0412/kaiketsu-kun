@@ -149,23 +149,62 @@ describe('TimelineView', () => {
     expect(handle).toHaveAttribute('title', 'ドラッグ、またはスペースキーを押してから矢印キーで動かします');
   });
 
-  it('見出しのある証言は、見出しを表示し、本文は折りたたんで示す', () => {
-    // 前提: 長い本文に、要約としての見出しを付けている
+  it('見出しのある証言も、本文を開く操作をせずに、見出しの下に本文を表示する', () => {
+    // 前提: 本文に、要約としての見出しを付けている
     const caseData: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, statementWithHeading] };
     render(<TimelineView target={caseData} />);
 
     const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
-    const body = within(claim).getByText(/現金を渡すよう繰り返し迫った/);
-    // 検証: 本文は「本文を表示」を開くまで閉じている
-    expect(within(claim).getByText('本文を表示')).toBeInTheDocument();
-    expect(body.closest('details')).not.toHaveAttribute('open');
+    expect(within(claim).getByText(/現金を渡すよう繰り返し迫った/)).toBeVisible();
+    expect(within(claim).queryByText('本文を表示')).not.toBeInTheDocument();
   });
 
-  it('見出しの無い証言は、本文を折りたたまずに表示する', () => {
-    render(<TimelineView target={sampleFictionalCase} />);
+  it('長い本文は省略して表示し、「全文を表示」で展開、「折りたたむ」で省略に戻せる', async () => {
+    const user = userEvent.setup();
+    const longStatement: Claim = {
+      ...statementWithHeading,
+      content: Array.from({ length: 8 }, (_, index) => `Zは被害者の自宅を${index + 1}回目に訪れ、現金を渡すよう迫った。`).join('\n'),
+    };
+    render(<TimelineView target={{ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, longStatement] }} />);
 
-    const body = screen.getByText(/明かりがついていて/);
-    expect(body.closest('details')).toBeNull();
+    const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+    const expandButton = within(claim).getByRole('button', { name: '全文を表示' });
+    expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(expandButton);
+    const collapseButton = within(claim).getByRole('button', { name: '折りたたむ' });
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(collapseButton);
+    expect(within(claim).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('省略中の本文のメンションは、隠れている場合があるため Tab キーで移らず、展開すると移れる', async () => {
+    const user = userEvent.setup();
+    const longStatement: Claim = {
+      ...statementWithHeading,
+      content: [
+        ...Array.from({ length: 6 }, (_, index) => `Zは被害者の自宅を${index + 1}回目に訪れた。`),
+        '@[別荘の持ち主](person:person-owner)も、その様子を見ていた。',
+      ].join('\n'),
+      mentionedPersonIds: ['person-owner'],
+    };
+    render(<TimelineView target={{ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, longStatement] }} />);
+
+    const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+    const mention = () => within(claim).getByRole('link', { name: /@別荘の持ち主/ });
+    expect(mention()).toHaveAttribute('tabindex', '-1');
+
+    await user.click(within(claim).getByRole('button', { name: '全文を表示' }));
+    expect(mention()).not.toHaveAttribute('tabindex');
+  });
+
+  it('短い本文は省略せず、「全文を表示」を置かない', () => {
+    const caseData: Case = { ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, statementWithHeading] };
+    render(<TimelineView target={caseData} />);
+
+    const claim = screen.getByText('Zによる恐喝事件があった').closest('li')!;
+    expect(within(claim).queryByRole('button', { name: '全文を表示' })).not.toBeInTheDocument();
   });
 
   it('見出しのある証言は、本文の冒頭ではなく見出しを、つまみの名前にする', () => {
