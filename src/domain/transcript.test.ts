@@ -12,6 +12,7 @@ import {
   isYoutubeUrl,
   quoteSecondsAt,
   stripTimestampLines,
+  youtubeEmbedUrl,
   youtubeUrlAt,
 } from './transcript';
 import type { Case, Claim, Interview } from './types';
@@ -142,6 +143,26 @@ describe('isYoutubeUrl', () => {
   it('YouTube 以外のURLと、URLとして読めない文字列は YouTube のURLとみなさない', () => {
     expect(isYoutubeUrl('https://example.com/news/1')).toBe(false);
     expect(isYoutubeUrl('youtube.com の動画')).toBe(false);
+  });
+});
+
+describe('youtubeEmbedUrl', () => {
+  it('YouTube の動画のURLから、埋め込みプレーヤーのURLを作る', () => {
+    const embedUrl = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ';
+    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(embedUrl);
+    expect(youtubeEmbedUrl('https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=10s')).toBe(embedUrl);
+    expect(youtubeEmbedUrl('https://youtu.be/dQw4w9WgXcQ?si=share')).toBe(embedUrl);
+    expect(youtubeEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toBe(embedUrl);
+    expect(youtubeEmbedUrl('https://www.youtube.com/live/dQw4w9WgXcQ')).toBe(embedUrl);
+    expect(youtubeEmbedUrl('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe(embedUrl);
+  });
+
+  it('動画を特定できない YouTube のURLと、YouTube 以外のURLでは undefined を返す', () => {
+    expect(youtubeEmbedUrl('https://www.youtube.com/@channel')).toBeUndefined();
+    expect(youtubeEmbedUrl('https://www.youtube.com/playlist?list=PL123')).toBeUndefined();
+    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=短すぎる')).toBeUndefined();
+    expect(youtubeEmbedUrl('https://example.com/watch?v=dQw4w9WgXcQ')).toBeUndefined();
+    expect(youtubeEmbedUrl('youtube.com の動画')).toBeUndefined();
   });
 });
 

@@ -78,6 +78,20 @@ describe('InterviewDetail', () => {
     expect(screen.getByText(/「編集」から記事の本文や動画の文字起こしを貼り付けると/)).toBeInTheDocument();
   });
 
+  it('YouTube の動画の資料では、動画を埋め込みプレーヤーで表示する', () => {
+    const videoInterview: Interview = { id: 'interview-video', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: '管理人の会見動画' };
+    openTestCase({ ...caseWithInterviews, interviews: [...caseWithInterviews.interviews, videoInterview] });
+    render(<InterviewDetail interviewId="interview-video" />);
+
+    expect(screen.getByTitle('日時不明の資料の動画')).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+  });
+
+  it('YouTube 以外のURLの資料では、動画を埋め込まない', () => {
+    const { container } = render(<InterviewDetail interviewId="interview-press" />);
+
+    expect(container.querySelector('iframe')).toBeNull();
+  });
+
   it('資料を編集して、タイトルを変えられる', async () => {
     const user = userEvent.setup();
     render(<InterviewDetail interviewId="interview-book" />);
