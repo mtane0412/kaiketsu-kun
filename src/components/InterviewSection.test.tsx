@@ -1,13 +1,14 @@
 /**
  * 人物の詳細に並べる「供述の変遷」（その人物が発言者の証言を含む聴取の一覧・編集・削除と、聴取からの証言の書き足し・候補の抽出）のテスト
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim, Interview } from '@/domain/types';
 import { MAX_EXTRACTION_TEXT_LENGTH } from '@/lib/claim-extraction-api';
 import { OPENROUTER_MODELS_URL } from '@/lib/openrouter-models';
+import { placeVertically } from '@/test/layout';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { InterviewSection } from './InterviewSection';
@@ -279,22 +280,44 @@ describe('InterviewSection', () => {
       expect(within(history).queryByRole('button', { name: '全文を表示' })).not.toBeInTheDocument();
     });
 
-    it('省略中の本文の、証言へのリンクは、隠れている場合があるため Tab キーで移らず、展開すると移れる', async () => {
-      const user = userEvent.setup();
-      const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');
-      openTestCase({
-        ...withTranscript(longTranscript),
-        claims: caseWithInterviews.claims.map((claim) =>
-          claim.id === firstStatement.id ? { ...claim, quote: { text: '管理人の話の20段落目です。' } } : claim
-        ),
-      });
-      const history = renderCaretakerStatementHistory();
-      const transcriptRegion = within(history).getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
-      const quoted = () => within(transcriptRegion).getByRole('link', { name: /^書き起こした証言:/ });
-      expect(quoted()).toHaveAttribute('tabindex', '-1');
+    describe('省略中の本文の、証言へのリンクへのフォーカス', () => {
+      /** 長い本文の最後の段落を書き起こした証言を持つケースを開き、本文の領域と、証言へのリンクと、本文の要素を返します。 */
+      function renderLongQuotedTranscript() {
+        const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');
+        openTestCase({
+          ...withTranscript(longTranscript),
+          claims: caseWithInterviews.claims.map((claim) =>
+            claim.id === firstStatement.id ? { ...claim, quote: { text: '管理人の話の20段落目です。' } } : claim
+          ),
+        });
+        const history = renderCaretakerStatementHistory();
+        const transcriptRegion = within(history).getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
+        const quoted = within(transcriptRegion).getByRole('link', { name: /^書き起こした証言:/ });
+        return { transcriptRegion, quoted, text: within(transcriptRegion).getByTestId('transcript-text') };
+      }
 
-      await user.click(within(transcriptRegion).getByRole('button', { name: '全文を表示' }));
-      expect(quoted()).not.toHaveAttribute('tabindex');
+      it('見えている行のリンクには Tab キーで移れ、移っても省略したままにする', () => {
+        const { transcriptRegion, quoted, text } = renderLongQuotedTranscript();
+        // 前提: リンクは本文の枠の中に収まって見えている（jsdom はレイアウトを計算しないため、位置を与える）
+        placeVertically(text, 0, 160);
+        placeVertically(quoted, 20, 40);
+
+        expect(quoted).not.toHaveAttribute('tabindex');
+        act(() => quoted.focus());
+
+        expect(within(transcriptRegion).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
+      });
+
+      it('省略で隠れている行のリンクに移ると、本文を展開して見えるようにする', () => {
+        const { transcriptRegion, quoted, text } = renderLongQuotedTranscript();
+        // 前提: リンクは本文の枠の下端より下にあり、省略で隠れている
+        placeVertically(text, 0, 160);
+        placeVertically(quoted, 400, 420);
+
+        act(() => quoted.focus());
+
+        expect(within(transcriptRegion).getByRole('button', { name: '折りたたむ' })).toHaveAttribute('aria-expanded', 'true');
+      });
     });
 
     it('長い本文は省略して表示し、「全文を表示」で展開、「折りたたむ」で省略に戻せる', async () => {

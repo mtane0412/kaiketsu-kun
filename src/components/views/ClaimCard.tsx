@@ -9,6 +9,7 @@
  * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
  * 見出しのある証言は、見出しを表示し、その下に本文を表示します。
  * 長い本文（isLongClaimContent）は、ボードを占めないよう先頭の数行だけを見せ、「全文を表示」で展開、「折りたたむ」で省略に戻します。
+ * 省略中も本文のメンションには Tab キーで移れ、省略で隠れているメンションに移ったときは本文を展開します（expandOnClippedFocus）。
  * カード全体が、証言の詳細ページへのリンクになります。証言の編集は詳細ページに一本化しているため、カードには編集のボタンを置きません。
  * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
@@ -37,6 +38,7 @@ import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks'
 import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
 import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
+import { expandOnClippedFocus } from '../clipping';
 import { EntityAvatar } from '../EntityAvatar';
 import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
 import { useCaseId } from '../useCaseId';
@@ -99,6 +101,8 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
     // 本文はリンクの当たり判定より手前に置く（カード全体がリンクだと、本文をドラッグして選択・コピーできないため）
     <p
       id={contentId}
+      // 省略で隠れているメンションに Tab キーで移ったときは、移った先が見えるよう本文を展開する
+      onFocus={expandOnClippedFocus(isCollapsed, () => setIsExpanded(true))}
       className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground ${isCollapsed ? 'line-clamp-4' : ''}`}
     >
       {view.contentSegments.map((segment, index) =>
@@ -113,8 +117,6 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
           <Link
             key={index}
             href={mentionHref(caseId, segment.kind, segment.id, tab)}
-            // 省略中は、見えない行のリンクに Tab キーで移らないよう、本文のリンクをフォーカスの順から外す（展開すると移れる）
-            tabIndex={isCollapsed ? -1 : undefined}
             className={`${ABOVE_CARD_LINK} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
           >
             <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
