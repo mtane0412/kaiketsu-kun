@@ -7,7 +7,7 @@
  * - 詳細（InterviewDetail）: 資料の名前（タイトル・日時・聴取者）を見出しにし、証言の発言者を人物の詳細へのリンクで並べます。
  *   発言者は、資料にひもづく証言から導きます（src/domain/interviews.ts）。証言の無い資料では、証言を書き起こすと並ぶことを示します。
  *   その下に資料のカード（InterviewCard）を置き、本文・ひもづく証言の表示と、編集・削除・証言の書き足しを行います。
- *   本文は最初から開いておきます。削除すると、ボードへ戻ります。
+ *   本文は最初から開いておきます。YouTube の動画の資料では、動画を埋め込みプレーヤーで表示します。削除すると、ボードへ戻ります。
  * - 登録（NewInterviewDetail）: サイドバーの「資料」の「＋」から開きます。URL・タイトル・本文のいずれかを入れて保存すると、
  *   その資料の詳細へ移ります。登録のURLへ「戻る」で戻ると、同じ資料を二重に登録しかねないため、履歴は置き換えます。
  *
@@ -84,6 +84,7 @@ export function InterviewDetail({ interviewId }: { interviewId: Id }) {
         tab={tab}
         showsSource={false}
         opensTranscript
+        embedsVideo
         // 削除した資料のURLへ「戻る」で戻らないよう、履歴を置き換える
         onDeleted={() => router.replace(boardHref(caseId, tab))}
       />
