@@ -47,28 +47,42 @@ function showsIconText(target: IconTarget): boolean {
 }
 
 /**
+ * アイコンの文字を比べるための形にします。
+ * 英字の大文字と小文字は、小さなアイコンでは見分けにくいため、同じ文字とみなします。
+ */
+function iconKey(character: string): string {
+  return character.toUpperCase();
+}
+
+/**
  * 対象の人物とアイコンの文字が同じになる、ケースの中の他の人物を返します（並びは persons の順）。
  * 対象の人物自身（同じ ID）は含めません。対象の人物が文字を表示しない場合は、空の配列を返します。
  */
 export function findIconTextCollisions(persons: readonly Person[], target: IconTarget): Person[] {
   if (!showsIconText(target)) return [];
-  const text = personIconText(target);
+  const key = iconKey(personIconText(target));
   return persons.filter(
-    (other) => other.id !== target.id && showsIconText(other) && personIconText(other) === text,
+    (other) => other.id !== target.id && showsIconText(other) && iconKey(personIconText(other)) === key,
   );
 }
 
-/**
- * アイコンの文字の候補にできる1文字かどうかを返します。
- * ひらがな（「の」など）・長音符・記号・空白は、人物を表す文字になりにくいため候補にしません。
- */
+/** 人物を表す文字になりにくいため、候補にしない文字です（踊り字・長音符・小書きの仮名）。 */
+const UNSUITABLE_ICON_CHARACTERS = new Set([...'々〆ーぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ']);
+
+/** 文字（記号・空白ではない）で、候補にしない文字でもない1文字かどうかを返します。 */
 function isIconCandidate(character: string): boolean {
-  return /^[\p{L}\p{N}]$/u.test(character) && !/\p{Script=Hiragana}/u.test(character) && character !== 'ー';
+  return /^[\p{L}\p{N}]$/u.test(character) && !UNSUITABLE_ICON_CHARACTERS.has(character);
+}
+
+/** ひらがなかどうかを返します。ひらがな（「の」など）は、他に候補が無い場合にだけ候補にします。 */
+function isHiragana(character: string): boolean {
+  return /\p{Script=Hiragana}/u.test(character);
 }
 
 /**
  * 名前に含まれる文字のうち、他の人物のアイコンの文字と重ならないものを、名前の順に返します。
  * 同じ文字は1回だけ返し、上限（limit）の数までに切り詰めます。
+ * ひらがなは人物を表す文字になりにくいため、ひらがな以外の候補が1つも無い場合（ひらがなだけの名前など）にだけ返します。
  * 画像を登録した人物のアイコンの文字は表示されないため、避ける対象にしません。
  */
 export function suggestIconTexts(
@@ -76,12 +90,12 @@ export function suggestIconTexts(
   otherPersons: readonly Person[],
   limit: number = DEFAULT_SUGGESTION_LIMIT,
 ): string[] {
-  const taken = new Set(otherPersons.filter(showsIconText).map(personIconText));
-  const suggestions: string[] = [];
+  const taken = new Set(otherPersons.filter(showsIconText).map((other) => iconKey(personIconText(other))));
+  const available: string[] = [];
   for (const { segment } of GRAPHEME_SEGMENTER.segment(name)) {
-    if (suggestions.length >= limit) break;
-    if (!isIconCandidate(segment) || taken.has(segment) || suggestions.includes(segment)) continue;
-    suggestions.push(segment);
+    if (!isIconCandidate(segment) || taken.has(iconKey(segment))) continue;
+    if (!available.some((character) => iconKey(character) === iconKey(segment))) available.push(segment);
   }
-  return suggestions;
+  const preferred = available.filter((character) => !isHiragana(character));
+  return (preferred.length > 0 ? preferred : available).slice(0, limit);
 }

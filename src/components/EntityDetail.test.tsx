@@ -43,6 +43,21 @@ describe('PersonDetail のアイコンの文字の重なり', () => {
     expect(openedCase().persons.find((person) => person.id === 'person-police')?.iconText).toBe('警');
   });
 
+  it('メモで新しく作った、まだ保存していない人物とも、アイコンの文字の重なりを調べる', async () => {
+    const user = userEvent.setup();
+    resetMockNavigation('/cases/case-lakeside/persons/new');
+    render(<NewPersonDetail />);
+
+    // 前提: メモで「通報した釣り人」を新しく作り、同じ頭の文字「通」の人物「通行人」を登録しようとする
+    const registerRegion = screen.getByRole('region', { name: '人物の登録' });
+    await user.type(within(registerRegion).getByLabelText('名前'), '通行人');
+    await user.type(within(registerRegion).getByLabelText('メモ'), '@通報した釣り人');
+    await user.click(screen.getByRole('option', { name: '「通報した釣り人」を人物として新規作成' }));
+
+    const iconField = screen.getByRole('textbox', { name: /^アイコンの文字（/ });
+    expect(iconField).toHaveAccessibleDescription(/「通」.*通報した釣り人/);
+  });
+
   it('アイコンの文字が他の人物と重ならない場合は、案内を表示しない', () => {
     // 前提: 「隣家の住人」のアイコン「隣」は、他の人物と重ならない
     render(<PersonDetail personId="person-neighbor" />);

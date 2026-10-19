@@ -79,6 +79,12 @@ describe('findIconTextCollisions', () => {
     ]);
   });
 
+  it('英字は大文字と小文字を同じ文字とみなす（小さなアイコンでは見分けにくいため）', () => {
+    expect(findIconTextCollisions([person('alice', 'Alice')], { name: 'alan' }).map((other) => other.id)).toEqual([
+      'alice',
+    ]);
+  });
+
   it('名前もアイコンの文字も空の人物は、文字を表示しないため重なりは無い', () => {
     expect(findIconTextCollisions([person('blank', '')], { name: '' })).toEqual([]);
   });
@@ -93,6 +99,14 @@ describe('suggestIconTexts', () => {
 
   it('ひらがな・記号・空白は、人物を表す文字になりにくいため候補にしない', () => {
     expect(suggestIconTexts('被疑者 の・弟', [person('victim', '被害女性')])).toEqual(['疑', '者', '弟']);
+  });
+
+  it('踊り字や小書きの仮名は、人物を表す文字になりにくいため候補にしない', () => {
+    expect(suggestIconTexts('佐々木ッヶ原', [person('sato', '佐藤')])).toEqual(['木', '原']);
+  });
+
+  it('ひらがなだけの名前では、ひらがなも候補にする（候補が無くならないようにするため）', () => {
+    expect(suggestIconTexts('ひろし', [person('hitomi', 'ひとみ')])).toEqual(['ろ', 'し']);
   });
 
   it('同じ文字は1回だけ候補にする', () => {

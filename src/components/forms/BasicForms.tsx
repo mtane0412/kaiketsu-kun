@@ -26,7 +26,7 @@ import {
   type MentionKind,
 } from '@/domain/mention';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
-import { findIconTextCollisions, firstCharacter, suggestIconTexts } from '@/domain/person-icon';
+import { findIconTextCollisions, firstCharacter, personIconText, suggestIconTexts } from '@/domain/person-icon';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from '@/domain/person-kind';
 import type { Coordinates, Id, Person, PersonKind, Place } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
@@ -174,6 +174,7 @@ export function PersonForm({ initial, onDone, actions }: FormProps<Person>) {
       <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
       <IconTextField
         personId={initial?.id}
+        pendingPersons={newEntries.flatMap((entry) => (entry.key === 'persons' ? [entry.entity] : []))}
         name={name}
         imageDataUrl={imageDataUrl}
         value={iconText}
@@ -192,6 +193,8 @@ export function PersonForm({ initial, onDone, actions }: FormProps<Person>) {
 type IconTextFieldProps = {
   /** 編集中の人物のIDです。新規登録では省略します。重なりの相手から自分自身を除くために使います。 */
   personId: Id | undefined;
+  /** メモのメンションから新しく作り、この人物と同時に保存する人物です。まだケースに無いため、別に渡します。 */
+  pendingPersons: Person[];
   /** 入力中の名前です。 */
   name: string;
   /** 入力中の画像です。画像があるとアイコンに文字を表示しないため、重なりを案内しません。 */
@@ -202,17 +205,18 @@ type IconTextFieldProps = {
 
 /**
  * 人物のアイコンの文字の入力欄です。
- * 入力中の名前・アイコンの文字から決まるアイコンの文字が、ケースの他の人物と重なる場合は、
+ * 入力中の名前・アイコンの文字から決まるアイコンの文字が、ケースの他の人物（同時に保存する人物を含む）と重なる場合は、
  * 重なる人物の名前と、重ならない文字の候補（押すとその文字を入れるボタン）を、欄の説明として示します。
+ * 案内は、入力中に現れたことが読み上げで伝わるよう、ライブリージョンの中に表示します。
  * 重なっていても保存はできます（見分けにくいだけで、データとしては誤りではないため）。
  */
-function IconTextField({ personId, name, imageDataUrl, value, onChange }: IconTextFieldProps) {
-  const persons = useCurrentCase().persons;
+function IconTextField({ personId, pendingPersons, name, imageDataUrl, value, onChange }: IconTextFieldProps) {
+  const savedPersons = useCurrentCase().persons;
   const noticeId = useId();
-  const iconText = firstCharacter(value);
-  const target = { id: personId, name, imageDataUrl, ...(iconText ? { iconText } : {}) };
-  const collisions = findIconTextCollisions(persons, target);
-  const otherPersons = persons.filter((person) => person.id !== personId);
+  const otherPersons = [...savedPersons, ...pendingPersons].filter((person) => person.id !== personId);
+  const typedIconText = firstCharacter(value);
+  const target = { name, imageDataUrl, ...(typedIconText ? { iconText: typedIconText } : {}) };
+  const collisions = findIconTextCollisions(otherPersons, target);
   const suggestions = collisions.length > 0 ? suggestIconTexts(name, otherPersons) : [];
 
   return (
@@ -224,32 +228,34 @@ function IconTextField({ personId, name, imageDataUrl, value, onChange }: IconTe
         placeholder="未入力の場合は名前の先頭の文字"
         describedBy={collisions.length > 0 ? noticeId : undefined}
       />
-      {collisions.length > 0 && (
-        <div className="grid gap-1.5">
-          <p id={noticeId} className="text-xs text-muted-foreground">
-            アイコンの文字「{iconText || firstCharacter(name)}」が、
-            {collisions.map((person) => person.name).join('・')}
-            と同じです。見分けられるよう、別の1文字を指定してください。
-          </p>
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">候補:</span>
-              {suggestions.map((suggestion) => (
-                <Button
-                  key={suggestion}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={`アイコンの文字を「${suggestion}」にする`}
-                  onClick={() => onChange(suggestion)}
-                >
-                  {suggestion}
-                </Button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <div aria-live="polite" className="grid gap-1.5 empty:hidden">
+        {collisions.length > 0 && (
+          <>
+            <p id={noticeId} className="text-xs text-muted-foreground">
+              アイコンの文字「{personIconText(target)}」が、
+              {collisions.map((person) => `「${person.name}」`).join('、')}
+              と同じです。見分けられるよう、別の1文字を指定してください。
+            </p>
+            {suggestions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">候補:</span>
+                {suggestions.map((suggestion) => (
+                  <Button
+                    key={suggestion}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`アイコンの文字を「${suggestion}」にする`}
+                    onClick={() => onChange(suggestion)}
+                  >
+                    {suggestion}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
