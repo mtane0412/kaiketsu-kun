@@ -6,7 +6,7 @@
  * 自動では判定しません。どちらの証言が正しいかも判定しません。
  *
  * 各行には、照合の種類・相手の証言へのリンク・相手の証言が載っている資料（ある場合）・理由（ある場合）を並べます。
- * 資料は、媒体・日付（転載なら原典の発行日）・資料の格の短い表示で示します（src/domain/interviews.ts の formatClaimSourceLabels）。
+ * 資料は、媒体・日付（転載なら原典の発行日）・資料の格の短い表示で示します（証言の表示 ClaimView の interviewSources）。
  * 同じ媒体が日によって違う内容を報じる場合に、どの資料どうしの照合かを、相手の証言を開かずに見比べられるようにするためです。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
  * 開いているタブ（tab）はリンク先のURLに引き継ぎます。
@@ -21,7 +21,6 @@
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
 import { buildClaimCrossChecks, type ClaimCrossCheckView } from '@/domain/cross-checks';
-import { formatClaimSourceLabels } from '@/domain/interviews';
 import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -86,7 +85,7 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
       ) : (
         <ul className="space-y-2">
           {crossChecks.map((view) => {
-            const sourceLabels = formatClaimSourceLabels(currentCase, view.other.claim);
+            const sourceLabels = view.other.interviewSources.map((source) => source.label);
             return (
               <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
                 <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
