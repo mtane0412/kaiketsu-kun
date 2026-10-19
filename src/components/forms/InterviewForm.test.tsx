@@ -148,6 +148,55 @@ describe('InterviewForm の入力', () => {
 
     expect(screen.getByLabelText('日時（任意）')).toHaveValue('1998-08-14');
   });
+
+  it('資料の格と、転載の原典（媒体・発行日・紙面）を入力して保存できる', async () => {
+    // 前提: 架空日報の朝刊の記事を、書籍の著者がブログに転載したものを資料として登録する
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '架空日報の記事の転載');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.selectOptions(screen.getByLabelText('聴取者または媒体（任意）'), '湖畔の夏 20年目の証言（架空の書籍）');
+    await user.selectOptions(screen.getByLabelText('資料の格（任意）'), '二次報道');
+    await user.selectOptions(screen.getByLabelText('原典の媒体（任意）'), '架空日報 朝刊');
+    await user.type(screen.getByLabelText('原典の発行日（任意）'), '1998年8月14日');
+    await user.type(screen.getByLabelText('紙面・版など（任意）'), '  朝刊 社会面 ');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(openedCase().interviews[0]).toEqual({
+      id: expect.any(String),
+      title: '架空日報の記事の転載',
+      interviewerPersonId: 'person-book',
+      grade: 'secondaryReport',
+      origin: { publisherPersonId: 'person-newspaper', publishedAt: '1998-08-14', citation: '朝刊 社会面' },
+    });
+  });
+
+  it('原典の発行日として解釈できない表記では、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '架空日報の記事の転載');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.type(screen.getByLabelText('原典の発行日（任意）'), '事件の翌週');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText(/原典の発行日を解釈できません/)).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('編集では、原典と格の入力済みの値を示し、原典の欄を空にして保存すると原典を持たない資料に戻す', async () => {
+    // 前提: 原典の紙面だけを入力した、格が「主要報道」の資料
+    const user = userEvent.setup();
+    const reprint: Interview = { id: 'interview-reprint', title: '架空日報の記事の転載', grade: 'majorReport', origin: { citation: '朝刊 社会面' } };
+    renderForm(reprint);
+
+    expect(screen.getByLabelText('資料の格（任意）')).toHaveDisplayValue('主要報道');
+    await user.clear(screen.getByLabelText('紙面・版など（任意）'));
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(openedCase().interviews[0]).toEqual({ id: 'interview-reprint', title: '架空日報の記事の転載', grade: 'majorReport' });
+  });
 });
 
 describe('InterviewForm の本文の取得', () => {

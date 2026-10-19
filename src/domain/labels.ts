@@ -9,6 +9,7 @@ import type {
   HypothesisAspect,
   HypothesisStanceChangeKind,
   HypothesisStatus,
+  InterviewGrade,
   PersonKind,
   TaskStatus,
 } from './types';
@@ -37,6 +38,19 @@ export const PERSON_KIND_LABELS: Record<PersonKind, string> = {
 export function personKindSuffixOf(kind: PersonKind): string {
   return kind === 'individual' ? '' : `（${PERSON_KIND_LABELS[kind]}）`;
 }
+
+/**
+ * 資料の格の表示名です。資料のフォーム・資料のカード・資料の短い表示で使います。
+ * 並びは選択肢の順（出来事に近く、検証を経た格から）を兼ねます。
+ */
+export const INTERVIEW_GRADE_LABELS: Record<InterviewGrade, string> = {
+  primary: '一次資料',
+  majorReport: '主要報道',
+  specialist: '専門資料',
+  secondaryReport: '二次報道',
+  sns: 'SNS',
+  unverified: '未確認',
+};
 
 /** 照合の種類の表示名です。照合の一覧と入力フォームで使います。 */
 export const CROSS_CHECK_KIND_LABELS: Record<CrossCheckKind, string> = {

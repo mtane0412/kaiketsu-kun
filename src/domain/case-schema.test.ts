@@ -628,6 +628,41 @@ describe('parseCase（聴取）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.at/);
   });
 
+  it('転載の原典（媒体・発行日・紙面）と資料の格を保持して受け付ける', () => {
+    // 前提: 書籍の著者が転載した、架空日報の朝刊の記事
+    const reprint = {
+      id: 'interview-reprint',
+      title: '架空日報の記事の転載',
+      interviewerPersonId: 'person-book',
+      at: '2018-05',
+      origin: { publisherPersonId: 'person-newspaper', publishedAt: '1998-08-14', citation: '朝刊 社会面' },
+      grade: 'secondaryReport',
+    };
+    const caseData = { ...caseWithInterviews, interviews: [bookInterview, reprint] };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([bookInterview, reprint]);
+  });
+
+  it('原典の媒体が存在しない人物の場合は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [bookInterview, { id: 'interview-reprint', origin: { publisherPersonId: 'person-gone' } }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない人物を参照しています: person-gone/);
+  });
+
+  it('原典の発行日が時刻参照の形式でない場合と、何も持たない原典は拒否する', () => {
+    const withBadDate = { ...caseWithInterviews, interviews: [bookInterview, { id: 'interview-reprint', origin: { publishedAt: '7月7日の朝刊' } }] };
+    const withEmptyOrigin = { ...caseWithInterviews, interviews: [bookInterview, { id: 'interview-reprint', origin: {} }] };
+
+    expect(() => parseCase(toJsonData(withBadDate))).toThrow(/interviews\.1\.origin\.publishedAt/);
+    expect(() => parseCase(toJsonData(withEmptyOrigin))).toThrow(/interviews\.1\.origin/);
+  });
+
+  it('定められていない資料の格は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, grade: '信頼できる' }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.grade/);
+  });
+
   it('どの人物の証言でも、聴取にひもづけられる（記事には何人もの発言が載るため）', () => {
     // 前提: 隣家の住人の証言を、書籍の取材にひもづける
     const caseData = {
