@@ -12,7 +12,7 @@ function makeWalkClaim(id: string, when?: TimeRef): Claim {
   const claim: Claim = {
     id,
     speaker: { kind: 'person', personIds: ['person-walker'] },
-    viaPersonIds: [],
+    sources: [],
     content: `${id}の内容`,
     mentionedPersonIds: [],
   };

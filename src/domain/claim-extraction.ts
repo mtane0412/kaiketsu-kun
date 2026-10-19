@@ -12,17 +12,22 @@
  *   正規化した完全一致で照らし合わせます（normalizeName）。一致しない名前は、新規作成の候補として示します。
  * - 日時は、本文のメンションと同じ表記（src/domain/date-input.ts の parseDateInput）で解釈します。
  *   解釈できない日時は時刻参照を持たせず、LLM が出した文字列（whenText）だけを参考として示します。
- * - 同じ聴取で書き起こし済みの引用（Claim.quote）と範囲が重なる候補は、捨てずに印（overlapsTranscribed）を付けます。
+ * - 同じ聴取で書き起こし済みの引用（この聴取の出典の ClaimSource.quote）と範囲が重なる候補は、捨てずに印（overlapsTranscribed）を付けます。
  *   同じ範囲から別の人物の発言を拾い直す場合もあるため、判断はユーザーに任せます。
+ * - 別の資料から登録済みの証言と同じ事柄を述べていそうな候補は、LLM にその証言のIDを示させます（sameClaimIds）。
+ *   LLM に渡す既存の証言は、本文に名前が出てくる人物・場所に触れる証言に絞ります（selectExistingClaimsForExtraction）。
+ *   ケースに無いIDは捨てます。同じ証言として出典を書き足すか、新しい証言にして照合でつなぐかは、ユーザーが決めます。
  *
  * 候補を証言の入力欄の初期値に直すとき（candidateToClaimDraft）は、聴取の媒体（聴取者）を発言者か経由に含めます
  * （記事の地の文は媒体の記述であり、記事に載った発言は媒体を通じて伝わったものであるためです）。
  */
 import { z } from 'zod';
 import { parseDateInput } from './date-input';
-import { dateMentionOf, type ClaimDraft, type DraftMention, type MentionKind } from './mention';
+import { buildTimeline, describeClaimAttribution } from './case-views';
+import { interviewIdsOf, sourceForInterview, viaPersonIdsOf } from './claim-sources';
+import { dateMentionOf, resolveContent, type ClaimDraft, type DraftMention, type MentionKind } from './mention';
 import { findQuoteRange, quoteSecondsAt, type TextRange } from './transcript';
-import type { Case, ClaimQuote, Id, Interview, TimeRef } from './types';
+import type { Case, Claim, ClaimQuote, Id, Interview, TimeRef } from './types';
 
 /**
  * LLM に出させる証言の候補1件の形式です。人物と場所は、IDではなく名前で受け取ります。
@@ -49,6 +54,9 @@ export const ExtractedClaimSchema = z.object({
   mentionedPersonNames: z
     .array(z.string())
     .describe('証言の内容の中で言及している人物・組織・物の名前（発言者と経由を除く）'),
+  sameClaimIds: z
+    .array(z.string())
+    .describe('「既存の証言」のうち、この候補と同じ事柄を述べていそうな証言のID。一覧にあるIDだけを使う。無ければ空配列'),
 });
 
 /** LLM に出させる抽出結果の形式です。 */
@@ -72,6 +80,11 @@ export type ClaimCandidate = {
   quote: ClaimQuote;
   /** 同じ聴取で書き起こし済みの引用と、範囲が重なるかどうかです。 */
   overlapsTranscribed: boolean;
+  /**
+   * LLM が「同じ事柄を述べていそう」と示した既存の証言のIDです。ケースに無いIDは捨て、重複は1つにまとめます。
+   * 同じ証言かどうか（出典を書き足すか、新しい証言にして照合でつなぐか）は、ユーザーが確かめて決めます。
+   */
+  sameClaimIds: Id[];
   /** 日時を本文のメンションと同じ表記で解釈できた場合の時刻参照です。 */
   when?: TimeRef;
   /** LLM が出した日時の文字列です。解釈できなかった場合に、参考として示します。 */
@@ -128,10 +141,12 @@ export function buildClaimCandidates(target: Case, interviewId: Id, extracted: E
   const persons = target.persons.map((person) => ({ id: person.id, name: person.name, keys: [person.name, ...(person.aliases ?? [])] }));
   const places = target.places.map((place) => ({ id: place.id, name: place.name, keys: [place.name] }));
   const transcribedRanges = target.claims.flatMap((claim) => {
-    if (claim.interviewId !== interviewId || claim.quote === undefined) return [];
-    const range = findQuoteRange(transcript, claim.quote.text);
+    const quote = sourceForInterview(claim, interviewId)?.quote;
+    if (quote === undefined) return [];
+    const range = findQuoteRange(transcript, quote.text);
     return range ? [range] : [];
   });
+  const claimIds = new Set(target.claims.map((claim) => claim.id));
 
   const candidates = extracted.flatMap((item, index): ClaimCandidate[] => {
     const range = findQuoteRange(transcript, item.quote);
@@ -145,6 +160,8 @@ export function buildClaimCandidates(target: Case, interviewId: Id, extracted: E
       content: item.content,
       quote: { text: item.quote, ...(seconds !== undefined && { seconds }) },
       overlapsTranscribed: transcribedRanges.some((transcribed) => overlaps(transcribed, range)),
+      // LLM の出力を裏付けなしに信用しないため、ケースに無い証言のIDは捨てる
+      sameClaimIds: [...new Set(item.sameClaimIds)].filter((claimId) => claimIds.has(claimId)),
       via: item.viaNames.map((name) => resolveName(name, persons)),
       mentioned: item.mentionedPersonNames.map((name) => resolveName(name, persons)),
     };
@@ -248,4 +265,64 @@ export function candidateToClaimDraft(
   };
   if (candidate.title) result.title = candidate.title;
   return result;
+}
+
+/** 抽出のときに LLM に渡す既存の証言の、上限の件数です（プロンプトが長くなりすぎないようにするため）。 */
+export const MAX_EXISTING_CLAIMS_FOR_EXTRACTION = 30;
+
+/** LLM に渡す既存の証言1件の要約の、上限の文字数です。 */
+export const MAX_EXISTING_CLAIM_SUMMARY_LENGTH = 300;
+
+/** 抽出のときに LLM に渡す既存の証言1件です。 */
+export type ExistingClaimForExtraction = {
+  id: Id;
+  /** 「発言者（経由）: 見出し — 本文」を1行にまとめた要約です。 */
+  summary: string;
+};
+
+/** 名前を本文から探すために、空白を除いて小文字にします（「山田 花子」と本文の「山田花子」を同じとみなすため）。 */
+function compactForSearch(text: string): string {
+  return text.replace(/\s+/g, '').toLowerCase();
+}
+
+/** 証言を、LLM に渡す1行の要約にします。改行は空白に置き換え、上限の文字数を超える分は省きます。 */
+function summarizeClaim(target: Case, claim: Claim): string {
+  const body = resolveContent(claim.content, target)
+    .map((segment) => (segment.type === 'mention' ? segment.label : segment.text))
+    .join('');
+  const text = `${describeClaimAttribution(target, claim)}: ${claim.title ? `${claim.title} — ` : ''}${body}`.replace(/\s+/g, ' ').trim();
+  return text.length > MAX_EXISTING_CLAIM_SUMMARY_LENGTH ? `${text.slice(0, MAX_EXISTING_CLAIM_SUMMARY_LENGTH)}…` : text;
+}
+
+/**
+ * 資料から証言を抽出するときに、「同じ事柄を述べていそうな既存の証言」を探させるため、LLM に渡す既存の証言を選びます。
+ *
+ * ケース全体の証言を渡すとプロンプトが長くなるため、抽出する本文 text に名前（人物は別名も含みます）が出てくる人物・場所に
+ * 触れている証言（発言者・経由・言及・場所）だけを選びます。本文に出てくる名前を多く含む証言から順に、
+ * 最大 MAX_EXISTING_CLAIMS_FOR_EXTRACTION 件を返します。同じ数の証言は、時系列ボードの並び順に並べます。
+ * この資料（interviewId）をすでに出典に持つ証言は返しません。同じ資料の中の重なりは、書き起こし済みの印（overlapsTranscribed）で示すためです。
+ */
+export function selectExistingClaimsForExtraction(target: Case, interviewId: Id, text: string): ExistingClaimForExtraction[] {
+  const searchText = compactForSearch(text);
+  const appears = (names: string[]) => names.some((name) => compactForSearch(name) !== '' && searchText.includes(compactForSearch(name)));
+  const appearingPersonIds = new Set(
+    target.persons.filter((person) => appears([person.name, ...(person.aliases ?? [])])).map((person) => person.id)
+  );
+  const appearingPlaceIds = new Set(target.places.filter((place) => appears([place.name])).map((place) => place.id));
+
+  const scored = buildTimeline(target).items.flatMap(({ view: { claim } }) => {
+    if (interviewIdsOf(claim).includes(interviewId)) return [];
+    const speakerIds = claim.speaker.kind === 'person' ? claim.speaker.personIds : [];
+    const personIds = new Set([...speakerIds, ...viaPersonIdsOf(claim), ...claim.mentionedPersonIds]);
+    const score =
+      [...personIds].filter((personId) => appearingPersonIds.has(personId)).length +
+      (claim.placeId !== undefined && appearingPlaceIds.has(claim.placeId) ? 1 : 0);
+    return score > 0 ? [{ claim, score }] : [];
+  });
+
+  return scored
+    // Array.prototype.sort は安定ソートのため、同じ数の証言は時系列ボードの並び順を保つ
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, MAX_EXISTING_CLAIMS_FOR_EXTRACTION)
+    .map(({ claim }) => ({ id: claim.id, summary: summarizeClaim(target, claim) }));
 }

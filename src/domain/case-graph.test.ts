@@ -54,7 +54,7 @@ describe('buildCaseGraph', () => {
         {
           id: 'claim-extortion',
           speaker: { kind: 'person', personIds: ['person-newspaper'] },
-          viaPersonIds: [],
+          sources: [],
           title: 'Zによる恐喝事件があった',
           content: 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。',
           mentionedPersonIds: [],
@@ -76,7 +76,7 @@ describe('buildCaseGraph', () => {
   });
 
   it('伝聞の経路を、証言から経由した人物へ、伝えた順につなぐ', () => {
-    // 前提: 防犯カメラの記録は、県警が発表し、架空日報が報じた（viaPersonIds: [県警, 架空日報]）
+    // 前提: 防犯カメラの記録は、県警が発表し、架空日報が報じた（出典の経由: [県警, 架空日報]）
     const graph = buildCaseGraph(sampleFictionalCase);
 
     expect(listEdgeKeys(graph, 'via')).toEqual([
@@ -87,11 +87,34 @@ describe('buildCaseGraph', () => {
     ]);
   });
 
+  it('出典ごとに経由が違う証言は、それぞれの経路をつなぎ、共通する区間のエッジは1本にする', () => {
+    // 前提: 防犯カメラの記録を、県警が発表し、架空日報と書籍がそれぞれ伝えた
+    const caseData: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-police-camera'
+          ? {
+              ...claim,
+              sources: [{ viaPersonIds: ['person-police', 'person-newspaper'] }, { viaPersonIds: ['person-police', 'person-book'] }],
+            }
+          : claim
+      ),
+    };
+
+    const viaEdges = listEdgeKeys(buildCaseGraph(caseData), 'via');
+
+    expect(viaEdges.filter((key) => key.startsWith('claim:claim-police-camera') || key.startsWith('person:person-police'))).toEqual([
+      'claim:claim-police-camera→person:person-police',
+      'person:person-police→person:person-newspaper',
+      'person:person-police→person:person-book',
+    ]);
+  });
+
   it('複数の証言が同じ伝聞の経路を通っても、エッジのIDは重複しない', () => {
     // 前提: 経由のエッジは人物と人物をつなぐため、元になった証言をIDに含めないと、同じ経路を通る証言同士でIDがぶつかる
     const caseData: Case = {
       ...sampleFictionalCase,
-      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, viaPersonIds: ['person-police', 'person-newspaper'] })),
+      claims: sampleFictionalCase.claims.map((claim) => ({ ...claim, sources: [{ viaPersonIds: ['person-police', 'person-newspaper'] }] })),
     };
 
     const graph = buildCaseGraph(caseData);

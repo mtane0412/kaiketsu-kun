@@ -25,6 +25,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { claimLabelOf, type ClaimView } from '@/domain/case-views';
+import { sourceForInterview } from '@/domain/claim-sources';
 import { buildTranscriptSegments, formatQuoteSeconds, isLongTranscript, quoteSecondsAt, splitTimestampLines } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
 import { Button } from '@/components/ui/button';
@@ -129,7 +130,11 @@ export function InterviewTranscript({
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [transcript]);
 
-  const quotedClaims = claims.flatMap((view) => (view.claim.quote ? [{ view, text: view.claim.quote.text }] : []));
+  const quotedClaims = claims.flatMap((view) => {
+    // 証言の出典のうち、この資料の出典の引用だけを本文で強調する（ほかの資料の引用は、この本文には無いため）
+    const quote = sourceForInterview(view.claim, interviewId)?.quote;
+    return quote ? [{ view, text: quote.text }] : [];
+  });
   const segments = buildTranscriptSegments(
     transcript,
     quotedClaims.map(({ view, text }) => ({ claimId: view.claim.id, text }))

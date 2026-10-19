@@ -38,10 +38,9 @@ const bookInterview: Interview = {
 const firstStatement: Claim = {
   id: 'claim-caretaker-first',
   speaker: { kind: 'person', personIds: ['person-caretaker'] },
-  viaPersonIds: ['person-police'],
   content: '見回りは夜10時ごろだった。',
   mentionedPersonIds: [],
-  interviewId: firstInterview.id,
+  sources: [{ interviewId: firstInterview.id, viaPersonIds: ['person-police'] }],
 };
 
 /** 登録順を日時の順と逆にし、2件の聴取のそれぞれに管理人の証言をひもづけたケースです。 */
@@ -50,7 +49,7 @@ const caseWithInterviews: Case = {
   interviews: [bookInterview, firstInterview],
   claims: [
     ...sampleFictionalCase.claims.map((claim) =>
-      claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+      claim.id === 'claim-caretaker' ? { ...claim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] } : claim
     ),
     firstStatement,
   ],
@@ -142,7 +141,7 @@ describe('InterviewSection', () => {
 
     expect(openedCase().claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      interviewId: firstInterview.id,
+      sources: [{ interviewId: firstInterview.id }],
     });
     expect(screen.queryByRole('region', { name: '資料の証言の書き足し' })).not.toBeInTheDocument();
   });
@@ -152,14 +151,13 @@ describe('InterviewSection', () => {
     const pressConference: Interview = { id: 'interview-press', title: '記者会見', at: '1998-08-14' };
     /** 記者会見での、管理人と隣家の住人の発言です。 */
     const pressStatements: Claim[] = [
-      { ...firstStatement, id: 'claim-press-caretaker', viaPersonIds: [], interviewId: pressConference.id },
+      { ...firstStatement, id: 'claim-press-caretaker', sources: [{ interviewId: pressConference.id, viaPersonIds: [] }] },
       {
         ...firstStatement,
         id: 'claim-press-neighbor',
         speaker: { kind: 'person', personIds: ['person-neighbor'] },
-        viaPersonIds: [],
         content: '夜9時に明かりが見えた。',
-        interviewId: pressConference.id,
+        sources: [{ interviewId: pressConference.id, viaPersonIds: [] }],
       },
     ];
 
@@ -190,7 +188,7 @@ describe('InterviewSection', () => {
 
       expect(openedCase().claims.at(-1)).toMatchObject({
         speaker: { kind: 'person', personIds: ['person-neighbor'] },
-        interviewId: pressConference.id,
+        sources: [{ interviewId: pressConference.id }],
       });
     });
   });
@@ -225,9 +223,8 @@ describe('InterviewSection', () => {
 
     expect(openedCase().claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      interviewId: firstInterview.id,
       content: 'あの夜は別荘が真っ暗でした',
-      quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 },
+      sources: [{ interviewId: firstInterview.id, quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 } }],
     });
   });
 
@@ -244,7 +241,9 @@ describe('InterviewSection', () => {
     openTestCase(
       withVideoInterview((claims) =>
         claims.map((claim) =>
-          claim.id === 'claim-caretaker' ? { ...claim, interviewId: firstInterview.id, quote: { text: '別荘が真っ暗でした' } } : claim
+          claim.id === 'claim-caretaker'
+            ? { ...claim, sources: [{ interviewId: firstInterview.id, viaPersonIds: ['person-book'], quote: { text: '別荘が真っ暗でした' } }] }
+            : claim
         )
       )
     );
@@ -287,7 +286,9 @@ describe('InterviewSection', () => {
         openTestCase({
           ...withTranscript(longTranscript),
           claims: caseWithInterviews.claims.map((claim) =>
-            claim.id === firstStatement.id ? { ...claim, quote: { text: '管理人の話の20段落目です。' } } : claim
+            claim.id === firstStatement.id
+              ? { ...claim, sources: [{ interviewId: firstInterview.id, viaPersonIds: ['person-police'], quote: { text: '管理人の話の20段落目です。' } }] }
+              : claim
           ),
         });
         const history = renderCaretakerStatementHistory();
@@ -356,6 +357,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     when: '1998年8月12日22時',
     placeName: '湖畔の別荘',
     mentionedPersonNames: ['見回りの同行者'],
+    sameClaimIds: [],
   };
   /** 引用が本文に無い（LLM がでっち上げた）候補です。 */
   const fabricatedCandidate = { ...caretakerCandidate, title: null, content: '鍵が壊れていた', quote: '玄関の鍵が壊れていた' };
@@ -491,10 +493,9 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     expect(saved).toMatchObject({
       title: '見回り',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      interviewId: firstInterview.id,
       when: '1998-08-12T22:00',
       placeId: 'place-villa',
-      quote: { text: '夜10時に見回りをしたが、別荘は真っ暗だった' },
+      sources: [{ interviewId: firstInterview.id, quote: { text: '夜10時に見回りをしたが、別荘は真っ暗だった' } }],
     });
     // 一致しなかった名前の人物は、証言とあわせて新規作成する
     expect(openedCase().persons.find((person) => person.name === '見回りの同行者')).toBeDefined();
@@ -524,7 +525,9 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     openTestCase({
       ...withArticleInterview(),
       claims: caseWithInterviews.claims.map((claim) =>
-        claim.id === 'claim-caretaker' ? { ...claim, interviewId: firstInterview.id, quote: { text: '別荘は真っ暗だった' } } : claim
+        claim.id === 'claim-caretaker'
+          ? { ...claim, sources: [{ interviewId: firstInterview.id, viaPersonIds: ['person-book'], quote: { text: '別荘は真っ暗だった' } }] }
+          : claim
       ),
     });
     renderCaretakerStatementHistory();
@@ -533,6 +536,96 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     const candidates = await sendWithApiKey(user, extraction);
 
     expect(within(candidates).getByRole('listitem')).toHaveTextContent('書き起こし済みの範囲と重なります');
+  });
+
+  describe('同じかもしれない既存の証言', () => {
+    /** 書籍に載った管理人の証言（claim-caretaker）と同じ事柄だと、LLM が示した候補です。 */
+    const sameAsBookCandidate = { ...caretakerCandidate, sameClaimIds: ['claim-caretaker', 'claim-made-up-by-llm'] };
+
+    it('抽出のリクエストに、本文に名前が出てくる人物に触れる既存の証言を含める', async () => {
+      const user = userEvent.setup();
+      const fetchSpy = mockExtractionApi(200, { claims: [] });
+      openTestCase(withArticleInterview());
+      renderCaretakerStatementHistory();
+
+      const extraction = await openExtraction(user);
+      await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+      await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+      await within(extraction).findByText('証言の候補は見つかりませんでした。');
+
+      const [, init] = extractionCalls(fetchSpy)[0] ?? [];
+      const body = JSON.parse(String(init?.body));
+      // 前提: 本文には「管理人」と「別荘の持ち主」の名前が出てくる。この資料をすでに出典に持つ証言（初回の聴取の証言）は含めない
+      expect(body.existingClaims.map((claim: { id: string }) => claim.id)).toContain('claim-caretaker');
+      expect(body.existingClaims.map((claim: { id: string }) => claim.id)).not.toContain(firstStatement.id);
+    });
+
+    it('候補に、同じかもしれない既存の証言を示し、ケースに無いIDは示さない', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [sameAsBookCandidate] });
+      openTestCase(withArticleInterview());
+      renderCaretakerStatementHistory();
+
+      const candidates = await sendWithApiKey(user, await openExtraction(user));
+
+      const sameClaims = within(candidates).getByRole('list', { name: '同じかもしれない既存の証言' });
+      expect(within(sameClaims).getAllByRole('listitem')).toHaveLength(1);
+      expect(sameClaims).toHaveTextContent('管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
+    });
+
+    it('「この証言に出典を書き足す」を押すと、新しい証言を作らずに、既存の証言にこの資料・経由・引用を書き足す', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [sameAsBookCandidate] });
+      openTestCase(withArticleInterview());
+      renderCaretakerStatementHistory();
+      const claimCount = openedCase().claims.length;
+
+      const extraction = await openExtraction(user);
+      const candidates = await sendWithApiKey(user, extraction);
+      await user.click(within(candidates).getByRole('button', { name: /^この証言に出典を書き足す/ }));
+
+      expect(openedCase().claims).toHaveLength(claimCount);
+      // 検証: 資料の媒体（県警）を経由にした出典を、書籍の出典の後ろに書き足す
+      expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources).toEqual([
+        { interviewId: bookInterview.id, viaPersonIds: ['person-book'] },
+        { interviewId: firstInterview.id, viaPersonIds: ['person-police'], quote: { text: '夜10時に見回りをしたが、別荘は真っ暗だった' } },
+      ]);
+      expect(extraction).toHaveTextContent('候補をすべて確かめました');
+    });
+
+    it('この資料をすでに出典に持つ既存の証言には、出典を書き足すボタンを置かない', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [{ ...caretakerCandidate, sameClaimIds: [firstStatement.id] }] });
+      openTestCase(withArticleInterview());
+      renderCaretakerStatementHistory();
+
+      const candidates = await sendWithApiKey(user, await openExtraction(user));
+
+      const sameClaims = within(candidates).getByRole('list', { name: '同じかもしれない既存の証言' });
+      expect(within(sameClaims).queryByRole('button', { name: /^この証言に出典を書き足す/ })).not.toBeInTheDocument();
+      expect(sameClaims).toHaveTextContent('この資料をすでに出典に持っています');
+    });
+
+    it('新しい証言として採用するときに、既存の証言との照合を選んで、証言とあわせて保存できる', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [sameAsBookCandidate] });
+      openTestCase(withArticleInterview());
+      renderCaretakerStatementHistory();
+
+      const candidates = await sendWithApiKey(user, await openExtraction(user));
+      await user.click(within(candidates).getByRole('button', { name: '採用' }));
+      const composer = within(candidates).getByRole('region', { name: '候補からの証言の書き足し' });
+      // 既定は「照合を作らない」。ユーザーが選んだ場合だけ照合を作る
+      const crossCheckSelect = within(composer).getByLabelText(/との照合$/);
+      expect(crossCheckSelect).toHaveValue('');
+      await user.selectOptions(crossCheckSelect, '食い違う');
+      await user.click(within(composer).getByRole('button', { name: '書き足す' }));
+
+      const saved = openedCase().claims.at(-1);
+      expect(openedCase().crossChecks).toContainEqual(
+        expect.objectContaining({ kind: 'contradicts', claimIds: [saved?.id, 'claim-caretaker'] })
+      );
+    });
   });
 
   it('抽出に失敗した場合は、理由を示し、ケースを変えない', async () => {

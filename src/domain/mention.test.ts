@@ -112,7 +112,7 @@ describe('日時のメンション', () => {
     const claimWithDateTimeInput: Claim = {
       id: 'claim-legacy-when',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      viaPersonIds: [],
+      sources: [],
       content: '見回りをしたとき、別荘は真っ暗だった。',
       mentionedPersonIds: [],
       when: '1998-08-12T19:00',
@@ -211,7 +211,7 @@ describe('claimToDraft', () => {
     const legacyClaim: Claim = {
       id: 'claim-legacy',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       content: '庭に持ち主の姿が見えた。',
       mentionedPersonIds: ['person-owner'],
       placeId: 'place-villa',

@@ -270,7 +270,9 @@ function caseWithQuote(quoteText: string, interview: Interview = videoInterview)
     ...sampleFictionalCase,
     interviews: [interview],
     claims: sampleFictionalCase.claims.map((claim) =>
-      claim.id === 'claim-caretaker' ? { ...claim, interviewId: interview.id, quote: { text: quoteText, seconds: 754 } } : claim
+      claim.id === 'claim-caretaker'
+        ? { ...claim, sources: [{ interviewId: interview.id, viaPersonIds: ['person-book'], quote: { text: quoteText, seconds: 754 } }] }
+        : claim
     ),
   };
 }
@@ -339,13 +341,36 @@ describe('ClaimDetail（引用）', () => {
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
-    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.quote).toEqual({
+    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]?.quote).toEqual({
       text: 'あの夜は別荘が真っ暗でした',
       seconds: 754,
     });
 
     await user.click(screen.getByRole('button', { name: '引用を外す' }));
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
-    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')).not.toHaveProperty('quote');
+    expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]).not.toHaveProperty('quote');
+  });
+
+  it('複数の出典に引用がある場合は、資料ごとに資料の名前を添えて引用を並べる', () => {
+    // 前提: 管理人の同じ発言が、動画と新聞の記事の両方に載っている
+    const newspaperInterview: Interview = { id: 'interview-newspaper', title: '架空日報の記事', transcript: '管理人は「別荘は真っ暗だった」と語った。' };
+    const base = caseWithQuote('あの夜は別荘が真っ暗でした');
+    openTestCase({
+      ...base,
+      interviews: [...base.interviews, newspaperInterview],
+      claims: base.claims.map((claim) =>
+        claim.id === 'claim-caretaker'
+          ? { ...claim, sources: [...claim.sources, { interviewId: newspaperInterview.id, viaPersonIds: ['person-newspaper'], quote: { text: '別荘は真っ暗だった' } }] }
+          : claim
+      ),
+    });
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    const quoteSection = screen.getByRole('region', { name: '引用' });
+    const videoQuote = within(quoteSection).getByRole('group', { name: '管理人へのインタビュー の引用' });
+    const newspaperQuote = within(quoteSection).getByRole('group', { name: '架空日報の記事 の引用' });
+    expect(within(videoQuote).getByRole('blockquote')).toHaveTextContent('あの夜は別荘が真っ暗でした');
+    expect(within(newspaperQuote).getByRole('blockquote')).toHaveTextContent('別荘は真っ暗だった');
+    expect(within(quoteSection).queryByText(/本文に見つかりません/)).not.toBeInTheDocument();
   });
 });

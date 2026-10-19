@@ -6,7 +6,9 @@ import {
   buildClaimCandidates,
   candidateToClaimDraft,
   ExtractionResultSchema,
+  MAX_EXISTING_CLAIMS_FOR_EXTRACTION,
   normalizeName,
+  selectExistingClaimsForExtraction,
   type ExtractedClaim,
 } from './claim-extraction';
 import type { Case, Claim, Interview } from './types';
@@ -53,6 +55,7 @@ function extracted(overrides: Partial<ExtractedClaim>): ExtractedClaim {
     when: null,
     placeName: null,
     mentionedPersonNames: [],
+    sameClaimIds: [],
     ...overrides,
   };
 }
@@ -141,11 +144,9 @@ describe('buildClaimCandidates', () => {
     const transcribed: Claim = {
       id: 'claim-transcribed',
       speaker: { kind: 'person', personIds: ['person-hanako'] },
-      viaPersonIds: ['person-newspaper'],
       content: '黒い車を見た',
       mentionedPersonIds: [],
-      interviewId: 'interview-article',
-      quote: { text: '「庭に黒い車が' },
+      sources: [{ interviewId: 'interview-article', viaPersonIds: ['person-newspaper'], quote: { text: '「庭に黒い車が' } }],
     };
     const { candidates } = buildClaimCandidates(createCase({ claims: [transcribed] }), 'interview-article', [
       extracted({ quote: '庭に黒い車が止まっていた' }),
@@ -153,6 +154,44 @@ describe('buildClaimCandidates', () => {
     ]);
 
     expect(candidates.map((candidate) => candidate.overlapsTranscribed)).toEqual([true, false]);
+  });
+
+  it('2つ目以降の出典でこの資料を引用した証言とも、範囲の重なりを照らし合わせる', () => {
+    const transcribed: Claim = {
+      id: 'claim-transcribed',
+      speaker: { kind: 'person', personIds: ['person-hanako'] },
+      content: '黒い車を見た',
+      mentionedPersonIds: [],
+      sources: [
+        { interviewId: 'interview-other', viaPersonIds: [] },
+        { interviewId: 'interview-article', viaPersonIds: ['person-newspaper'], quote: { text: '庭に黒い車が' } },
+      ],
+    };
+    const target = createCase({ claims: [transcribed] });
+    const { candidates } = buildClaimCandidates(
+      { ...target, interviews: [...target.interviews, { id: 'interview-other' }] },
+      'interview-article',
+      [extracted({ quote: '庭に黒い車が止まっていた' })]
+    );
+
+    expect(candidates[0]?.overlapsTranscribed).toBe(true);
+  });
+
+  it('LLM が示した「同じかもしれない既存の証言」のうち、ケースにある証言だけを候補に持たせる', () => {
+    // 前提: 別の新聞の記事から、山田花子さんの同じ話をすでに登録している
+    const registered: Claim = {
+      id: 'claim-hanako-other-paper',
+      speaker: { kind: 'person', personIds: ['person-hanako'] },
+      content: '庭に黒い車が止まっていた',
+      mentionedPersonIds: [],
+      sources: [],
+    };
+    const { candidates } = buildClaimCandidates(createCase({ claims: [registered] }), 'interview-article', [
+      extracted({ sameClaimIds: ['claim-hanako-other-paper', 'claim-made-up-by-llm', 'claim-hanako-other-paper'] }),
+    ]);
+
+    // 検証: LLM がでっち上げたIDは捨て、重複したIDは1つにまとめる
+    expect(candidates[0]?.sameClaimIds).toEqual(['claim-hanako-other-paper']);
   });
 
   it('本文の無い聴取は照らし合わせられないため、エラーにする', () => {
@@ -268,5 +307,60 @@ describe('candidateToClaimDraft', () => {
 
     expect(candidateToClaimDraft(target, 'interview-article', titled!, sequentialIds()).title).toBe('黒い車の目撃');
     expect(candidateToClaimDraft(target, 'interview-article', untitled!, sequentialIds()).title).toBeUndefined();
+  });
+});
+
+describe('selectExistingClaimsForExtraction', () => {
+  /** 山田花子さんの話を、別の新聞から登録した証言です。 */
+  const hanakoClaim: Claim = {
+    id: 'claim-hanako',
+    speaker: { kind: 'person', personIds: ['person-hanako'] },
+    title: '黒い車',
+    content: '@[湖畔の別荘](place:place-villa)の庭に黒い車が止まっていた\n（2行目）',
+    mentionedPersonIds: [],
+    placeId: 'place-villa',
+    sources: [{ viaPersonIds: ['person-newspaper'] }],
+  };
+  /** 本文に名前の出てこない人物・場所だけに触れる証言です。 */
+  const unrelatedClaim: Claim = {
+    id: 'claim-unrelated',
+    speaker: { kind: 'person', personIds: ['person-unrelated'] },
+    content: '湖の水位は例年どおりだった',
+    mentionedPersonIds: [],
+    sources: [],
+  };
+
+  /** 本文に名前の出てこない人物を加えたケースです。 */
+  function caseWith(claims: Claim[]): Case {
+    const target = createCase({ claims });
+    return { ...target, persons: [...target.persons, { id: 'person-unrelated', name: '湖の管理事務所', kind: 'organization' }] };
+  }
+
+  it('本文に名前（別名を含む）が出てくる人物・場所に触れる証言だけを、発言者・経由・内容の要約とともに返す', () => {
+    const result = selectExistingClaimsForExtraction(caseWith([hanakoClaim, unrelatedClaim]), 'interview-article', articleTranscript);
+
+    // 検証: 要約は改行を含めず、発言者と経由・見出し・本文を1行にまとめる
+    expect(result).toEqual([{ id: 'claim-hanako', summary: '山田 花子（湖畔新聞 による）: 黒い車 — 湖畔の別荘の庭に黒い車が止まっていた （2行目）' }]);
+  });
+
+  it('この資料をすでに出典に持つ証言は返さない（同じ資料の重なりは、書き起こし済みの印で示すため）', () => {
+    const sameInterview: Claim = { ...hanakoClaim, sources: [{ interviewId: 'interview-article', viaPersonIds: ['person-newspaper'] }] };
+
+    expect(selectExistingClaimsForExtraction(caseWith([sameInterview]), 'interview-article', articleTranscript)).toEqual([]);
+  });
+
+  it(`多くの証言が当てはまる場合は、本文に出てくる名前を多く含む順に、最大 ${MAX_EXISTING_CLAIMS_FOR_EXTRACTION} 件までにする`, () => {
+    const manyClaims: Claim[] = Array.from({ length: MAX_EXISTING_CLAIMS_FOR_EXTRACTION }, (_, index) => ({
+      ...hanakoClaim,
+      id: `claim-hanako-${index}`,
+      placeId: undefined,
+      content: `山田花子さんの話（${index + 1}件目）`,
+    }));
+    const policeAndHanako: Claim = { ...hanakoClaim, id: 'claim-police-and-hanako', mentionedPersonIds: ['person-police'] };
+
+    const result = selectExistingClaimsForExtraction(caseWith([...manyClaims, policeAndHanako]), 'interview-article', articleTranscript);
+
+    expect(result).toHaveLength(MAX_EXISTING_CLAIMS_FOR_EXTRACTION);
+    expect(result[0]?.id).toBe('claim-police-and-hanako');
   });
 });

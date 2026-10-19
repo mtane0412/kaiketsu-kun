@@ -73,7 +73,7 @@ function makeClaimMentioningOwner(id: string, fields: Partial<Claim>): Claim {
   return {
     id,
     speaker: { kind: 'person', personIds: ['person-neighbor'] },
-    viaPersonIds: [],
+    sources: [],
     content: `${id}の本文`,
     mentionedPersonIds: ['person-owner'],
     ...fields,
@@ -105,7 +105,7 @@ const travelCheckCase: Case = {
     {
       id: 'claim-via-owner',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-owner'],
+      sources: [{ viaPersonIds: ['person-owner'] }],
       content: '持ち主を経由した証言',
       mentionedPersonIds: [],
       when: '2026-09-28T19:05',
@@ -115,7 +115,7 @@ const travelCheckCase: Case = {
     {
       id: 'claim-owner-speaks',
       speaker: { kind: 'person', personIds: ['person-owner'] },
-      viaPersonIds: [],
+      sources: [],
       content: '持ち主の発言',
       mentionedPersonIds: [],
       when: '2026-09-28T21:00',

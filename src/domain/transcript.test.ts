@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { sampleFictionalCase } from './sample-fictional-case';
 import {
   buildTranscriptSegments,
-  checkClaimQuote,
+  checkSourceQuote,
   findQuoteRange,
   formatQuoteSeconds,
   isHttpUrl,
@@ -19,7 +19,7 @@ import {
   youtubeEmbedUrl,
   youtubeUrlAt,
 } from './transcript';
-import type { Case, Claim, Interview } from './types';
+import type { Case, Claim, ClaimSource, Interview } from './types';
 
 /** YouTube の「文字起こしを表示」からコピーした形式（時刻の行と文の行が交互に並ぶ）の本文です。 */
 const youtubeTranscript = ['0:00', 'こんばんは、管理人です', '0:05', 'あの夜は別荘が真っ暗でした', '1:02:03', '車もありませんでした'].join('\n');
@@ -208,7 +208,7 @@ describe('youtubeEmbedUrl', () => {
   });
 });
 
-describe('checkClaimQuote', () => {
+describe('checkSourceQuote', () => {
   /** 管理人へのインタビュー動画の聴取です（文字起こしを貼り付けています）。 */
   const videoInterview: Interview = {
     id: 'interview-video',
@@ -227,19 +227,19 @@ describe('checkClaimQuote', () => {
   });
 
   it('引用の原文が、ひもづけた聴取の本文にある場合は found を返す', () => {
-    const claim: Claim = { ...baseClaim, interviewId: videoInterview.id, quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } };
-    expect(checkClaimQuote(caseWith(claim), claim)).toBe('found');
+    const source: ClaimSource = { interviewId: videoInterview.id, viaPersonIds: [], quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } };
+    expect(checkSourceQuote(caseWith({ ...baseClaim, sources: [source] }), source)).toBe('found');
   });
 
   it('本文をあとから書き換えて、引用の原文が見つからない場合は notFound を返す', () => {
-    const claim: Claim = { ...baseClaim, interviewId: videoInterview.id, quote: { text: 'あの夜は明かりがついていました' } };
-    expect(checkClaimQuote(caseWith(claim), claim)).toBe('notFound');
+    const source: ClaimSource = { interviewId: videoInterview.id, viaPersonIds: [], quote: { text: 'あの夜は明かりがついていました' } };
+    expect(checkSourceQuote(caseWith({ ...baseClaim, sources: [source] }), source)).toBe('notFound');
   });
 
   it('聴取にひもづけていないか、聴取に本文が無い場合は、照合できないことを示す noTranscript を返す', () => {
-    const withoutInterview: Claim = { ...baseClaim, interviewId: undefined, quote: { text: 'あの夜は別荘が真っ暗でした' } };
-    const withBlankInterview: Claim = { ...baseClaim, interviewId: blankInterview.id, quote: { text: 'あの夜は別荘が真っ暗でした' } };
-    expect(checkClaimQuote(caseWith(withoutInterview), withoutInterview)).toBe('noTranscript');
-    expect(checkClaimQuote(caseWith(withBlankInterview), withBlankInterview)).toBe('noTranscript');
+    const withoutInterview: ClaimSource = { viaPersonIds: [], quote: { text: 'あの夜は別荘が真っ暗でした' } };
+    const withBlankInterview: ClaimSource = { interviewId: blankInterview.id, viaPersonIds: [], quote: { text: 'あの夜は別荘が真っ暗でした' } };
+    expect(checkSourceQuote(caseWith({ ...baseClaim, sources: [withoutInterview] }), withoutInterview)).toBe('noTranscript');
+    expect(checkSourceQuote(caseWith({ ...baseClaim, sources: [withBlankInterview] }), withBlankInterview)).toBe('noTranscript');
   });
 });

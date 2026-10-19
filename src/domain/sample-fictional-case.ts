@@ -7,7 +7,7 @@
  * - 報道の地の文を、媒体（新聞）の発言として扱えること
  * - ユーザーの推測を人物の発言と区別し、関係の根拠として参照できること
  * - 組織（県警）・記録装置（防犯カメラ）・媒体（新聞、書籍）を、人物と同じく発言しうる主体として扱えること
- * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、経由（viaPersonIds）で表せること
+ * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、出典の経由（ClaimSource.viaPersonIds）で表せること
  *
  * 証言の本文（content）は、人物・場所・日時への参照を `@[表示名](種類:ID)` の形式で含みます。
  * 各証言の placeId・mentionedPersonIds・when は、本文からの導出結果（src/domain/mention.ts）と一致させています。
@@ -31,7 +31,7 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-report',
       speaker: { kind: 'person', personIds: ['person-newspaper'] },
-      viaPersonIds: [],
+      sources: [],
       locator: '社会面',
       content: '@[別荘の持ち主](person:person-owner)は12日夜から連絡が取れなくなっている。',
       mentionedPersonIds: ['person-owner'],
@@ -39,7 +39,7 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-neighbor',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       locator: '社会面',
       content:
         '@[1998年8月12日 21:00](date:1998-08-12T21:00)ごろ、@[湖畔の別荘](place:place-villa)の明かりがついていて、庭に@[別荘の持ち主](person:person-owner)の姿が見えた。',
@@ -50,7 +50,7 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-caretaker',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      viaPersonIds: ['person-book'],
+      sources: [{ viaPersonIds: ['person-book'] }],
       locator: '第3章 112ページ',
       content:
         '@[1998年8月12日 19:00](date:1998-08-12T19:00)に見回りをしたとき、@[湖畔の別荘](place:place-villa)はすでに真っ暗で、@[別荘の持ち主](person:person-owner)の車も無かった。',
@@ -61,7 +61,7 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-police-camera',
       speaker: { kind: 'person', personIds: ['person-road-camera'] },
-      viaPersonIds: ['person-police', 'person-newspaper'],
+      sources: [{ viaPersonIds: ['person-police', 'person-newspaper'] }],
       locator: '社会面',
       content:
         '@[1998年8月12日 20:10](date:1998-08-12T20:10)ごろ、@[別荘の持ち主](person:person-owner)の車が別荘の方向へ走る様子が映っていた。',
@@ -71,7 +71,7 @@ export const sampleFictionalCase: Case = {
     {
       id: 'claim-user-guess',
       speaker: { kind: 'user' },
-      viaPersonIds: [],
+      sources: [],
       content: 
         '@[管理人](person:person-caretaker)の証言は事件の20年後に初めて出たもので、@[隣家の住人](person:person-neighbor)の証言と2時間食い違う。管理人と@[別荘の持ち主](person:person-owner)の間に金銭の問題があった可能性を調べたい。',
       mentionedPersonIds: ['person-caretaker', 'person-neighbor', 'person-owner'],

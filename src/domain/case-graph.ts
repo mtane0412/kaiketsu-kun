@@ -6,7 +6,7 @@
  * エッジは次の4種類です。前の3種類は証言（Claim）から導出し、関係（relates）だけは人物どうしの関係（Relationship）から作ります。
  *
  * - 発言（speaks）: 発言者の人物 → 証言。ユーザーの推測は、ユーザーのノード（USER_GRAPH_NODE_ID）から張ります
- * - 経由（via）: 証言 → 最初に伝えた人物 → 次に伝えた人物…（Claim.viaPersonIds の順）。伝聞が伝わってきた向きに張ります
+ * - 経由（via）: 証言 → 最初に伝えた人物 → 次に伝えた人物…（出典（ClaimSource.viaPersonIds）ごとに伝えた順）。伝聞が伝わってきた向きに張ります
  * - 言及（mentions）: 証言 → その証言が言及している人物
  * - 関係（relates）: 人物 → 人物（Relationship.fromPersonId → toPersonId）。ユーザーが証言から導いた結論です
  *
@@ -21,6 +21,7 @@
  * 並びを決めておくのは、レイアウト（src/lib/graph-layout.ts）の結果を、同じケースなら毎回同じにするためです。
  * このビューも他のビューと同じく一次データから毎回計算する派生物であり、保存しません。
  */
+import { viaChainsOf } from './claim-sources';
 import { buildTimeline, claimLabelOf, USER_SPEAKER_LABEL } from './case-views';
 import { personIconText } from './person-icon';
 import type { RelationshipPeriod } from './relationship-period';
@@ -166,9 +167,17 @@ export function buildCaseGraph(target: Case): CaseGraph {
         ? view.claim.speaker.personIds.map(personNodeId)
         : [USER_GRAPH_NODE_ID];
 
-    // 伝聞の経路は、証言を起点に、伝えた順の人物を数珠つなぎにする
-    const viaNodeIds = view.claim.viaPersonIds.map(personNodeId);
-    const viaEdges = viaNodeIds.map((nodeId, index) => edgeOf('via', claimId, viaNodeIds[index - 1] ?? claimId, nodeId));
+    // 伝聞の経路は、出典ごとに、証言を起点に伝えた順の人物を数珠つなぎにする。
+    // 出典どうしで共通する区間（同じ県警の発表を2紙が報じた場合の「証言→県警」など）は、1本のエッジにまとめる
+    const viaEdgesById = new Map<string, GraphEdge>();
+    for (const chain of viaChainsOf(view.claim)) {
+      const viaNodeIds = chain.map(personNodeId);
+      viaNodeIds.forEach((nodeId, index) => {
+        const edge = edgeOf('via', claimId, viaNodeIds[index - 1] ?? claimId, nodeId);
+        viaEdgesById.set(edge.id, edge);
+      });
+    }
+    const viaEdges = [...viaEdgesById.values()];
 
     return [
       ...speakerIds.map((speakerId) => edgeOf('speaks', claimId, speakerId, claimId)),

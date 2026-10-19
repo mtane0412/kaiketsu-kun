@@ -12,7 +12,7 @@
  *    - 証言の言及・場所・日時が、本文のメンションから導いたもの（deriveClaimLinks）と食い違う
  *    - 時系列の並び順（timelineOrder）に、証言が過不足なく1回ずつ載っていない
  *    - 時系列の並び順が、証言の日時と矛盾する（src/domain/timeline-order.ts の矛盾の定義）
- *    - 証言の引用が、ひもづけた資料の本文に一字一句含まれていない（checkClaimQuote）。
+ *    - 証言の引用が、出典の資料の本文に一字一句含まれていない（checkSourceQuote）。
  *      アプリは本文の書き換えに備えて受け付けますが、新しく作るデータでは、原文に裏付けられない引用になるためです。
  *
  * 注意: 内容の正しさ（証言が資料に基づくかどうか）は確かめません。
@@ -21,7 +21,7 @@ import { parseCase } from '@/domain/case-schema';
 import { deriveClaimLinks } from '@/domain/mention';
 import { toInterval } from '@/domain/time-ref';
 import { timelineKeyOf } from '@/domain/timeline-order';
-import { checkClaimQuote } from '@/domain/transcript';
+import { checkSourceQuote } from '@/domain/transcript';
 import type { Case } from '@/domain/types';
 
 /** 検証の結果です。受け付けた場合は件数の要約を、受け付けない場合は誤りの一覧を持ちます。 */
@@ -116,19 +116,22 @@ function findLinkMismatches(target: Case): string[] {
   });
 }
 
-/** 引用が、ひもづけた資料の本文に一字一句含まれていない証言を列挙します。 */
+/** 引用が、出典の資料の本文に一字一句含まれていない証言を、出典ごとに列挙します。 */
 function findUnbackedQuotes(target: Case): string[] {
-  return target.claims.flatMap((claim) => {
-    if (claim.quote === undefined) return [];
-    switch (checkClaimQuote(target, claim)) {
-      case 'found':
-        return [];
-      case 'notFound':
-        return [`${claim.id}: 引用が資料の本文に一字一句含まれていません`];
-      case 'noTranscript':
-        return [`${claim.id}: 引用を持ちますが、本文を持つ資料にひもづいていません`];
-    }
-  });
+  return target.claims.flatMap((claim) =>
+    claim.sources.flatMap((source) => {
+      if (source.quote === undefined) return [];
+      const interviewLabel = source.interviewId ?? '資料なし';
+      switch (checkSourceQuote(target, source)) {
+        case 'found':
+          return [];
+        case 'notFound':
+          return [`${claim.id}: 引用が資料（${interviewLabel}）の本文に一字一句含まれていません`];
+        case 'noTranscript':
+          return [`${claim.id}: 引用を持ちますが、本文を持つ資料にひもづいていません（${interviewLabel}）`];
+      }
+    })
+  );
 }
 
 /** 時系列の並び順の過不足と、日時との矛盾を列挙します。 */

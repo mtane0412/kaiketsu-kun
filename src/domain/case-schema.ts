@@ -13,6 +13,7 @@
  * 日時を区間で持っていた頃のデータは、最も早い時点だけを日時として引き継ぎます（migrateLegacyTimeRef）。
  * 証言が述べられた時点（statedAt）を持っていた頃のデータは、その時点を取り除きます（未知のキーとして捨てます）。
  * 聴取（interviews）を持たない頃のデータは、聴取を空として補います。
+ * 証言が資料・引用・経由を1つずつ持っていた頃のデータは、それらを出典（Claim.sources）に移します（migrateLegacyClaimSources）。
  * 資料（聴取）の相手を持っていた頃のデータは、相手を取り除き、タイトルの無い資料は相手の名前をタイトルにします。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
@@ -29,9 +30,20 @@ import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
 import { settleTimelineItems } from './timeline-order';
-import type { Case, Id, Interview, Person, Speaker } from './types';
+import { interviewIdsOf } from './claim-sources';
+import type { Case, ClaimSource, Id, Interview, Person, Speaker } from './types';
 
 const idSchema = z.string().min(1);
+
+/**
+ * 証言の引用です。
+ * 引用の原文が聴取の本文に見つからなくても拒否しない（本文をあとから書き換えた場合に、ケースを開けなくしないため。
+ * 見つからないことは、証言の詳細に示す。src/domain/transcript.ts の checkClaimQuote）
+ */
+const claimQuoteSchema = z.object({
+  text: z.string().min(1, '引用の原文を指定しない場合は、項目ごと省略してください'),
+  seconds: z.number().int().nonnegative().optional(),
+});
 
 /** 未了事項の期限の形（年月日。入力欄 type="date" の値と同じ形）です。 */
 const TASK_DUE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -148,7 +160,7 @@ const caseSchema = z.object({
     z.object({
       id: idSchema,
       speaker: speakerSchema,
-      // ソースを人物に統合する前のデータは viaPersonIds を持たず、sourceId を持ちます
+      // 出典を持たない頃のデータは、証言そのものに経由を持ちます。ソースを人物に統合する前のデータは viaPersonIds を持たず、sourceId を持ちます
       viaPersonIds: z.array(idSchema).optional(),
       sourceId: idSchema.optional(),
       locator: z.string().optional(),
@@ -159,14 +171,18 @@ const caseSchema = z.object({
       mentionedPersonIds: z.array(idSchema),
       when: timeRefSchema.optional(),
       placeId: idSchema.optional(),
+      // 出典を持たない頃のデータは、証言そのものに資料・引用を1つずつ持ちます（migrateLegacyClaimSources で出典に移します）
       interviewId: idSchema.optional(),
-      // 引用の原文が聴取の本文に見つからなくても拒否しない（本文をあとから書き換えた場合に、ケースを開けなくしないため。
-      // 見つからないことは、証言の詳細に示す。src/domain/transcript.ts の checkClaimQuote）
-      quote: z
-        .object({
-          text: z.string().min(1, '引用の原文を指定しない場合は、項目ごと省略してください'),
-          seconds: z.number().int().nonnegative().optional(),
-        })
+      quote: claimQuoteSchema.optional(),
+      // 出典を持たない頃のデータは持ちません
+      sources: z
+        .array(
+          z.object({
+            interviewId: idSchema.optional(),
+            viaPersonIds: z.array(idSchema),
+            quote: claimQuoteSchema.optional(),
+          })
+        )
         .optional(),
     })
   ),
@@ -314,17 +330,27 @@ export function findCaseViolations(target: Case): string[] {
   }
   for (const claim of target.claims) {
     if (claim.speaker.kind === 'person') claim.speaker.personIds.forEach((id) => check(personIds, id, '人物'));
-    claim.viaPersonIds.forEach((id) => check(personIds, id, '人物'));
-    if (claim.speaker.kind === 'user' && claim.viaPersonIds.length > 0) {
+    for (const source of claim.sources) {
+      source.viaPersonIds.forEach((id) => check(personIds, id, '人物'));
+      if (source.interviewId !== undefined && !interviewsById.has(source.interviewId)) {
+        violations.push(`存在しない資料を参照しています: ${source.interviewId}`);
+      }
+      if (source.interviewId === undefined && source.viaPersonIds.length === 0 && source.quote === undefined) {
+        violations.push(`資料・経由・引用のどれも持たない出典があります: ${claim.id}`);
+      }
+    }
+    if (claim.speaker.kind === 'user' && claim.sources.some((source) => source.viaPersonIds.length > 0)) {
       violations.push(`ユーザーの推測に経由は指定できません: ${claim.id}`);
+    }
+    // 同じ資料の出典が2つあると、資料の本文で引用を強調するときや、資料から証言を外すときに、どちらの出典か決められないため
+    const sourceInterviewIds = interviewIdsOf(claim);
+    if (new Set(sourceInterviewIds).size !== sourceInterviewIds.length) {
+      violations.push(`同じ資料を2つの出典で参照しています: ${claim.id}`);
     }
     check(placeIds, claim.placeId, '場所');
     claim.mentionedPersonIds.forEach((id) => check(personIds, id, '人物'));
     // 同じ種類の2つ目以降のメンションは上記の項目に現れないため、本文のトークンも検証する
     checkMentions(claim.content);
-    if (claim.interviewId !== undefined && !interviewsById.has(claim.interviewId)) {
-      violations.push(`存在しない資料を参照しています: ${claim.interviewId}`);
-    }
   }
   for (const interview of target.interviews) {
     check(personIds, interview.interviewerPersonId, '人物');
@@ -438,46 +464,76 @@ function migrateLegacySources(data: ParsedCase): { persons: Person[]; claims: Le
     return personId;
   };
 
-  const claims = data.claims.map(({ speaker: parsedSpeaker, sourceId, viaPersonIds, content: parsedContent, when, ...rest }): LegacyClaim => {
-    const sourcePersonId = sourceId === undefined ? undefined : personIdOf(sourceId);
+  const claims = data.claims.map(
+    ({ speaker: parsedSpeaker, sourceId, viaPersonIds, interviewId, quote, sources, content: parsedContent, when, ...rest }): LegacyClaim => {
+      const sourcePersonId = sourceId === undefined ? undefined : personIdOf(sourceId);
 
-    let speaker: Speaker;
-    let via: Id[] = viaPersonIds ?? [];
-    if (parsedSpeaker.kind === 'source') {
-      if (sourcePersonId === undefined) {
-        throw new Error(`ケースデータの参照に問題があります\nソース自体の記述にソースがありません: ${rest.id}`);
+      let speaker: Speaker;
+      let via: Id[] = viaPersonIds ?? [];
+      if (parsedSpeaker.kind === 'source') {
+        if (sourcePersonId === undefined) {
+          throw new Error(`ケースデータの参照に問題があります\nソース自体の記述にソースがありません: ${rest.id}`);
+        }
+        speaker = { kind: 'person', personIds: [sourcePersonId] };
+      } else {
+        speaker = parsedSpeaker;
+        if (parsedSpeaker.kind === 'person' && viaPersonIds === undefined && sourcePersonId !== undefined) via = [sourcePersonId];
       }
-      speaker = { kind: 'person', personIds: [sourcePersonId] };
-    } else {
-      speaker = parsedSpeaker;
-      if (parsedSpeaker.kind === 'person' && viaPersonIds === undefined && sourcePersonId !== undefined) via = [sourcePersonId];
-    }
 
-    // 発言者または経由に移したソースは、本文の末尾のメンションを取り除く
-    let content = parsedContent;
-    const trailingSourceId = LEGACY_TRAILING_SOURCE_TOKEN_PATTERN.exec(content)?.[1];
-    if (speaker.kind === 'person' && trailingSourceId !== undefined && trailingSourceId === sourceId) {
-      content = content.replace(LEGACY_TRAILING_SOURCE_TOKEN_PATTERN, '');
-    }
-    content = content.replaceAll(
-      LEGACY_SOURCE_TOKEN_PATTERN,
-      (_token, label: string, id: Id) => `@[${label}](person:${personIdOf(id)})`
-    );
-    content = stripLegacySpeakerPrefix(content, speaker);
+      // 発言者または経由に移したソースは、本文の末尾のメンションを取り除く
+      let content = parsedContent;
+      const trailingSourceId = LEGACY_TRAILING_SOURCE_TOKEN_PATTERN.exec(content)?.[1];
+      if (speaker.kind === 'person' && trailingSourceId !== undefined && trailingSourceId === sourceId) {
+        content = content.replace(LEGACY_TRAILING_SOURCE_TOKEN_PATTERN, '');
+      }
+      content = content.replaceAll(
+        LEGACY_SOURCE_TOKEN_PATTERN,
+        (_token, label: string, id: Id) => `@[${label}](person:${personIdOf(id)})`
+      );
+      content = stripLegacySpeakerPrefix(content, speaker);
 
-    return {
-      ...rest,
-      // 日時を持たない証言は、項目ごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
-      ...(when !== undefined && { when }),
-      speaker,
-      viaPersonIds: via,
-      content,
-      // 人物のメンションに変換したソースを、言及している人物に加える
-      mentionedPersonIds: [...new Set([...rest.mentionedPersonIds, ...deriveClaimLinks(content).mentionedPersonIds])],
-    };
-  });
+      return {
+        ...rest,
+        // 日時を持たない証言は、項目ごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
+        ...(when !== undefined && { when }),
+        speaker,
+        sources: migrateLegacyClaimSources(rest.id, { sources, interviewId, quote, viaPersonIds: via }),
+        content,
+        // 人物のメンションに変換したソースを、言及している人物に加える
+        mentionedPersonIds: [...new Set([...rest.mentionedPersonIds, ...deriveClaimLinks(content).mentionedPersonIds])],
+      };
+    }
+  );
 
   return { persons, claims };
+}
+
+/** 証言の出典に関わる、読み込んだままの項目です。出典を持たない頃のデータは、sources の代わりに残りの項目を持ちます。 */
+type ParsedClaimSourceFields = Pick<ParsedCase['claims'][number], 'sources' | 'interviewId' | 'quote'> & {
+  /** ソースから移した分を含む、以前の版の経由です（ソースも経由も持たない場合は空の配列です）。 */
+  viaPersonIds: Id[];
+};
+
+/**
+ * 証言を資料・引用・経由を1つずつ持っていた頃のデータを、出典（Claim.sources）の形に変換します。
+ *
+ * - 資料を持つ証言は、資料・経由・引用をまとめた1件の出典にします。
+ * - 資料を持たず、経由か引用を持つ証言は、資料の無い1件の出典にします。
+ * - どれも持たない証言は、出典なし（空の配列）にします。
+ *
+ * 出典をすでに持つデータは、そのまま返します。出典と以前の版の項目を両方持つ場合は、どちらが正しいか決められないため例外を投げます。
+ */
+function migrateLegacyClaimSources(claimId: Id, { sources, interviewId, quote, viaPersonIds }: ParsedClaimSourceFields): ClaimSource[] {
+  if (sources !== undefined) {
+    if (interviewId !== undefined || quote !== undefined || viaPersonIds.length > 0) {
+      throw new Error(
+        `ケースデータの形式が正しくありません\n出典（sources）と、以前の版の項目（viaPersonIds・interviewId・quote）を両方持っています: ${claimId}`
+      );
+    }
+    return sources;
+  }
+  if (interviewId === undefined && quote === undefined && viaPersonIds.length === 0) return [];
+  return [{ ...(interviewId !== undefined && { interviewId }), viaPersonIds, ...(quote !== undefined && { quote }) }];
 }
 
 /** 相手を持っていた頃の資料（聴取）です。 */
