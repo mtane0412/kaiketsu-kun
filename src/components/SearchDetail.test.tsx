@@ -19,9 +19,9 @@ function buildSearchResultUrl(searchTerm: string, tab?: string): string {
   return `/cases/case-lakeside/search?${params.toString()}`;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
 });
 
 describe('SearchDetail', () => {
@@ -56,14 +56,14 @@ describe('SearchDetail', () => {
     expect(within(place).getByRole('link', { name: /湖畔の別荘/ })).toHaveAttribute('href', '/cases/case-lakeside/places/place-villa');
   });
 
-  it('識別子の値で検索すると、表記の違う値を持つ人物をたどれる', () => {
+  it('識別子の値で検索すると、表記の違う値を持つ人物をたどれる', async () => {
     const caseData: Case = {
       ...sampleFictionalCase,
       persons: sampleFictionalCase.persons.map((person) =>
         person.id === 'person-owner' ? { ...person, identifiers: [{ type: '電話番号', value: '090-1234-5678' }] } : person
       ),
     };
-    openTestCase(caseData);
+    await openTestCase(caseData);
     resetMockNavigation(buildSearchResultUrl('０９０１２３４５６７８'));
     render(<SearchDetail />);
 

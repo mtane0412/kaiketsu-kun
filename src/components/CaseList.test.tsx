@@ -5,7 +5,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
-import { LEGACY_STORAGE_KEY, listCaseSummaries, saveCase } from '@/lib/case-storage';
+import { CASE_KEY_PREFIX, LEGACY_STORAGE_KEY, listCaseSummaries, saveCase } from '@/lib/case-storage';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
 import { CaseList } from './CaseList';
@@ -13,14 +13,13 @@ import { CaseList } from './CaseList';
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
-  localStorage.clear();
-  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null });
+  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null });
   resetMockNavigation('/');
 });
 
 describe('CaseList', () => {
   it('保存済みのケースを、名前と証言の件数とともに並べる', async () => {
-    saveCase(sampleFictionalCase);
+    await saveCase(sampleFictionalCase);
 
     render(<CaseList />);
 
@@ -42,7 +41,7 @@ describe('CaseList', () => {
     const emptyState = await screen.findByRole('region', { name: '保存されているケースはありません' });
     await user.click(within(emptyState).getByRole('button', { name: 'サンプルで使い方を見る' }));
 
-    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}`);
+    await vi.waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}`));
   });
 
   it('新しいケースを作って、そのケースのボードへ移る', async () => {
@@ -51,7 +50,8 @@ describe('CaseList', () => {
 
     await user.click(screen.getByRole('button', { name: '新しいケース' }));
 
-    const createdCaseId = listCaseSummaries()[0]!.id;
+    await vi.waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    const createdCaseId = (await listCaseSummaries())[0]!.id;
     expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${createdCaseId}`);
   });
 
@@ -61,8 +61,8 @@ describe('CaseList', () => {
 
     await user.click(screen.getByRole('button', { name: '架空のサンプルを読み込む' }));
 
-    expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}`);
-    expect(listCaseSummaries().map((summary) => summary.name)).toEqual([sampleFictionalCase.name]);
+    await vi.waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(`/cases/${sampleFictionalCase.id}`));
+    expect((await listCaseSummaries()).map((summary) => summary.name)).toEqual([sampleFictionalCase.name]);
   });
 
   it('JSONファイルを、新しいケースとして読み込む', async () => {
@@ -85,7 +85,7 @@ describe('CaseList', () => {
     await user.upload(screen.getByLabelText('JSONを読み込む'), file);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('ケースデータの形式が正しくありません');
-    expect(listCaseSummaries()).toEqual([]);
+    expect(await listCaseSummaries()).toEqual([]);
   });
 
   it('1件だけ保存していた頃のデータを移行できなかった場合は、理由を示す', async () => {
@@ -96,15 +96,24 @@ describe('CaseList', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('ケースデータの形式が正しくありません');
   });
 
+  it('LocalStorage に保存していた頃のケースを、新しい保存先へ移して並べる', async () => {
+    localStorage.setItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`, JSON.stringify(sampleFictionalCase));
+
+    render(<CaseList />);
+
+    expect(await screen.findByRole('link', { name: /湖畔の別荘失踪事件（架空）/ })).toBeInTheDocument();
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
+  });
+
   it('ケースを削除する前に確認し、承認された場合は一覧から取り除く', async () => {
     const user = userEvent.setup();
-    saveCase(sampleFictionalCase);
+    await saveCase(sampleFictionalCase);
     render(<CaseList />);
 
     await user.click(await screen.findByRole('button', { name: '「湖畔の別荘失踪事件（架空）」を削除' }));
     await user.click(await screen.findByRole('button', { name: '削除する' }));
 
-    expect(listCaseSummaries()).toEqual([]);
-    expect(screen.getByText(/保存されているケースはありません/)).toBeInTheDocument();
+    expect(await screen.findByText(/保存されているケースはありません/)).toBeInTheDocument();
+    expect(await listCaseSummaries()).toEqual([]);
   });
 });

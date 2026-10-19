@@ -1,43 +1,58 @@
 /**
- * ケースのブラウザ保存（複数ケース）のテスト
+ * ケースのブラウザ保存（IndexedDB）のテスト
+ *
+ * IndexedDB は jsdom に無いため、fake-indexeddb で代用します（src/test/setup.ts がテストごとに空のデータベースへ戻します）。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { openDB } from 'idb';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
 import {
   BACKUP_STORAGE_KEY,
   CASE_KEY_PREFIX,
+  CaseNotFoundError,
   createEmptyCase,
+  DATABASE_NAME,
   deleteCase,
   INDEX_STORAGE_KEY,
+  InvalidStoredCaseError,
   LEGACY_STORAGE_KEY,
   listCaseSummaries,
   loadCase,
-  migrateLegacyCase,
+  migrateLocalStorageCases,
   saveCase,
 } from './case-storage';
 
-/** 更新日時の比較が安定するよう、保存のたびに進む時計を用意します。 */
+/** 更新日時の比較が安定するよう、日時だけを固定します（IndexedDB の代用が使うタイマーは止めません）。 */
 function freezeClock(start: string): void {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(start));
 }
 
-beforeEach(() => {
+afterEach(() => {
   vi.useRealTimers();
 });
 
-/**
- * ケースの一覧（INDEX_STORAGE_KEY）への書き込みだけを、容量の超過で失敗させます。
- * ケースの本体の書き込みは成功させ、本体を書いた後に一覧の書き込みが失敗する状況を再現します。
- * テストの最後に、返した spy の mockRestore を呼び出してください。
- */
-function failOnlySummaryWrites() {
-  const originalSetItem = Storage.prototype.setItem;
-  return vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
-    if (key === INDEX_STORAGE_KEY) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    originalSetItem.call(this, key, value);
-  });
+/** 資料の本文を持つケースを作ります。本文はケースの本体とは別のストアに保存されることを確かめるために使います。 */
+function caseWithTranscripts(): Case {
+  return {
+    ...createEmptyCase('本文を持つケース'),
+    interviews: [
+      { id: 'interview-newspaper', title: '湖畔新聞の記事', transcript: '別荘の管理人は、午後9時ごろに車の音を聞いたと話した。' },
+      { id: 'interview-video', title: '地元局の動画', transcript: '0:12 近所の人は、夜中に明かりが点いていたと話した。' },
+      { id: 'interview-memo', title: '本文の無いメモ' },
+    ],
+  };
+}
+
+/** データベースのストアの中身を、本番のコードを通さずに直接読み出します。 */
+async function readStore(storeName: string): Promise<unknown[]> {
+  const database = await openDB(DATABASE_NAME);
+  try {
+    return await database.getAll(storeName);
+  } finally {
+    database.close();
+  }
 }
 
 describe('createEmptyCase', () => {
@@ -55,95 +70,83 @@ describe('createEmptyCase', () => {
 });
 
 describe('saveCase と loadCase', () => {
-  it('保存したケースを、IDを指定して読み出せる', () => {
-    saveCase(sampleFictionalCase);
+  it('保存したケースを、IDを指定して読み出せる', async () => {
+    await saveCase(sampleFictionalCase);
 
-    expect(loadCase(sampleFictionalCase.id)).toEqual(sampleFictionalCase);
+    expect(await loadCase(sampleFictionalCase.id)).toEqual(sampleFictionalCase);
   });
 
-  it('ケースごとに別のキーへ保存する', () => {
-    const otherCase = createEmptyCase('別のケース');
-    saveCase(sampleFictionalCase);
-    saveCase(otherCase);
+  it('資料の本文はケースの本体とは別のストアに保存し、読み出すときに戻す', async () => {
+    const target = caseWithTranscripts();
+    await saveCase(target);
 
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).not.toBeNull();
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${otherCase.id}`)).not.toBeNull();
+    const [storedBody] = (await readStore('cases')) as Case[];
+    expect(storedBody!.interviews.map((interview) => interview.transcript)).toEqual([undefined, undefined, undefined]);
+    expect(await readStore('transcripts')).toHaveLength(2);
+    expect(await loadCase(target.id)).toEqual(target);
   });
 
-  it('保存されていないIDを読み出すとエラーにする', () => {
-    expect(() => loadCase('case-unknown')).toThrow('ケースが見つかりません');
+  it('本文を書き換えた・消した資料は、次の保存で本文のストアにも反映する', async () => {
+    const target = caseWithTranscripts();
+    await saveCase(target);
+    await loadCase(target.id);
+    const edited: Case = {
+      ...target,
+      interviews: [
+        { ...target.interviews[0]!, transcript: '管理人は、午後10時ごろに車の音を聞いたと訂正した。' },
+        { ...target.interviews[1]!, transcript: undefined },
+        target.interviews[2]!,
+      ],
+    };
+
+    await saveCase(edited);
+
+    expect(await readStore('transcripts')).toHaveLength(1);
+    expect(await loadCase(target.id)).toEqual(edited);
   });
 
-  it('保存データの形式が正しくない場合は、退避してからエラーにする', () => {
-    localStorage.setItem(`${CASE_KEY_PREFIX}case-broken`, '{"id":"case-broken"}');
+  it('5MBを超えるケースも保存して読み出せる', async () => {
+    // 前提: LocalStorage（およそ5MB）では保存できなかった大きさの本文
+    const longTranscript = '管理人の証言の書き起こし。'.repeat(500_000);
+    const target: Case = {
+      ...createEmptyCase('大きなケース'),
+      interviews: [{ id: 'interview-long', title: '長い文字起こし', transcript: longTranscript }],
+    };
+    expect(JSON.stringify(target).length).toBeGreaterThan(5 * 1024 * 1024);
 
-    expect(() => loadCase('case-broken')).toThrow('ケースデータの形式が正しくありません');
-    expect(localStorage.getItem(`${BACKUP_STORAGE_KEY}:case-broken`)).toBe('{"id":"case-broken"}');
+    await saveCase(target);
+
+    expect((await loadCase(target.id)).interviews[0]!.transcript).toBe(longTranscript);
   });
 
-  it('ブラウザの保存容量を超えた場合は、理由と対処を日本語で伝えるエラーにし、保存済みのケースを書き換えない', () => {
-    // 前提: 長い文字起こしを貼り付けて、LocalStorage の容量を超えた
-    saveCase(sampleFictionalCase);
-    const storedBefore = localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`);
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    });
-
-    expect(() => saveCase({ ...sampleFictionalCase, name: '書き換えたケース' })).toThrow(
-      /ブラウザの保存容量を超えたため、保存できませんでした/
-    );
-    setItem.mockRestore();
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBe(storedBefore);
+  it('保存されていないIDを読み出すと、見つからないことを示すエラーにする', async () => {
+    await expect(loadCase('case-unknown')).rejects.toBeInstanceOf(CaseNotFoundError);
+    await expect(loadCase('case-unknown')).rejects.toThrow('ケースが見つかりません');
   });
 
-  it('ケースの一覧の保存で容量を超えた場合も、理由と対処を日本語で伝えるエラーにする', () => {
-    const setItem = failOnlySummaryWrites();
+  it('保存データの形式が正しくない場合は、退避用のストアへ写してからエラーにする', async () => {
+    // 前提: データモデルの変更などで、保存済みのデータが検証に通らなくなった
+    await listCaseSummaries();
+    const database = await openDB(DATABASE_NAME);
+    await database.put('cases', { id: 'case-broken' }, 'case-broken');
+    database.close();
 
-    expect(() => saveCase(sampleFictionalCase)).toThrow(/ブラウザの保存容量を超えたため、保存できませんでした/);
-    setItem.mockRestore();
-  });
-
-  it('ケースの一覧の保存に失敗した場合は、保存済みのケースの本体を書き換える前の内容に戻す', () => {
-    // 前提: 本体だけが新しい内容になると、画面には反映されなかった変更が、再読み込みで現れてしまう
-    saveCase(sampleFictionalCase);
-    const storedBefore = localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`);
-    const setItem = failOnlySummaryWrites();
-
-    expect(() => saveCase({ ...sampleFictionalCase, name: '書き換えたケース' })).toThrow();
-    setItem.mockRestore();
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBe(storedBefore);
-  });
-
-  it('新しいケースの一覧の保存に失敗した場合は、書き込んだケースの本体を取り除く', () => {
-    // 前提: 一覧に載らない本体だけが残ると、一覧から開けず、消すこともできない
-    const created = createEmptyCase('新しく作ったケース');
-    const setItem = failOnlySummaryWrites();
-
-    expect(() => saveCase(created)).toThrow();
-    setItem.mockRestore();
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${created.id}`)).toBeNull();
-  });
-
-  it('保存容量の超過以外の失敗は、そのまま伝える', () => {
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('予期しない失敗');
-    });
-
-    expect(() => saveCase(sampleFictionalCase)).toThrow('予期しない失敗');
-    setItem.mockRestore();
+    await expect(loadCase('case-broken')).rejects.toBeInstanceOf(InvalidStoredCaseError);
+    await expect(loadCase('case-broken')).rejects.toThrow('ケースデータの形式が正しくありません');
+    expect(await readStore('backups')).toEqual([{ id: 'case-broken', data: { id: 'case-broken' } }]);
   });
 });
 
 describe('listCaseSummaries', () => {
-  it('保存が無い場合は空の一覧を返す', () => {
-    expect(listCaseSummaries()).toEqual([]);
+  it('保存が無い場合は空の一覧を返す', async () => {
+    expect(await listCaseSummaries()).toEqual([]);
   });
 
-  it('ケース名・証言の件数・更新日時を返す', () => {
+  it('ケース名・証言の件数・更新日時を返す', async () => {
     freezeClock('2026-09-21T10:00:00.000Z');
-    saveCase(sampleFictionalCase);
+    await saveCase(sampleFictionalCase);
 
-    expect(listCaseSummaries()).toEqual([
+    expect(await listCaseSummaries()).toEqual([
       {
         id: sampleFictionalCase.id,
         name: sampleFictionalCase.name,
@@ -153,25 +156,22 @@ describe('listCaseSummaries', () => {
     ]);
   });
 
-  it('更新日時の新しいケースから順に並べる', () => {
+  it('更新日時の新しいケースから順に並べる', async () => {
     freezeClock('2026-09-21T10:00:00.000Z');
-    const olderCase = createEmptyCase('古いケース');
-    saveCase(olderCase);
+    await saveCase(createEmptyCase('古いケース'));
     vi.setSystemTime(new Date('2026-09-21T11:00:00.000Z'));
-    const newerCase = createEmptyCase('新しいケース');
-    saveCase(newerCase);
+    await saveCase(createEmptyCase('新しいケース'));
 
-    expect(listCaseSummaries().map((summary) => summary.name)).toEqual(['新しいケース', '古いケース']);
+    expect((await listCaseSummaries()).map((summary) => summary.name)).toEqual(['新しいケース', '古いケース']);
   });
 
-  it('同じケースを保存し直しても、一覧には1件だけ載せる', () => {
+  it('同じケースを保存し直しても、一覧には1件だけ載せる', async () => {
     freezeClock('2026-09-21T10:00:00.000Z');
-    saveCase(sampleFictionalCase);
+    await saveCase(sampleFictionalCase);
     vi.setSystemTime(new Date('2026-09-21T12:00:00.000Z'));
-    const renamedCase: Case = { ...sampleFictionalCase, name: '改名したケース' };
-    saveCase(renamedCase);
+    await saveCase({ ...sampleFictionalCase, name: '改名したケース' });
 
-    expect(listCaseSummaries()).toEqual([
+    expect(await listCaseSummaries()).toEqual([
       {
         id: sampleFictionalCase.id,
         name: '改名したケース',
@@ -180,75 +180,122 @@ describe('listCaseSummaries', () => {
       },
     ]);
   });
-
-  it('一覧のデータが壊れている場合は、空の一覧として扱う', () => {
-    localStorage.setItem(INDEX_STORAGE_KEY, 'これはJSONではありません');
-
-    expect(listCaseSummaries()).toEqual([]);
-  });
 });
 
 describe('deleteCase', () => {
-  it('ケースの本体と、一覧の項目を消す', () => {
-    saveCase(sampleFictionalCase);
+  it('ケースの本体・資料の本文・一覧の項目を消す', async () => {
+    const target = caseWithTranscripts();
+    await saveCase(target);
 
-    deleteCase(sampleFictionalCase.id);
+    await deleteCase(target.id);
 
-    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
-    expect(listCaseSummaries()).toEqual([]);
+    await expect(loadCase(target.id)).rejects.toBeInstanceOf(CaseNotFoundError);
+    expect(await readStore('transcripts')).toEqual([]);
+    expect(await listCaseSummaries()).toEqual([]);
   });
 
-  it('他のケースは残す', () => {
-    const remainingCase = createEmptyCase('残るケース');
-    saveCase(sampleFictionalCase);
-    saveCase(remainingCase);
+  it('他のケースは残す', async () => {
+    const remainingCase = caseWithTranscripts();
+    await saveCase(sampleFictionalCase);
+    await saveCase(remainingCase);
 
-    deleteCase(sampleFictionalCase.id);
+    await deleteCase(sampleFictionalCase.id);
 
-    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([remainingCase.id]);
+    expect((await listCaseSummaries()).map((summary) => summary.id)).toEqual([remainingCase.id]);
+    expect(await loadCase(remainingCase.id)).toEqual(remainingCase);
   });
 });
 
-describe('migrateLegacyCase', () => {
-  it('1件だけ保存していた頃のデータを、1件目のケースとして移行する', () => {
-    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase } }));
+describe('migrateLocalStorageCases', () => {
+  /** LocalStorage に保存していた頃の形（ケースごとのキーと一覧）で、ケースを書き込みます。 */
+  function storeInLocalStorage(...cases: Case[]): void {
+    for (const item of cases) localStorage.setItem(`${CASE_KEY_PREFIX}${item.id}`, JSON.stringify(item));
+    const summaries = cases.map((item) => ({
+      id: item.id,
+      name: item.name,
+      claimCount: item.claims.length,
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    }));
+    localStorage.setItem(INDEX_STORAGE_KEY, JSON.stringify(summaries));
+  }
 
-    migrateLegacyCase();
+  it('LocalStorage のケースを IndexedDB へ移し、移せたことを確かめてから LocalStorage から消す', async () => {
+    const withTranscripts = caseWithTranscripts();
+    storeInLocalStorage(sampleFictionalCase, withTranscripts);
 
-    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
-    expect(loadCase(sampleFictionalCase.id)).toEqual(sampleFictionalCase);
+    expect(await migrateLocalStorageCases()).toEqual([]);
+
+    expect(await loadCase(sampleFictionalCase.id)).toEqual(sampleFictionalCase);
+    expect(await loadCase(withTranscripts.id)).toEqual(withTranscripts);
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
+    expect(localStorage.getItem(INDEX_STORAGE_KEY)).toBeNull();
   });
 
-  it('移行しても、元のデータは消さない', () => {
+  it('移したケースの更新日時は、LocalStorage の一覧の日時を引き継ぐ', async () => {
+    storeInLocalStorage(sampleFictionalCase);
+
+    await migrateLocalStorageCases();
+
+    expect((await listCaseSummaries())[0]!.updatedAt).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('読めないケースは移さずに LocalStorage に残し、退避用のキーへ写して理由を返す', async () => {
+    storeInLocalStorage(sampleFictionalCase);
+    localStorage.setItem(`${CASE_KEY_PREFIX}case-broken`, '{"id":"case-broken"}');
+
+    const errors = await migrateLocalStorageCases();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('case-broken');
+    expect(errors[0]).toContain('ケースデータの形式が正しくありません');
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}case-broken`)).toBe('{"id":"case-broken"}');
+    expect(localStorage.getItem(`${BACKUP_STORAGE_KEY}:case-broken`)).toBe('{"id":"case-broken"}');
+    expect((await listCaseSummaries()).map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
+  });
+
+  it('IndexedDB に同じIDのケースがある場合は上書きせず、LocalStorage の側を消す', async () => {
+    // 前提: 前回の移行で IndexedDB へ移した後、LocalStorage から消す前に画面が閉じられた
+    await saveCase({ ...sampleFictionalCase, name: '移行後に改名したケース' });
+    storeInLocalStorage(sampleFictionalCase);
+
+    await migrateLocalStorageCases();
+
+    expect((await loadCase(sampleFictionalCase.id)).name).toBe('移行後に改名したケース');
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
+  });
+
+  it('1件だけ保存していた頃のデータを、ケースとして移行する。元のデータは消さない', async () => {
     const legacyData = JSON.stringify({ state: { currentCase: sampleFictionalCase } });
     localStorage.setItem(LEGACY_STORAGE_KEY, legacyData);
 
-    migrateLegacyCase();
+    expect(await migrateLocalStorageCases()).toEqual([]);
 
+    expect(await loadCase(sampleFictionalCase.id)).toEqual(sampleFictionalCase);
     expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBe(legacyData);
   });
 
-  it('移行済みの場合は、二重に移行しない', () => {
+  it('1件だけ保存していた頃のデータを移行済みの場合は、二重に移行しない', async () => {
     localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase } }));
-    migrateLegacyCase();
-    saveCase({ ...sampleFictionalCase, name: '移行後に改名したケース' });
+    await migrateLocalStorageCases();
+    await saveCase({ ...sampleFictionalCase, name: '移行後に改名したケース' });
 
-    migrateLegacyCase();
+    await migrateLocalStorageCases();
 
-    expect(listCaseSummaries().map((summary) => summary.name)).toEqual(['移行後に改名したケース']);
+    expect((await listCaseSummaries()).map((summary) => summary.name)).toEqual(['移行後に改名したケース']);
   });
 
-  it('旧データが無い場合は、何もしない', () => {
-    migrateLegacyCase();
-
-    expect(listCaseSummaries()).toEqual([]);
-  });
-
-  it('旧データを読めない場合は、退避してエラーを返す', () => {
+  it('1件だけ保存していた頃のデータを読めない場合は、退避して理由を返す', async () => {
     localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ state: { currentCase: { id: 'case-broken' } } }));
 
-    expect(migrateLegacyCase()).toContain('ケースデータの形式が正しくありません');
+    const errors = await migrateLocalStorageCases();
+
+    expect(errors[0]).toContain('ケースデータの形式が正しくありません');
     expect(localStorage.getItem(BACKUP_STORAGE_KEY)).not.toBeNull();
-    expect(listCaseSummaries()).toEqual([]);
+    expect(await listCaseSummaries()).toEqual([]);
+  });
+
+  it('移すデータが無い場合は、何もしない', async () => {
+    expect(await migrateLocalStorageCases()).toEqual([]);
+    expect(await listCaseSummaries()).toEqual([]);
   });
 });

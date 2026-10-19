@@ -16,9 +16,9 @@ import { TimelineView } from './TimelineView';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -261,8 +261,8 @@ const searchStatement: Claim = {
 };
 
 describe('TimelineView への書き足し', () => {
-  beforeEach(() => {
-    openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
+  beforeEach(async () => {
+    await openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
   });
 
   it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {

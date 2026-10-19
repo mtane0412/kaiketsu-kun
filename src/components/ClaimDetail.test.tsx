@@ -12,10 +12,10 @@ import { ClaimDetail } from './ClaimDetail';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: サンプルのケースの時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
 });
 
@@ -280,8 +280,8 @@ describe('ClaimDetail（引用）', () => {
     resetMockNavigation('/cases/case-lakeside/claims/claim-caretaker');
   });
 
-  it('引用の原文と動画の位置を示し、その時点から動画を再生するリンクを置く', () => {
-    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
+  it('引用の原文と動画の位置を示し、その時点から動画を再生するリンクを置く', async () => {
+    await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     const quoteSection = screen.getByRole('region', { name: '引用' });
@@ -292,8 +292,8 @@ describe('ClaimDetail（引用）', () => {
     expect(within(quoteSection).queryByText(/本文に見つかりません/)).not.toBeInTheDocument();
   });
 
-  it('引用の原文が時刻だけの行を含む場合は、時刻の行を除いて示す（動画の位置は別に示すため）', () => {
-    openTestCase(caseWithQuote('12:34\nあの夜は別荘が真っ暗でした'));
+  it('引用の原文が時刻だけの行を含む場合は、時刻の行を除いて示す（動画の位置は別に示すため）', async () => {
+    await openTestCase(caseWithQuote('12:34\nあの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     const quoteSection = screen.getByRole('region', { name: '引用' });
@@ -303,31 +303,31 @@ describe('ClaimDetail（引用）', () => {
     expect(within(quoteSection).queryByText(/資料の本文に見つかりません/)).not.toBeInTheDocument();
   });
 
-  it('YouTube 以外の資料では、再生位置を付けずに資料を開くリンクを置く', () => {
-    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', { ...videoInterview, url: 'https://example.com/news/1' }));
+  it('YouTube 以外の資料では、再生位置を付けずに資料を開くリンクを置く', async () => {
+    await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', { ...videoInterview, url: 'https://example.com/news/1' }));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     const quoteSection = screen.getByRole('region', { name: '引用' });
     expect(within(quoteSection).getByRole('link', { name: '資料を開く' })).toHaveAttribute('href', 'https://example.com/news/1');
   });
 
-  it('引用の原文が聴取の本文に見つからない場合は、見つからないことを示す', () => {
-    openTestCase(caseWithQuote('あの夜は明かりがついていました'));
+  it('引用の原文が聴取の本文に見つからない場合は、見つからないことを示す', async () => {
+    await openTestCase(caseWithQuote('あの夜は明かりがついていました'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     expect(within(screen.getByRole('region', { name: '引用' })).getByText(/資料の本文に見つかりません/)).toBeInTheDocument();
   });
 
-  it('聴取に本文が無い場合は、引用を照らし合わせられないことを示す', () => {
+  it('聴取に本文が無い場合は、引用を照らし合わせられないことを示す', async () => {
     const { transcript: _transcript, ...interviewWithoutTranscript } = videoInterview;
-    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', interviewWithoutTranscript));
+    await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', interviewWithoutTranscript));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     expect(within(screen.getByRole('region', { name: '引用' })).getByText(/照らし合わせられません/)).toBeInTheDocument();
   });
 
-  it('引用を持たない証言では、引用の欄を表示しない', () => {
-    openTestCase(sampleFictionalCase);
+  it('引用を持たない証言では、引用の欄を表示しない', async () => {
+    await openTestCase(sampleFictionalCase);
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     expect(screen.queryByRole('region', { name: '引用' })).not.toBeInTheDocument();
@@ -335,7 +335,7 @@ describe('ClaimDetail（引用）', () => {
 
   it('編集で引用を保持し、「引用を外す」を押して保存すると、引用を持たない証言にする', async () => {
     const user = userEvent.setup();
-    openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
+    await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
     await user.click(screen.getByRole('button', { name: '証言を保存' }));

@@ -12,10 +12,10 @@ import { NewPersonDetail, NewPlaceDetail, PersonDetail, PlaceDetail } from './En
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: サンプルのケースの時系列は「管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測」の順に並ぶ
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
 });
 
@@ -62,7 +62,7 @@ describe('PersonDetail', () => {
     expect(screen.queryByRole('region', { name: 'この人物を経由して伝わった証言' })).not.toBeInTheDocument();
   });
 
-  it('メモのメンションでつながったエンティティを、そのエンティティの詳細へのリンクで表示する', () => {
+  it('メモのメンションでつながったエンティティを、そのエンティティの詳細へのリンクで表示する', async () => {
     // 前提: 隣家の住人のメモから、湖畔の別荘に言及している
     const caseData: Case = {
       ...sampleFictionalCase,
@@ -70,7 +70,7 @@ describe('PersonDetail', () => {
         person.id === 'person-neighbor' ? { ...person, note: '@[湖畔の別荘](place:place-villa)の隣に住んでいます。' } : person
       ),
     };
-    openTestCase(caseData);
+    await openTestCase(caseData);
     render(<PersonDetail personId="person-neighbor" />);
 
     const related = screen.getByRole('region', { name: '関連するエンティティ' });
@@ -93,7 +93,7 @@ describe('PersonDetail', () => {
     // 前提: 証言にも関係にも現れない「町役場の職員」を登録したケースを用意する
     const user = userEvent.setup();
 
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       persons: [...sampleFictionalCase.persons, { id: 'person-clerk', name: '町役場の職員', kind: 'individual' }],
     });
@@ -216,7 +216,7 @@ describe('人物・場所の未了事項', () => {
 
   it('未了事項にひもづいた人物の削除の確認では、未了事項からひもづけを外すことを伝え、削除すると外れる', async () => {
     // 前提: 駅員は、「防犯カメラの映像の確認」の未了事項だけが参照する人物とする
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       persons: [...sampleFictionalCase.persons, { id: 'person-station-staff', name: '駅員', kind: 'individual' }],
       tasks: sampleFictionalCase.tasks.map((task) =>
@@ -321,7 +321,7 @@ describe('人物の識別子', () => {
 
   it('登録済みの識別子を表示し、削除できる', async () => {
     const user = userEvent.setup();
-    openTestCase(samePhoneNumberCase);
+    await openTestCase(samePhoneNumberCase);
     render(<PersonDetail personId="person-owner" />);
 
     expect(screen.getByRole('combobox', { name: '識別子1の種類' })).toHaveValue('電話番号');
@@ -346,8 +346,8 @@ describe('人物の識別子', () => {
     expect(openedCase().persons.find((person) => person.id === 'person-owner')?.identifiers).toBeUndefined();
   });
 
-  it('同じ識別子を持つ人物を、一致した識別子とともに、互いの詳細に表示する', () => {
-    openTestCase(samePhoneNumberCase);
+  it('同じ識別子を持つ人物を、一致した識別子とともに、互いの詳細に表示する', async () => {
+    await openTestCase(samePhoneNumberCase);
     const { unmount } = render(<PersonDetail personId="person-owner" />);
 
     const fromOwner = screen.getByRole('region', { name: '同じ識別子を持つ人物' });
@@ -361,9 +361,9 @@ describe('人物の識別子', () => {
     expect(within(fromCaretaker).getByRole('link', { name: /別荘の持ち主/ })).toHaveTextContent('電話番号: 090-1234-5678');
   });
 
-  it('識別子を持つが一致する人物がいない場合は、いないことを示し、識別子を持たない人物では節を表示しない', () => {
+  it('識別子を持つが一致する人物がいない場合は、いないことを示し、識別子を持たない人物では節を表示しない', async () => {
     // 前提: 管理人の識別子を外すと、別荘の持ち主の電話番号と一致する人物はいない
-    openTestCase({
+    await openTestCase({
       ...samePhoneNumberCase,
       persons: samePhoneNumberCase.persons.map((person) =>
         person.id === 'person-caretaker' ? { ...person, identifiers: undefined } : person
