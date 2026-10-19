@@ -76,6 +76,26 @@ describe('InterviewSection', () => {
     expect(within(history).getByText('聴取者: 県警 / 場所: 湖畔の別荘 / 立場: 参考人 / 資料番号: 供述調書 第1号')).toBeInTheDocument();
   });
 
+  it('転載の資料は、転載した媒体と原典（媒体・発行日・紙面）を分けて示し、資料の格を添える', () => {
+    // 前提: 書籍の著者の取材を、架空日報の朝刊の記事を転載したもの（二次報道）に置き換える
+    openTestCase({
+      ...caseWithInterviews,
+      interviews: [
+        {
+          ...bookInterview,
+          grade: 'secondaryReport',
+          origin: { publisherPersonId: 'person-newspaper', publishedAt: '1998-08-14', citation: '朝刊 社会面' },
+        },
+        firstInterview,
+      ],
+    });
+    const history = renderCaretakerStatementHistory();
+
+    expect(
+      within(history).getByText('転載した媒体: 湖畔の夏 20年目の証言（架空の書籍） / 資料の格: 二次報道 / 原典: 架空日報 朝刊・1998年8月14日・朝刊 社会面')
+    ).toBeInTheDocument();
+  });
+
   it('各聴取に、資料の詳細へのリンクをタイトルで置く', () => {
     const history = renderCaretakerStatementHistory();
 

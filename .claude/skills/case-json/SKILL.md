@@ -37,6 +37,10 @@ description: 事件や作品について資料（Webの記事・公開資料な�
 
 - 資料1件（記事1本・動画1本・会見1回・書籍の1章など）を、資料（`Interview`）1件にします。
 - 資料には、分かる範囲で `title`・`url`・`at`（公開・実施の日時）・`interviewerPersonId`（媒体や聴き取った人物）を入れます。
+- 資料の格 `grade` を、`primary`（一次資料）・`majorReport`（主要報道）・`specialist`（専門資料）・`secondaryReport`（二次報道）・`sns`（SNS・個人の投稿・動画）・`unverified`（未確認）から選んで入れます。迷う場合は入れません。
+- 原典が手に入らず、ブログなどへの転載でしか読めない記事は、転載した記事を資料1件にします。`interviewerPersonId` と `at` は転載した媒体と転載した日時にし、
+  原典を `origin: { publisherPersonId, publishedAt, citation }`（原典の媒体・発行日・紙面や版。分かる項目だけ。媒体は人物として登録します）に入れます。
+  発行日や紙面をタイトルに書き込まないでください。経由は「…, 原典の媒体, 転載した媒体」の順にします。
 - 本文は、ページの原文から取ります。**WebFetch の結果は要約・言い換えを含むため、`transcript` や引用に使わないでください。**
   Wikipedia は MediaWiki API（`action=query&prop=extracts&explaintext=1`）、その他のページは `curl` で取得したHTMLから本文を取り出します。
 - 証言を書き起こす資料には、`transcript` に本文を入れます。本文が長い場合は、証言を書き起こす段落だけでもかまいません。
