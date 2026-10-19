@@ -5,7 +5,9 @@
  * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている）を記録した一次データです。
  * 自動では判定しません。どちらの証言が正しいかも判定しません。
  *
- * 各行には、照合の種類・相手の証言へのリンク・理由（ある場合）を並べます。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
+ * 各行には、照合の種類・相手の証言へのリンク・相手の証言が載っている資料（ある場合）・理由（ある場合）を並べます。
+ * 資料は、媒体・日付（転載なら原典の発行日）・資料の格の短い表示で示します（src/domain/interviews.ts の formatClaimSourceLabels）。
+ * 同じ媒体が日によって違う内容を報じる場合に、どの資料どうしの照合かを、相手の証言を開かずに見比べられるようにするためです。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
  * 開いているタブ（tab）はリンク先のURLに引き継ぎます。
  *
@@ -19,6 +21,7 @@
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
 import { buildClaimCrossChecks, type ClaimCrossCheckView } from '@/domain/cross-checks';
+import { formatClaimSourceLabels } from '@/domain/interviews';
 import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -82,44 +85,48 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
         </p>
       ) : (
         <ul className="space-y-2">
-          {crossChecks.map((view) => (
-            <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
-              <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
-              <ClaimLink view={view.other} tab={tab} />
-              {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
+          {crossChecks.map((view) => {
+            const sourceLabels = formatClaimSourceLabels(currentCase, view.other.claim);
+            return (
+              <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
+                <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
+                <ClaimLink view={view.other} tab={tab} />
+                {sourceLabels.length > 0 && <p className="text-xs text-muted-foreground">資料: {sourceLabels.join(' / ')}</p>}
+                {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
 
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={actionLabelOf(view, '編集')}
-                  onClick={() => setForm({ kind: 'edit', crossCheckId: view.crossCheck.id })}
-                >
-                  編集
-                </Button>
-                <DeleteConfirmButton
-                  iconOnly
-                  label={actionLabelOf(view, '削除')}
-                  title="この照合を削除しますか？"
-                  description="この照合をケースから削除します。この操作は取り消せません。照合した証言は削除しません。"
-                  onConfirm={() => handleDelete(view.crossCheck.id)}
-                />
-              </div>
-
-              {form.kind === 'edit' && form.crossCheckId === view.crossCheck.id && (
-                <section aria-label="照合の編集" className="border-t pt-3">
-                  <CrossCheckForm
-                    key={view.crossCheck.id}
-                    claimId={claimId}
-                    initial={view.crossCheck}
-                    onDone={closeForm}
-                    onCancel={closeForm}
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={actionLabelOf(view, '編集')}
+                    onClick={() => setForm({ kind: 'edit', crossCheckId: view.crossCheck.id })}
+                  >
+                    編集
+                  </Button>
+                  <DeleteConfirmButton
+                    iconOnly
+                    label={actionLabelOf(view, '削除')}
+                    title="この照合を削除しますか？"
+                    description="この照合をケースから削除します。この操作は取り消せません。照合した証言は削除しません。"
+                    onConfirm={() => handleDelete(view.crossCheck.id)}
                   />
-                </section>
-              )}
-            </li>
-          ))}
+                </div>
+
+                {form.kind === 'edit' && form.crossCheckId === view.crossCheck.id && (
+                  <section aria-label="照合の編集" className="border-t pt-3">
+                    <CrossCheckForm
+                      key={view.crossCheck.id}
+                      claimId={claimId}
+                      initial={view.crossCheck}
+                      onDone={closeForm}
+                      onCancel={closeForm}
+                    />
+                  </section>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

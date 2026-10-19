@@ -50,6 +50,32 @@ describe('CrossCheckSection', () => {
     );
   });
 
+  it('相手の証言が載っている資料を、媒体・原典の日付・資料の格の短い表示で示す（どの資料どうしの食い違いかを見比べるため）', () => {
+    // 前提: 管理人の証言は、架空日報の朝刊（1998年8月14日）の記事を書籍の著者が転載した資料（二次報道）に載っている
+    openTestCase({
+      ...sampleFictionalCase,
+      interviews: [
+        {
+          id: 'interview-reprint',
+          title: '架空日報の記事の転載',
+          interviewerPersonId: 'person-book',
+          at: '2018-05',
+          grade: 'secondaryReport',
+          origin: { publisherPersonId: 'person-newspaper', publishedAt: '1998-08-14' },
+        },
+      ],
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.id === 'claim-caretaker' ? { ...claim, sources: [{ interviewId: 'interview-reprint', viaPersonIds: ['person-newspaper', 'person-book'] }] } : claim
+      ),
+    });
+    const crossCheckSection = renderNeighborCrossCheck();
+
+    const [caretakerItem, cameraItem] = within(crossCheckSection).getAllByRole('listitem');
+    expect(within(caretakerItem!).getByText('資料: 架空日報 朝刊 1998年8月14日・二次報道・転載')).toBeInTheDocument();
+    // 検証: 資料にひもづかない証言には、資料の表示を出さない
+    expect(within(cameraItem!).queryByText(/^資料:/)).not.toBeInTheDocument();
+  });
+
   it('照合が1件も無い証言では、照合の登録を促す案内を表示する', () => {
     render(<CrossCheckSection claimId="claim-user-guess" tab="timeline" />);
 

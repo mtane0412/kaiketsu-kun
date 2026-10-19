@@ -2,11 +2,13 @@
  * 資料（聴取。証言を得た機会）の入力フォーム
  *
  * 1件の資料（Interview）を登録・編集します。資料のカード（InterviewCard）と、資料の登録ページ（InterviewDetail の NewInterviewDetail）から開きます。
- * 入力するのは、URL・タイトル・本文と、詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号）です。
+ * 入力するのは、URL・タイトル・本文と、詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典）です。
  * - どれも任意ですが、資料を見分けられるよう、タイトル・URL・本文のいずれかは必須です。
  *   資料を見つけた時点では、URLだけを登録し、ほかは後から補えるようにするためです。
  * - 詳しい情報は、最初は閉じておきます（URLと本文から始める流れで、入力欄の多さに迷わないようにするためです）。
  *   編集で詳しい情報が入力済みの場合と、記事の公開日時を日時の欄に入れた場合は、開いた状態にします。
+ * - 転載の原典（媒体・発行日・紙面など）は、原典が手に入らず転載で読んだ資料に入力します。そのとき、聴取者または媒体と日時には、転載した媒体と転載した日時を入れます。
+ *   原典の欄がすべて空なら、原典を持たない資料として保存します。
  * - 資料に載っている人物は入力しません。資料にひもづく証言の発言者から導きます（src/domain/interviews.ts）。
  * 本文には、記事の本文や動画の文字起こしを貼り付けます。証言は、本文の範囲を選んで書き起こせます（InterviewTranscript）。
  * Web の記事は、URLを入れて「本文を取得」を押すと、本文の取得 API（src/app/api/fetch-article/route.ts）で本文を取り出して本文の欄に入れます。
@@ -18,7 +20,7 @@
  * - 取得に失敗した場合は理由を示し、本文の欄を変えません。
  * URLはリンクとして表示するため、http か https のURLだけを受け付けます（src/domain/transcript.ts の isHttpUrl）。
  *
- * 日時は、証言の本文の日時のメンションと同じ表記を受け付けます（1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00、
+ * 日時と原典の発行日は、証言の本文の日時のメンションと同じ表記を受け付けます（1998 / 1998-08 / 1998-08-12 / 1998-08-12T19:00、
  * スラッシュ区切り、日本語の表記。src/domain/date-input.ts）。解釈できない表記は、保存せずにエラーを示します。
  *
  * 注意: フォームの初期値は useState の初期化でのみ設定するため、編集対象を切り替えるときは
@@ -29,8 +31,10 @@
 import { nanoid } from 'nanoid';
 import { useId, useState, type FormEvent } from 'react';
 import { parseDateInput } from '@/domain/date-input';
+import { INTERVIEW_GRADES } from '@/domain/interview-grade';
+import { INTERVIEW_GRADE_LABELS } from '@/domain/labels';
 import { isHttpUrl } from '@/domain/transcript';
-import type { Id, Interview } from '@/domain/types';
+import type { Id, Interview, InterviewGrade, InterviewOrigin } from '@/domain/types';
 import { describeArticleUrlProblem, requestArticleFetch, type FetchedArticle } from '@/lib/article-fetch-api';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import {
@@ -58,11 +62,16 @@ type InterviewFormProps = {
   onCancel: () => void;
 };
 
-/** 詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号）のいずれかを持つかどうかを返します。 */
+/** 詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典）のいずれかを持つかどうかを返します。 */
 function hasDetails(interview: Interview | undefined): boolean {
   if (interview === undefined) return false;
-  const { at, interviewerPersonId, placeId, subjectRole, documentRef } = interview;
-  return [at, interviewerPersonId, placeId, subjectRole, documentRef].some((value) => value !== undefined);
+  const { at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin } = interview;
+  return [at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin].some((value) => value !== undefined);
+}
+
+/** 選択肢の値が資料の格かどうかを判定します（選択肢の値は文字列のため、格に絞り込みます）。 */
+function isInterviewGrade(value: string): value is InterviewGrade {
+  return INTERVIEW_GRADES.some((grade) => grade === value);
 }
 
 export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps) {
@@ -79,6 +88,10 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
   const [placeId, setPlaceId] = useState<Id>(initial?.placeId ?? UNSELECTED);
   const [subjectRole, setSubjectRole] = useState(initial?.subjectRole ?? '');
   const [documentRef, setDocumentRef] = useState(initial?.documentRef ?? '');
+  const [grade, setGrade] = useState<InterviewGrade | typeof UNSELECTED>(initial?.grade ?? UNSELECTED);
+  const [originPublisherPersonId, setOriginPublisherPersonId] = useState<Id>(initial?.origin?.publisherPersonId ?? UNSELECTED);
+  const [originPublishedAt, setOriginPublishedAt] = useState(initial?.origin?.publishedAt ?? '');
+  const [originCitation, setOriginCitation] = useState(initial?.origin?.citation ?? '');
   const [url, setUrl] = useState(initial?.url ?? '');
   const [transcript, setTranscript] = useState(initial?.transcript ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +172,20 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
     if (placeId !== UNSELECTED) interview.placeId = placeId;
     if (subjectRole.trim()) interview.subjectRole = subjectRole.trim();
     if (documentRef.trim()) interview.documentRef = documentRef.trim();
+    if (grade !== UNSELECTED) interview.grade = grade;
+    const origin: InterviewOrigin = {};
+    if (originPublisherPersonId !== UNSELECTED) origin.publisherPersonId = originPublisherPersonId;
+    if (originPublishedAt.trim()) {
+      const parsedPublishedAt = parseDateInput(originPublishedAt);
+      if (parsedPublishedAt === null) {
+        setError(`原典の発行日を解釈できません: ${originPublishedAt.trim()}（例: 2008-07-07、2008年7月7日）`);
+        return;
+      }
+      origin.publishedAt = parsedPublishedAt;
+    }
+    if (originCitation.trim()) origin.citation = originCitation.trim();
+    // 原典の欄がすべて空なら、原典を持たない（転載ではない）資料として保存する
+    if (Object.keys(origin).length > 0) interview.origin = origin;
     if (url.trim()) {
       if (!isHttpUrl(url.trim())) {
         setError(`URLは http か https のURLで指定してください: ${url.trim()}`);
@@ -242,6 +269,52 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
 
           <TextField label="発言者の立場（任意）" value={subjectRole} onChange={setSubjectRole} placeholder="参考人、被疑者、目撃者 など" />
           <TextField label="資料番号（任意）" value={documentRef} onChange={setDocumentRef} placeholder="調書番号 など" />
+
+          <div>
+            <label htmlFor={`${formId}-grade`} className={LABEL_CLASS}>
+              資料の格（任意）
+            </label>
+            <select
+              id={`${formId}-grade`}
+              value={grade}
+              onChange={(event) => setGrade(isInterviewGrade(event.target.value) ? event.target.value : UNSELECTED)}
+              className={INPUT_CLASS}
+            >
+              <option value={UNSELECTED}>選ばない</option>
+              {INTERVIEW_GRADES.map((value) => (
+                <option key={value} value={value}>
+                  {INTERVIEW_GRADE_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <fieldset className="space-y-3 rounded-md border p-3">
+            <legend className="px-1 text-xs text-muted-foreground">転載の原典（原典が手に入らず、転載で読んだ場合）</legend>
+            <p className="text-xs text-muted-foreground">
+              聴取者または媒体と日時には、転載した媒体と転載した日時を入れます。原典には、元の媒体と発行日を入れます。
+            </p>
+            <div>
+              <label htmlFor={`${formId}-origin-publisher`} className={LABEL_CLASS}>
+                原典の媒体（任意）
+              </label>
+              <select
+                id={`${formId}-origin-publisher`}
+                value={originPublisherPersonId}
+                onChange={(event) => setOriginPublisherPersonId(event.target.value)}
+                className={INPUT_CLASS}
+              >
+                <option value={UNSELECTED}>選ばない</option>
+                {currentCase.persons.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <TextField label="原典の発行日（任意）" value={originPublishedAt} onChange={setOriginPublishedAt} placeholder="2008-07-07、2008年7月7日 など" />
+            <TextField label="紙面・版など（任意）" value={originCitation} onChange={setOriginCitation} placeholder="朝刊 社会面 など" />
+          </fieldset>
         </fieldset>
       ) : (
         <Button type="button" variant="ghost" size="sm" onClick={() => setShowsDetails(true)}>
