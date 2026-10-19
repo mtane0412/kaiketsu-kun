@@ -279,6 +279,18 @@ describe('candidateToClaimDraft', () => {
       expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper', 'person-journalist'] });
     });
 
+    it('候補の経由に転載した媒体が先に挙がっていても、媒体は「原典の媒体 → 転載した媒体」の順に並べる', () => {
+      // 前提: LLM が経由に転載したジャーナリストだけを挙げた候補
+      const target = createReprintCase();
+      const [candidate] = buildClaimCandidates(target, 'interview-article', [
+        extracted({ speakerName: '県警', viaNames: ['転載したジャーナリスト'], quote: '県警によると' }),
+      ]).candidates;
+
+      const result = candidateToClaimDraft(target, 'interview-article', candidate!, sequentialIds());
+
+      expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper', 'person-journalist'] });
+    });
+
     it('発言者の分からない候補（記者の地の文）は、原典の媒体を発言者にし、転載した媒体を経由にする', () => {
       const target = createReprintCase();
       const [candidate] = buildClaimCandidates(target, 'interview-article', [
