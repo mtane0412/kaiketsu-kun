@@ -19,6 +19,38 @@ beforeEach(() => {
   resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
 });
 
+describe('PersonDetail のアイコンの文字の重なり', () => {
+  it('アイコンの文字が他の人物と重なる場合は、重なる人物を示し、アイコンの文字の指定を促す', () => {
+    // 前提: 「県警」と「県道の防犯カメラ」は、どちらも画像もアイコンの文字の指定も無く、アイコンが「県」になる
+    render(<PersonDetail personId="person-police" />);
+
+    const iconField = screen.getByRole('textbox', { name: /^アイコンの文字（/ });
+    expect(iconField).toHaveAccessibleDescription(/「県」.*県道の防犯カメラ/);
+  });
+
+  it('候補の文字を押すと、その文字をアイコンの文字に入れ、重なりの案内が消える', async () => {
+    const user = userEvent.setup();
+    render(<PersonDetail personId="person-police" />);
+
+    // 前提: 「県」は重なるため、候補は名前の残りの文字「警」になる
+    await user.click(screen.getByRole('button', { name: 'アイコンの文字を「警」にする' }));
+
+    const iconField = screen.getByRole('textbox', { name: /^アイコンの文字（/ });
+    expect(iconField).toHaveValue('警');
+    expect(iconField).not.toHaveAccessibleDescription(/県道の防犯カメラ/);
+
+    await user.click(screen.getByRole('button', { name: '人物を保存' }));
+    expect(openedCase().persons.find((person) => person.id === 'person-police')?.iconText).toBe('警');
+  });
+
+  it('アイコンの文字が他の人物と重ならない場合は、案内を表示しない', () => {
+    // 前提: 「隣家の住人」のアイコン「隣」は、他の人物と重ならない
+    render(<PersonDetail personId="person-neighbor" />);
+
+    expect(screen.queryByText(/同じです/)).not.toBeInTheDocument();
+  });
+});
+
 describe('PersonDetail', () => {
   it('人物の編集で、登録済みの種別を示し、種別を変更できる', async () => {
     const user = userEvent.setup();
