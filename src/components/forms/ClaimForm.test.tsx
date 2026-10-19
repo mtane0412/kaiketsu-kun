@@ -76,7 +76,7 @@ describe('ClaimForm', () => {
     // 検証: 発言者と経由は本文に書かず、「発言者」で選んだ人物を保存する
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       content:
         '翌朝、@[湖畔の別荘](place:place-villa)の郵便受けに@[別荘の持ち主](person:person-owner)あての新聞が残っていた。 @[1998年8月13日](date:1998-08-13)',
       placeId: 'place-villa',
@@ -254,7 +254,7 @@ describe('ClaimForm', () => {
     await user.type(screen.getByLabelText('内容'), '時刻の勘違いではないか。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(lastSavedClaim()).toMatchObject({ speaker: { kind: 'user' }, viaPersonIds: [] });
+    expect(lastSavedClaim()).toMatchObject({ speaker: { kind: 'user' }, sources: [] });
   });
 
   describe('日時の「@」での入力', () => {
@@ -459,7 +459,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       mentionedPersonIds: [],
     });
   });
@@ -477,7 +477,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(lastSavedClaim()?.viaPersonIds).toEqual(['person-newspaper', 'person-police']);
+    expect(lastSavedClaim()?.sources).toEqual([{ viaPersonIds: ['person-newspaper', 'person-police'] }]);
   });
 
   it('新聞の地の文は、新聞を発言者に選んで保存する（経由は無し）', async () => {
@@ -490,7 +490,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-newspaper'] },
-      viaPersonIds: [],
+      sources: [],
     });
   });
 
@@ -525,7 +525,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     const fictionalWeekly = openedCase().persons.find((person) => person.name === '週刊架空');
     expect(fictionalWeekly).toBeDefined();
-    expect(lastSavedClaim()?.viaPersonIds).toEqual([fictionalWeekly?.id]);
+    expect(lastSavedClaim()?.sources).toEqual([{ viaPersonIds: [fictionalWeekly?.id] }]);
   });
 
   it('「人物を追加」に登録済みの人物の名前を入力した場合は、新規作成せずにその人物を選ぶ', async () => {
@@ -716,7 +716,7 @@ describe('ClaimForm の発言者と経由の選択', () => {
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      viaPersonIds: ['person-book'],
+      sources: [{ viaPersonIds: ['person-book'] }],
     });
   });
 });
@@ -936,12 +936,15 @@ describe('ClaimForm（聴取）', () => {
     await user.selectOptions(screen.getByLabelText('資料（任意）'), '湖畔の夏 第3章・2018年5月・湖畔の夏 20年目の証言（架空の書籍）');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.interviewId).toBe(bookInterview.id);
+    // 検証: 編集した出典（経由が書籍の出典）を、選んだ資料にひもづける
+    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual([
+      { interviewId: bookInterview.id, viaPersonIds: ['person-book'] },
+    ]);
   });
 
   it('聴取を「資料なし」に戻すと、聴取の項目を持たない証言として保存する', async () => {
     const user = userEvent.setup();
-    const linkedClaim = { ...caretakerClaim, interviewId: bookInterview.id };
+    const linkedClaim = { ...caretakerClaim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] };
     openTestCase({
       ...sampleFictionalCase,
       interviews: [bookInterview],
@@ -952,7 +955,8 @@ describe('ClaimForm（聴取）', () => {
     await user.selectOptions(screen.getByLabelText('資料（任意）'), '資料なし');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)).not.toHaveProperty('interviewId');
+    // 検証: 経由は残し、資料だけを外す
+    expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual([{ viaPersonIds: ['person-book'] }]);
   });
 
   it('聴取を選んでも、発言者は選び直さない（資料に何人もの発言が載る場合があるため）', async () => {
@@ -977,7 +981,65 @@ describe('ClaimForm（聴取）', () => {
 
     expect(lastSavedClaim()).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      interviewId: bookInterview.id,
+      sources: [{ interviewId: bookInterview.id, viaPersonIds: [] }],
+    });
+  });
+
+  describe('複数の出典を持つ証言', () => {
+    /** 管理人の同じ発言が載った、新聞の記事です。 */
+    const newspaperInterview = { id: 'interview-newspaper', title: '架空日報 1998年8月14日 朝刊', interviewerPersonId: 'person-newspaper' };
+    /** 書籍と新聞の2つの出典を持つ、管理人の証言です。 */
+    const claimInTwoSources = {
+      ...caretakerClaim,
+      sources: [
+        { interviewId: bookInterview.id, viaPersonIds: ['person-book'] },
+        { interviewId: newspaperInterview.id, viaPersonIds: ['person-newspaper'], quote: { text: '別荘は真っ暗だった' } },
+      ],
+    };
+
+    beforeEach(() => {
+      openTestCase({
+        ...sampleFictionalCase,
+        interviews: [bookInterview, newspaperInterview],
+        claims: sampleFictionalCase.claims.map((claim) => (claim.id === caretakerClaim.id ? claimInTwoSources : claim)),
+      });
+    });
+
+    it('1つ目の出典を資料の欄と発言者の欄で編集し、2つ目以降の出典は一覧に示してそのまま保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      // 検証: 資料の欄と経由は1つ目の出典、2つ目の出典は「ほかの出典」に示す
+      expect(screen.getByLabelText('資料（任意）')).toHaveValue(bookInterview.id);
+      expect(screen.getByRole('button', { name: /^発言者/ })).toHaveTextContent('発言者: 管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
+      const otherSources = screen.getByRole('list', { name: 'ほかの出典' });
+      expect(within(otherSources).getByText(/架空日報 1998年8月14日 朝刊/)).toBeInTheDocument();
+      expect(within(otherSources).getByText(/別荘は真っ暗だった/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual(claimInTwoSources.sources);
+    });
+
+    it('ほかの出典を「外す」と、その出典を除いて保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: '出典を外す: 架空日報 1998年8月14日 朝刊・架空日報 朝刊' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual([claimInTwoSources.sources[0]]);
+    });
+
+    it('資料の欄で、ほかの出典と同じ資料を選ぶと、保存せずに理由を示す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      await user.selectOptions(screen.getByLabelText('資料（任意）'), newspaperInterview.id);
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(screen.getByText('この資料は、ほかの出典にすでに含まれています。ほかの出典を外すか、別の資料を選んでください')).toBeInTheDocument();
+      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual(claimInTwoSources.sources);
     });
   });
 
@@ -1019,11 +1081,11 @@ describe('ClaimForm（聴取）', () => {
     expect(lastSavedClaim()).toMatchObject({
       title: '車の不在',
       speaker: { kind: 'person', personIds: ['person-former-employee'] },
-      viaPersonIds: ['person-caretaker'],
       placeId: 'place-villa',
       mentionedPersonIds: ['person-owner'],
-      interviewId: bookInterview.id,
-      quote: { text: '持ち主の車は無かったと元従業員は語る' },
+      sources: [
+        { interviewId: bookInterview.id, viaPersonIds: ['person-caretaker'], quote: { text: '持ち主の車は無かったと元従業員は語る' } },
+      ],
     });
     expect(openedCase().persons.find((person) => person.id === 'person-former-employee')).toEqual({
       id: 'person-former-employee',

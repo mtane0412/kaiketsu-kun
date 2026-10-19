@@ -32,7 +32,7 @@ const caseWithIdentifiers: Case = {
     {
       id: 'claim-phone-record',
       speaker: { kind: 'user' },
-      viaPersonIds: [],
+      sources: [],
       title: '通話記録のメモ',
       content: '当夜に09012345678から着信があった。',
       mentionedPersonIds: [],

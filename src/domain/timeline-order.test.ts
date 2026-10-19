@@ -13,7 +13,7 @@ import type { Case, Claim, TimeRef } from './types';
 
 /** ユーザーの推測としての証言を作ります。 */
 function makeClaim(id: string, when?: TimeRef): Claim {
-  const claim: Claim = { id, speaker: { kind: 'user' }, viaPersonIds: [], content: `${id}の内容`, mentionedPersonIds: [] };
+  const claim: Claim = { id, speaker: { kind: 'user' }, sources: [], content: `${id}の内容`, mentionedPersonIds: [] };
   if (when) claim.when = when;
   return claim;
 }

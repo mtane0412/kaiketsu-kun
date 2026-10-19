@@ -157,7 +157,7 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
         )}
         {showSpeaker && <span className="font-semibold">{view.speakerLabel}</span>}
         {view.viaPersons.length > 0 && (
-          <span className="text-muted-foreground">{formatViaLabel(view.viaPersons.map((person) => person.name))}</span>
+          <span className="text-muted-foreground">{formatViaLabel(view.viaChains.map((chain) => chain.map((person) => person.name)))}</span>
         )}
         <Link
           href={claimHref(caseId, claim.id, tab)}

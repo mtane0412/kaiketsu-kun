@@ -37,11 +37,14 @@ export type SpeakerDraft = { personIds: Id[]; viaPersonIds: Id[] };
 /** 発言者・経由として選べる人物です。personKind は人物の種別で、選択肢の名前に添える表記に使います。 */
 export type SpeakerPersonOption = { id: Id; label: string; personKind: PersonKind };
 
-/** 保存済みの証言の発言者と経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。 */
-export function speakerToDraft(claim: Pick<Claim, 'speaker' | 'viaPersonIds'> | undefined): SpeakerDraft {
+/**
+ * 保存済みの証言の発言者と、1つ目の出典の経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。
+ * 2つ目以降の出典の経由は、証言のフォームの「ほかの出典」で扱います（src/components/forms/ClaimForm.tsx）。
+ */
+export function speakerToDraft(claim: Pick<Claim, 'speaker' | 'sources'> | undefined): SpeakerDraft {
   return {
     personIds: claim?.speaker.kind === 'person' ? claim.speaker.personIds : [],
-    viaPersonIds: claim?.viaPersonIds ?? [],
+    viaPersonIds: claim?.sources[0]?.viaPersonIds ?? [],
   };
 }
 
@@ -189,7 +192,7 @@ export function SpeakerPicker({ value, onChange, persons, onCreatePerson }: Spea
 
   const namesOf = (ids: Id[]) => ids.flatMap((id) => persons.find((person) => person.id === id)?.label ?? []);
   const speakerNames = namesOf(value.personIds).join('、') || `なし（${USER_SPEAKER_LABEL}）`;
-  const currentLabel = `${speakerNames}${formatViaLabel(namesOf(value.viaPersonIds))}`;
+  const currentLabel = `${speakerNames}${formatViaLabel([namesOf(value.viaPersonIds)])}`;
 
   const toggleOpen = () => {
     if (!isOpen) placePanel();
