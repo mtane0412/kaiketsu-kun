@@ -121,6 +121,8 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     const newspaper = screen.getByRole('region', { name: '「架空日報 朝刊」に触れている他の証言' });
+    // 検証: 見出しの件数は、経由としてだけ触れている証言も含めた件数にする（折りたたんだ証言だけのグループで0件と示さないため）
+    expect(within(newspaper).getByRole('heading')).toHaveTextContent('人物・2件');
     expect(within(newspaper).getByRole('link', { name: /12日夜から/ })).toBeInTheDocument();
     // 検証: 経由としてだけ触れている証言は、開くまで並べない
     expect(within(newspaper).queryByRole('link', { name: /車が別荘の方向へ走る/ })).not.toBeInTheDocument();

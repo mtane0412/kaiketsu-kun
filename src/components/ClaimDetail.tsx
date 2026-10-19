@@ -261,7 +261,7 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
               </Link>
               」に触れている他の証言
               <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {MENTION_KIND_LABELS[group.kind]}・{group.claims.length}件
+                {MENTION_KIND_LABELS[group.kind]}・{group.claims.length + group.viaOnlyClaims.length}件
               </span>
             </h3>
             {group.claims.length > 0 && (
