@@ -166,6 +166,18 @@ export function toInterval(ref: TimeRef): Interval {
   return { start: intervalOfParts(start).start, end: intervalOfParts(end ?? start).end };
 }
 
+/**
+ * 時刻参照が時刻（時・分）まで書かれているかどうかを判定します。
+ * 区間表記の場合は、始まりと終わりの両方が時刻を持つときだけ true を返します（粗い方の精度に合わせます）。
+ * 時刻軸で、日付だけ・期間の証言を、時刻のある証言と分けて描くために使います（src/domain/person-time-axis.ts）。
+ *
+ * 注意: 表記が解釈できない場合は、toInterval と同じく例外を投げます。
+ */
+export function hasClockTime(ref: TimeRef): boolean {
+  const { start, end } = parseTimeRefOrThrow(ref);
+  return [start, end ?? start].every((parts) => parts.hour !== undefined && parts.minute !== undefined);
+}
+
 /** 2つの区間が、一部でも重なるかどうかを判定します。接しているだけの区間同士は重なりません。 */
 export function intervalsOverlap(a: Interval, b: Interval): boolean {
   return a.start <= b.end && b.start <= a.end;

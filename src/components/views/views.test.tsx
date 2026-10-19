@@ -601,6 +601,68 @@ describe('PersonLaneView の時刻軸', () => {
     expect(within(within(timeAxis).getByRole('region', { name: '隣家の住人' })).getByRole('link')).toBeInTheDocument();
   });
 
+  /** 散歩していた人物が、日付だけの証言と時刻のある証言に登場するケースです。 */
+  const walkCase: Case = {
+    ...sampleFictionalCase,
+    persons: [{ id: 'person-walker', name: '散歩していた人', kind: 'individual' }],
+    claims: [
+      {
+        id: 'claim-fought-today',
+        speaker: { kind: 'person', personIds: ['person-walker'] },
+        sources: [],
+        title: '今日、けんかをした',
+        content: '今日、けんかをした。',
+        mentionedPersonIds: [],
+        when: '2008-07-01',
+      },
+      {
+        id: 'claim-accident',
+        speaker: { kind: 'person', personIds: ['person-walker'] },
+        sources: [],
+        title: '車をぶつけた',
+        content: '車をぶつけた。',
+        mentionedPersonIds: [],
+        when: '2008-07-01T21:30',
+      },
+    ],
+    relationships: [],
+    interviews: [],
+    crossChecks: [],
+    hypotheses: [],
+    tasks: [],
+    timelineOrder: [],
+    personLaneOrder: [],
+  };
+
+  it('日付だけの証言は列の端の細い段に、時刻のある証言は残りの幅に描き、互いに覆わない', async () => {
+    openTestCase(walkCase);
+    const user = userEvent.setup();
+    render(<PersonLaneView target={walkCase} />);
+    const timeAxis = await switchToTimeAxis(user);
+
+    const walkerColumn = within(timeAxis).getByRole('region', { name: '散歩していた人' });
+    const coarseBand = within(walkerColumn).getByRole('link', { name: /今日、けんかをした/ });
+    const fineBand = within(walkerColumn).getByRole('link', { name: /車をぶつけた/ });
+    // 検証: 2本の帯は別々の段に置かれ、時刻のある証言の帯は、粗い段の幅を空けた位置から描く
+    expect(coarseBand.closest('[data-track]')).toHaveAttribute('data-track', 'coarse');
+    expect(fineBand.closest('[data-track]')).toHaveAttribute('data-track', 'fine');
+    expect(screen.getByText(/列の左端の細い帯は、日付だけ・期間で述べた証言です/)).toBeInTheDocument();
+  });
+
+  it('帯には、帯の幅に関わらず読めるよう、日時と見出しの全文をホバー・フォーカスで示す要素を持たせる', async () => {
+    openTestCase(walkCase);
+    const user = userEvent.setup();
+    render(<PersonLaneView target={walkCase} />);
+    const timeAxis = await switchToTimeAxis(user);
+
+    const coarseBand = within(timeAxis).getByRole('link', { name: /今日、けんかをした/ });
+    coarseBand.focus();
+
+    expect(coarseBand).toHaveFocus();
+    expect(within(coarseBand).getByText('2008年7月1日')).toBeInTheDocument();
+    expect(within(coarseBand).getByText('今日、けんかをした', { selector: '[data-band-popup] *' })).toBeInTheDocument();
+  });
+
   it('「証言の順」に戻すと、証言の順の表を表示する', async () => {
     const user = userEvent.setup();
     render(<PersonLaneView target={sampleFictionalCase} />);
