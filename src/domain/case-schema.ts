@@ -26,6 +26,7 @@
 import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
+import { INTERVIEW_GRADES } from './interview-grade';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
@@ -83,6 +84,21 @@ const timeRefSchema = z.preprocess(
     .refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`)
     .optional()
 );
+
+/**
+ * 転載の原典の書誌です。分かっている項目だけを持ち、何も持たない原典は拒否します（原典を持たない資料は origin ごと持ちません）。
+ * 紙面などの書誌は、空白だけの文字列を持たせません（資料のタイトルと同じ扱いです）。
+ */
+const interviewOriginSchema = z
+  .object({
+    publisherPersonId: idSchema.optional(),
+    publishedAt: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+    citation: z.string().refine((value) => value.trim() !== '', '紙面などの書誌は空白以外の文字を含めてください').optional(),
+  })
+  .refine(
+    (origin) => origin.publisherPersonId !== undefined || origin.publishedAt !== undefined || origin.citation !== undefined,
+    '原典は、媒体・発行日・紙面などの書誌のいずれかを持たせてください'
+  );
 
 /**
  * 発言者を1人しか持てなかった頃のデータ（speaker.personId）を、現在の形（speaker.personIds）に変換します。
@@ -216,6 +232,8 @@ const caseSchema = z.object({
         documentRef: z.string().optional(),
         url: z.string().refine(isHttpUrl, 'URLは http か https のURLで指定してください').optional(),
         transcript: z.string().optional(),
+        origin: interviewOriginSchema.optional(),
+        grade: z.enum(INTERVIEW_GRADES).optional(),
         })
       )
     )
@@ -354,6 +372,7 @@ export function findCaseViolations(target: Case): string[] {
   }
   for (const interview of target.interviews) {
     check(personIds, interview.interviewerPersonId, '人物');
+    check(personIds, interview.origin?.publisherPersonId, '人物');
     check(placeIds, interview.placeId, '場所');
   }
   for (const relationship of target.relationships) {

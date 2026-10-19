@@ -3,6 +3,7 @@
  *
  * 人物の詳細の「供述の変遷」（InterviewSection）と、資料の詳細（InterviewDetail）で、同じ資料を同じ形で表示するための部品です。
  * 日時の見出し・聴取者などの説明・URL・本文・ひもづく証言を並べ、資料に対する次の操作をこのカードの中で行います。
+ * 説明には、資料の格と転載の原典（媒体・発行日・紙面など）も含めます。原典を持つ資料では、聴取者を「転載した媒体」と示します。
  * - 「この資料の証言を書き足す」: 資料を選んだ状態の証言の入力欄（ClaimForm の compact）を開きます。
  *   同じ資料の証言を続けて書くときに、資料と発言者を選び直す手間を省くためです。
  *   speakerPersonId を渡した場合（人物の詳細から開いた場合）は、その人物を発言者に選んでおきます。
@@ -30,6 +31,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
 import { sourceForInterview } from '@/domain/claim-sources';
+import { INTERVIEW_GRADE_LABELS } from '@/domain/labels';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, youtubeEmbedUrl } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
@@ -57,13 +59,27 @@ function timeLabelOf(view: InterviewView): string {
   return view.interview.at === undefined ? UNKNOWN_INTERVIEW_TIME_LABEL : formatTimeRef(view.interview.at);
 }
 
-/** 聴取者・場所・立場・資料番号のうち、入力済みのものを「 / 」でつないだ説明を返します。1つも無い場合は空文字列です。 */
+/** 転載の原典の媒体・発行日・紙面などのうち、入力済みのものを「・」でつないだ説明を返します。原典を持たない資料では undefined です。 */
+function describeOrigin(view: InterviewView): string | undefined {
+  const { origin } = view.interview;
+  if (origin === undefined) return undefined;
+  return [view.originPublisher?.name, origin.publishedAt && formatTimeRef(origin.publishedAt), origin.citation].filter(Boolean).join('・');
+}
+
+/**
+ * 聴取者・場所・立場・資料番号・資料の格・原典のうち、入力済みのものを「 / 」でつないだ説明を返します。1つも無い場合は空文字列です。
+ * 原典を持つ（転載の）資料では、聴取者を「転載した媒体」と示し、原典の媒体と取り違えないようにします。
+ */
 function describeInterview(view: InterviewView): string {
+  const origin = describeOrigin(view);
+  const interviewerLabel = origin === undefined ? '聴取者' : '転載した媒体';
   return [
-    view.interviewer && `聴取者: ${view.interviewer.name}`,
+    view.interviewer && `${interviewerLabel}: ${view.interviewer.name}`,
     view.place && `場所: ${view.place.name}`,
     view.interview.subjectRole && `立場: ${view.interview.subjectRole}`,
     view.interview.documentRef && `資料番号: ${view.interview.documentRef}`,
+    view.interview.grade && `資料の格: ${INTERVIEW_GRADE_LABELS[view.interview.grade]}`,
+    origin !== undefined && `原典: ${origin}`,
   ]
     .filter(Boolean)
     .join(' / ');

@@ -222,6 +222,8 @@ function insertMentions(content: string, mentions: DraftMention[]): string {
  * - 発言者の分からない候補は、聴取の媒体（聴取者）を発言者にします（記者の地の文は、媒体そのものの記述のためです）。
  *   発言者も経由も媒体でない場合は、経由の最後に媒体を足します（媒体を通じて伝わった発言のためです）。
  *   媒体の無い聴取では、経由を足さず、発言者の分からない候補は発言者を選ばずにおきます（ユーザーが入力欄で選びます）。
+ * - 転載の原典を持つ聴取では、媒体は「原典の媒体 → 転載した媒体（聴取者）」の順に伝えたものとして扱います。
+ *   発言者の分からない候補は原典の媒体を発言者にし、経由には足りない媒体をこの順に足します。
  * - 一致しない名前は、同じ種類・同じ名前（正規化後）ごとに1件だけ、createId で振ったIDで新規作成します。
  */
 export function candidateToClaimDraft(
@@ -230,7 +232,9 @@ export function candidateToClaimDraft(
   candidate: ClaimCandidate,
   createId: () => Id
 ): CandidateClaimDraft {
-  const { interviewerPersonId } = interviewWithTranscript(target, interviewId);
+  const interview = interviewWithTranscript(target, interviewId);
+  // 発言を伝えた媒体の並び（転載の資料では、原典の媒体が先、転載した媒体が後）
+  const mediaIds = [...new Set([interview.origin?.publisherPersonId, interview.interviewerPersonId].filter((id) => id !== undefined))];
   const newEntities: NewEntity[] = [];
   const idOf = (kind: MentionKind, resolved: ResolvedName): Id => {
     if (resolved.status === 'registered') return resolved.id;
@@ -242,10 +246,10 @@ export function candidateToClaimDraft(
   };
   const mentionOf = (kind: MentionKind, resolved: ResolvedName): DraftMention => ({ kind, id: idOf(kind, resolved), label: resolved.name });
 
-  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : interviewerPersonId;
+  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : mediaIds[0];
   const viaPersonIds = [...new Set(candidate.via.map((name) => idOf('person', name)))].filter((id) => id !== speakerId);
-  if (interviewerPersonId !== undefined && speakerId !== interviewerPersonId && !viaPersonIds.includes(interviewerPersonId)) {
-    viaPersonIds.push(interviewerPersonId);
+  for (const mediaId of mediaIds) {
+    if (mediaId !== speakerId && !viaPersonIds.includes(mediaId)) viaPersonIds.push(mediaId);
   }
 
   const entityMentions = [
