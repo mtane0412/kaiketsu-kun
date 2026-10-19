@@ -3,6 +3,10 @@
  *
  * ボード（CaseBoard）の横に並べて表示します。幅が狭い画面では、ボードの代わりに、これだけを表示します。
  * 証言1件の編集（見出し・本文・発言者・日時）と削除を、この1か所で行います。
+ * 詳細を開いた人が最も見たいのは、本文・出典（資料・経由・引用）・照合のため、これらを先に並べます。
+ * 編集のフォームは「編集」を押したときだけ、本文の表示の代わりに開きます。フォームは本文の欄にフォーカスを置いて開き、
+ * 保存したら「保存しました」と伝えて読む表示に戻ります。保存・「やめる」で閉じたときは、フォーカスを「編集」に戻します。
+ * 編集中は出典の欄を閉じます。1つ目の出典の引用はフォームにも示すため、同じ引用を2回表示しないためです。
  * 証言を削除すると、その証言を含む照合もあわせて削除されるため、確認の画面で照合の件数を伝えます。
  * 仮説にひもづいた証言を削除すると、仮説からひもづけを外すため、確認の画面で仮説の件数を伝えます。
  * 読み手が他の証言と突き合わせた結果（照合）の一覧と登録・編集・削除は、CrossCheckSection が担います。
@@ -11,7 +15,10 @@
  * 未了事項にひもづいた証言を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
  * 同じ人物・場所に触れている他の証言へのリンクを表示します（導出は buildClaimDetail を参照）。
- * 聴取の本文から書き起こした証言の引用（原文・動画の位置・元の資料へのリンク）は、QuoteSection が担います。
+ * 時系列の前後はボード上の並び順のため、日時を持たない証言には、日時が無く並び順での前後であることを添えます。
+ * 人物に経由としてだけ触れている他の証言（記事を転載した媒体を経由にした証言など）は、関係が薄く数も多くなりやすいため、
+ * 発言者・言及として触れている証言と分けて折りたたみます。
+ * 出典ごとの資料・経由と、聴取の本文から書き起こした引用（原文・動画の位置・元の資料へのリンク）は、SourcesSection が担います。
  * 人物・場所・日時・聴取を多く共有する証言を似ている順に並べる欄は、SimilarClaimsSection が担います。
  * 開いているタブはURLのクエリ（?tab=）から読み取り、詳細を閉じるリンクと、他の証言へのリンクに引き継ぎます。
  *
@@ -23,20 +30,23 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { buildClaimDetail, claimLabelOf, type ClaimView } from '@/domain/case-views';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildClaimDetail, claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
 import { findHypothesesUsingClaim } from '@/domain/hypotheses';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import { findTasksLinkedTo } from '@/domain/tasks';
 import type { MentionKind } from '@/domain/mention';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ClaimContentSegments } from './ClaimContentSegments';
 import { ClaimLink } from './ClaimLink';
 import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { HypothesisUsageSection } from './HypothesisUsageSection';
-import { QuoteSection } from './QuoteSection';
 import { SimilarClaimsSection } from './SimilarClaimsSection';
+import { SourcesSection } from './SourcesSection';
 import { TaskLinkSection } from './TaskLinkSection';
 import { ClaimForm } from './forms/ClaimForm';
 import { FormError } from './forms/fields';
@@ -46,6 +56,17 @@ import { DetailCloseLink } from './DetailCloseLink';
 
 /** この証言が触れている人物・場所を並べる欄の見出しです。 */
 const MENTIONED_ENTITIES_LABEL = 'この証言が触れている人物・場所';
+
+/** 日時を持たない前後の証言のリンクに添える補足です。 */
+const UNDATED_NEIGHBOR_NOTE = '日時なし（ボード上の並び順での前後です）';
+
+/** この証言が日時を持たない場合に、時系列の前後の欄に添える説明です。 */
+const UNDATED_CLAIM_NOTE = 'この証言は日時を持たないため、前後はボード上の並び順です。';
+
+/** 日時を持たない証言には、前後の証言のリンクに補足を添えます。 */
+function neighborNoteOf(view: ClaimView): string | undefined {
+  return view.claim.when === undefined ? UNDATED_NEIGHBOR_NOTE : undefined;
+}
 
 /** この証言が触れている人物・場所1件と、どの立場で触れているかです。 */
 type MentionedEntity = { role: string; kind: MentionKind; id: Id; name: string };
@@ -74,7 +95,27 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const tab = parseTab(useSearchParams().get(TAB_SEARCH_PARAM));
   const detail = useMemo(() => buildClaimDetail(currentCase, claimId), [currentCase, claimId]);
   const [isSaved, setIsSaved] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  /** フォームを閉じたあとに、フォーカスを「編集」に戻すかどうかです（フォームと一緒にフォーカスのある要素が消えるため）。 */
+  const shouldRestoreFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditing || !shouldRestoreFocusRef.current) return;
+    shouldRestoreFocusRef.current = false;
+    editButtonRef.current?.focus();
+  }, [isEditing]);
+
+  const openEditor = () => {
+    setIsSaved(false);
+    setIsEditing(true);
+  };
+  const closeEditor = (saved: boolean) => {
+    shouldRestoreFocusRef.current = true;
+    setIsSaved(saved);
+    setIsEditing(false);
+  };
 
   const closeLink = (
     <DetailCloseLink href={boardHref(caseId, tab)} label="証言の詳細を閉じる" />
@@ -119,22 +160,45 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
     <div className="space-y-6">
       {closeLink}
 
-      <section aria-label="証言の編集" className="rounded-lg border bg-card p-4">
+      <section aria-label="証言" className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-lg font-semibold">{claimLabelOf(view)}</h2>
-        <ClaimForm
-          initial={view.claim}
-          onDone={() => setIsSaved(true)}
-          actions={
-            <div className="mr-auto">
-              <DeleteConfirmButton
-                label="この証言を削除"
-                title="この証言を削除しますか？"
-                description={deleteDescription}
-                onConfirm={handleDelete}
-              />
+        {isEditing ? (
+          <ClaimForm
+            initial={view.claim}
+            autoFocus
+            onDone={() => closeEditor(true)}
+            actions={
+              <div className="mr-auto">
+                <Button type="button" variant="ghost" size="sm" onClick={() => closeEditor(false)}>
+                  やめる
+                </Button>
+              </div>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground">
+              {view.speakerLabel}
+              {formatViaLabel(view.viaChains.map((chain) => chain.map((person) => person.name)))}
+            </p>
+            <p className="whitespace-pre-line text-sm">
+              <ClaimContentSegments segments={view.contentSegments} tab={tab} />
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <div className="mr-auto">
+                <DeleteConfirmButton
+                  label="この証言を削除"
+                  title="この証言を削除しますか？"
+                  description={deleteDescription}
+                  onConfirm={handleDelete}
+                />
+              </div>
+              <Button ref={editButtonRef} type="button" variant="outline" size="sm" aria-label="この証言を編集" onClick={openEditor}>
+                編集
+              </Button>
             </div>
-          }
-        />
+          </div>
+        )}
         {isSaved && (
           <p role="status" className="mt-2 text-right text-xs text-mention-place-foreground">
             保存しました
@@ -145,7 +209,10 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         </div>
       </section>
 
-      <QuoteSection claimId={claimId} />
+      {/* 編集中は、1つ目の出典の引用をフォームに示すため、出典の欄を閉じる（同じ引用を2回表示しないため） */}
+      {!isEditing && <SourcesSection claimId={claimId} />}
+
+      <CrossCheckSection claimId={claimId} tab={tab} />
 
       {mentionedEntities.length > 0 && (
         <nav aria-label={MENTIONED_ENTITIES_LABEL} className="space-y-2">
@@ -168,8 +235,6 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
         </nav>
       )}
 
-      <CrossCheckSection claimId={claimId} tab={tab} />
-
       <HypothesisUsageSection claimId={claimId} tab={tab} />
 
       <TaskLinkSection kind="claim" id={claimId} tab={tab} />
@@ -177,8 +242,9 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
       {(previous || next) && (
         <nav aria-label="時系列の前後の証言" className="space-y-2">
           <h3 className="text-sm font-semibold">時系列の前後</h3>
-          {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" />}
-          {next && <ClaimLink view={next} tab={tab} prefix="次の証言" />}
+          {view.claim.when === undefined && <p className="text-xs text-muted-foreground">{UNDATED_CLAIM_NOTE}</p>}
+          {previous && <ClaimLink view={previous} tab={tab} prefix="前の証言" note={neighborNoteOf(previous)} />}
+          {next && <ClaimLink view={next} tab={tab} prefix="次の証言" note={neighborNoteOf(next)} />}
         </nav>
       )}
 
@@ -198,13 +264,30 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
                 {MENTION_KIND_LABELS[group.kind]}・{group.claims.length}件
               </span>
             </h3>
-            <ul className="space-y-1">
-              {group.claims.map((claimView) => (
-                <li key={claimView.claim.id}>
-                  <ClaimLink view={claimView} tab={tab} />
-                </li>
-              ))}
-            </ul>
+            {group.claims.length > 0 && (
+              <ul className="space-y-1">
+                {group.claims.map((claimView) => (
+                  <li key={claimView.claim.id}>
+                    <ClaimLink view={claimView} tab={tab} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {group.viaOnlyClaims.length > 0 && (
+              // 経由としてだけ触れている証言は関係が薄く、数も多くなりやすいため、開くまで並べない
+              <Collapsible>
+                <CollapsibleTrigger className="text-xs text-muted-foreground hover:underline">
+                  経由としてだけ触れている証言（{group.viaOnlyClaims.length}件）
+                </CollapsibleTrigger>
+                <CollapsibleContent render={<ul />} className="mt-1 space-y-1">
+                  {group.viaOnlyClaims.map((claimView) => (
+                    <li key={claimView.claim.id}>
+                      <ClaimLink view={claimView} tab={tab} />
+                    </li>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </section>
         );
       })}
