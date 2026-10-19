@@ -13,6 +13,7 @@ import {
   buildPersonLanes,
   buildTimeline,
   claimLabelOf,
+  describeClaimAttribution,
   findRelatedEntities,
   groupClaimsBySpeaker,
   groupStopsByPlace,
@@ -207,7 +208,7 @@ describe('groupClaimsBySpeaker', () => {
         {
           id: 'claim-caretaker-acquaintance',
           speaker: { kind: 'person', personIds: ['person-caretaker'] },
-          viaPersonIds: ['person-newspaper'],
+          sources: [{ viaPersonIds: ['person-newspaper'] }],
           content: '持ち主とは挨拶をする程度の付き合いだった。',
           mentionedPersonIds: ['person-owner'],
         },
@@ -229,7 +230,7 @@ describe('groupClaimsBySpeaker', () => {
         {
           id: 'claim-two-speakers',
           speaker: { kind: 'person', personIds: ['person-neighbor', 'person-caretaker'] },
-          viaPersonIds: ['person-newspaper'],
+          sources: [{ viaPersonIds: ['person-newspaper'] }],
           content: '持ち主は几帳面な人だった。',
           mentionedPersonIds: ['person-owner'],
         },
@@ -249,6 +250,45 @@ describe('groupClaimsBySpeaker', () => {
     const securityCamera = groupClaimsBySpeaker(sampleFictionalCase).find((group) => group.label === '県道の防犯カメラ');
 
     expect(securityCamera?.claims[0]?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊']);
+  });
+});
+
+describe('出典ごとに経由が違う証言', () => {
+  /** 防犯カメラの記録を、県警の発表として架空日報が報じ、書籍も伝えたケースです。 */
+  const caseWithTwoRoutes: Case = {
+    ...sampleFictionalCase,
+    claims: sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-police-camera'
+        ? { ...claim, sources: [{ viaPersonIds: ['person-police', 'person-newspaper'] }, { viaPersonIds: ['person-book'] }] }
+        : claim
+    ),
+  };
+
+  it('証言の表示に、出典ごとの経路と、経由した人物の全員を持たせる', () => {
+    const view = buildTimeline(caseWithTwoRoutes).items.find((item) => item.view.claim.id === 'claim-police-camera')?.view;
+
+    expect(view?.viaChains.map((chain) => chain.map((person) => person.name))).toEqual([
+      ['県警', '架空日報 朝刊'],
+      ['湖畔の夏 20年目の証言（架空の書籍）'],
+    ]);
+    expect(view?.viaPersons.map((person) => person.name)).toEqual(['県警', '架空日報 朝刊', '湖畔の夏 20年目の証言（架空の書籍）']);
+  });
+
+  it('発言者の後ろに、出典ごとの経路を「／」で区切って添える', () => {
+    const claim = caseWithTwoRoutes.claims.find((item) => item.id === 'claim-police-camera')!;
+
+    expect(describeClaimAttribution(caseWithTwoRoutes, claim)).toBe(
+      '県道の防犯カメラ（県警 → 架空日報 朝刊 による／湖畔の夏 20年目の証言（架空の書籍） による）'
+    );
+  });
+
+  it('人物の詳細では、どれか1つの出典の経由に含まれる証言を「経由して伝わった証言」にまとめる', () => {
+    const detail = buildPersonDetail(caseWithTwoRoutes, 'person-book');
+
+    expect(detail?.claimGroups.find((group) => group.label === 'この人物を経由して伝わった証言')?.claims.map((view) => view.claim.id)).toEqual([
+      'claim-caretaker',
+      'claim-police-camera',
+    ]);
   });
 });
 
@@ -289,7 +329,7 @@ describe('buildPersonLanes', () => {
         {
           id: 'claim-self',
           speaker: { kind: 'person', personIds: ['person-neighbor'] },
-          viaPersonIds: [],
+          sources: [],
           content: '@[隣家の住人](person:person-neighbor)はその夜、家にいた。',
           mentionedPersonIds: ['person-neighbor'],
         },
@@ -326,7 +366,7 @@ describe('buildPersonLanes', () => {
         {
           id: 'claim-lonely-guess',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: 'あの夜は雨だったのではないか。',
           mentionedPersonIds: [],
         },

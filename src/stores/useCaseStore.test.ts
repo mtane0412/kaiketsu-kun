@@ -10,7 +10,7 @@ import { useCaseStore } from './useCaseStore';
 const newClaim: Claim = {
   id: 'claim-postman',
   speaker: { kind: 'person', personIds: ['person-neighbor'] },
-  viaPersonIds: ['person-newspaper'],
+  sources: [{ viaPersonIds: ['person-newspaper'] }],
   content: '翌朝、別荘の郵便受けに新聞が残ったままだった。',
   mentionedPersonIds: ['person-owner'],
 };
@@ -342,10 +342,10 @@ describe('聴取', () => {
     const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
     if (!caretakerClaim) throw new Error('前提の証言がありません');
 
-    useCaseStore.getState().upsert('claims', { ...caretakerClaim, interviewId: bookInterview.id });
+    useCaseStore.getState().upsert('claims', { ...caretakerClaim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] });
 
     expect(getOpenCase().interviews).toEqual([bookInterview]);
-    expect(getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker')?.interviewId).toBe(bookInterview.id);
+    expect(getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]?.interviewId).toBe(bookInterview.id);
   });
 
   it('証言がひもづいている聴取は削除できず、証言がひもづいていない聴取は削除できる', () => {
@@ -355,7 +355,7 @@ describe('聴取', () => {
     ]);
     const caretakerClaim = getOpenCase().claims.find((claim) => claim.id === 'claim-caretaker');
     if (!caretakerClaim) throw new Error('前提の証言がありません');
-    useCaseStore.getState().upsert('claims', { ...caretakerClaim, interviewId: bookInterview.id });
+    useCaseStore.getState().upsert('claims', { ...caretakerClaim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] });
 
     expect(() => useCaseStore.getState().remove('interviews', bookInterview.id)).toThrow(
       '他のデータから参照されているため削除できません'
@@ -405,7 +405,7 @@ describe('時系列ボードの並び順', () => {
   const searchGuess: Claim = {
     id: 'claim-police-search',
     speaker: { kind: 'user' },
-    viaPersonIds: [],
+    sources: [],
     content: '警察が別荘を捜索したはずだ。',
     mentionedPersonIds: [],
     when: '1998-08-15',

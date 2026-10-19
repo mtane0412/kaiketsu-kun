@@ -29,6 +29,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
+import { sourceForInterview } from '@/domain/claim-sources';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, youtubeEmbedUrl } from '@/domain/transcript';
 import type { ClaimQuote, Id } from '@/domain/types';
@@ -173,7 +174,7 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
       ) : (
         <ul className="space-y-1">
           {view.claims.map((claimView) => {
-            const quoteSeconds = claimView.claim.quote?.seconds;
+            const quoteSeconds = sourceForInterview(claimView.claim, interview.id)?.quote?.seconds;
             return (
               <li key={claimView.claim.id} className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">

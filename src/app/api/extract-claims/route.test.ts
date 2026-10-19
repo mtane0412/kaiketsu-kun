@@ -28,6 +28,7 @@ describe('POST /api/extract-claims', () => {
           sourceName: '別荘の事件の記事・1998年8月13日・湖畔新聞',
           personNames: [],
           placeNames: [],
+          existingClaims: [],
           apiKey: '',
           model: 'anthropic/claude-sonnet-5',
         })

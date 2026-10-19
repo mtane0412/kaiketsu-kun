@@ -6,8 +6,8 @@
  * このファイルが担うのは次の3つです。
  * - 供述の変遷: ある人物が発言者の証言を含む聴取を日時の順に並べ、各聴取で得た証言を添えます。
  *   同じ人物の初回の供述と後の供述を、並べて見比べられるようにするためです。
- *   聴取に載っている人物（発言者）は聴取の項目として持たず、聴取にひもづく証言の発言者から導きます。
- *   経由（Claim.viaPersonIds）に含まれるだけの人物は、その人物の供述ではないため含めません。
+ *   聴取に載っている人物（発言者）は聴取の項目として持たず、聴取を出典に持つ証言の発言者から導きます（2つ目以降の出典も含めます）。
+ *   経由（ClaimSource.viaPersonIds）に含まれるだけの人物は、その人物の供述ではないため含めません。
  * - 資料の一覧と詳細: ケースのすべての聴取を日時の順に並べた一覧（サイドバー）と、1件の聴取の表示（資料の詳細）を作ります。
  * - 聴取の名前: 証言のフォームの選択肢で、聴取を見分けるための短い名前を組み立てます。
  *
@@ -15,6 +15,7 @@
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { buildTimeline, type ClaimView } from './case-views';
+import { interviewIdsOf } from './claim-sources';
 import { compareTimeRef, formatTimeRef } from './time-ref';
 import type { Case, Id, Interview, Person, Place } from './types';
 
@@ -58,7 +59,7 @@ function speakerIdsOf(claimViews: ClaimView[]): Id[] {
 
 /** 聴取1件を表示の形にします。claimViews は時系列ボードの並び順に並んだ証言です。 */
 function toInterviewView(target: Case, interview: Interview, claimViews: ClaimView[]): InterviewView {
-  const claims = claimViews.filter((view) => view.claim.interviewId === interview.id);
+  const claims = claimViews.filter((view) => interviewIdsOf(view.claim).includes(interview.id));
   return {
     interview,
     speakers: speakerIdsOf(claims).map((personId) => personOf(target, personId)),
@@ -87,9 +88,7 @@ export function buildPersonInterviews(target: Case, personId: Id): InterviewView
   // 表示の形に直す前に、その人物が発言者の証言がひもづく聴取だけに絞る（ケースのすべての聴取を組み立てないため）
   const interviewIds = new Set(
     target.claims.flatMap((claim) =>
-      claim.interviewId !== undefined && claim.speaker.kind === 'person' && claim.speaker.personIds.includes(personId)
-        ? [claim.interviewId]
-        : []
+      claim.speaker.kind === 'person' && claim.speaker.personIds.includes(personId) ? interviewIdsOf(claim) : []
     )
   );
   return buildSortedInterviews(

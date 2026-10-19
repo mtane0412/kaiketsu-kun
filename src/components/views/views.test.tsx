@@ -26,7 +26,7 @@ beforeEach(() => {
 const statementWithHeading: Claim = {
   id: 'claim-extortion',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
-  viaPersonIds: [],
+  sources: [],
   title: 'Zによる恐喝事件があった',
   content: 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。被害者は数回にわたって現金を渡したという。',
   mentionedPersonIds: [],
@@ -254,7 +254,7 @@ function StoreBoard() {
 const searchStatement: Claim = {
   id: 'claim-police-search',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
-  viaPersonIds: [],
+  sources: [],
   content: '警察が別荘を捜索した。',
   mentionedPersonIds: [],
   when: '1998-08-15',
@@ -356,7 +356,7 @@ describe('TimelineView への書き足し', () => {
     expect(within(appendedClaim).getByText('（架空日報 朝刊 による）')).toBeInTheDocument();
     expect(openedCase().claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       content: '持ち主は几帳面な人だった。',
     });
   });
@@ -609,7 +609,7 @@ describe('PersonLaneView の時刻軸', () => {
       {
         id: 'claim-fought-today',
         speaker: { kind: 'person', personIds: ['person-walker'] },
-        viaPersonIds: [],
+        sources: [],
         title: '今日、けんかをした',
         content: '今日、けんかをした。',
         mentionedPersonIds: [],
@@ -618,7 +618,7 @@ describe('PersonLaneView の時刻軸', () => {
       {
         id: 'claim-accident',
         speaker: { kind: 'person', personIds: ['person-walker'] },
-        viaPersonIds: [],
+        sources: [],
         title: '車をぶつけた',
         content: '車をぶつけた。',
         mentionedPersonIds: [],

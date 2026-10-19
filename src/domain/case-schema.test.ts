@@ -151,7 +151,7 @@ describe('parseCase', () => {
         {
           id: 'claim-newspaper-left',
           speaker: { kind: 'person', personIds: ['person-neighbor'] },
-          viaPersonIds: ['person-newspaper'],
+          sources: [{ viaPersonIds: ['person-newspaper'] }],
           content: '@[隣家の住人](person:person-neighbor): 郵便受けに新聞が残っていた。',
           mentionedPersonIds: [],
         },
@@ -277,7 +277,7 @@ describe('parseCase', () => {
   it('経由が存在しない人物を参照している証言を拒否する', () => {
     const data = {
       ...sampleFictionalCase,
-      claims: [{ ...sampleFictionalCase.claims[1], viaPersonIds: ['person-unknown'] }],
+      claims: [{ ...sampleFictionalCase.claims[1], sources: [{ viaPersonIds: ['person-unknown'] }] }],
     };
 
     expect(() => parseCase(toJsonData(data))).toThrow('存在しない人物を参照しています: person-unknown');
@@ -288,7 +288,7 @@ describe('parseCase', () => {
     const guess = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-user-guess')!;
     const data = {
       ...sampleFictionalCase,
-      claims: [...sampleFictionalCase.claims.filter((claim) => claim !== guess), { ...guess, viaPersonIds: ['person-newspaper'] }],
+      claims: [...sampleFictionalCase.claims.filter((claim) => claim !== guess), { ...guess, sources: [{ viaPersonIds: ['person-newspaper'] }] }],
     };
 
     expect(() => parseCase(toJsonData(data))).toThrow('ユーザーの推測に経由は指定できません: claim-user-guess');
@@ -448,10 +448,10 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
     expect(testimonyClaim).toEqual({
       id: 'claim-testimony',
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['source-newspaper'],
       locator: '社会面',
       content: '庭に人影が見えた。',
       mentionedPersonIds: [],
+      sources: [{ viaPersonIds: ['source-newspaper'] }],
     });
   });
 
@@ -461,9 +461,9 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
     expect(statement).toEqual({
       id: 'claim-narration',
       speaker: { kind: 'person', personIds: ['source-newspaper'] },
-      viaPersonIds: [],
       content: '持ち主と連絡が取れなくなっている。',
       mentionedPersonIds: [],
+      sources: [],
     });
   });
 
@@ -473,9 +473,9 @@ describe('parseCase（ソースを人物に統合する前のデータ）', () =
     expect(guess).toEqual({
       id: 'claim-guess',
       speaker: { kind: 'user' },
-      viaPersonIds: [],
       content: '@[架空日報 朝刊](person:source-newspaper)の記事は誤報ではないか。',
       mentionedPersonIds: ['source-newspaper'],
+      sources: [],
     });
   });
 
@@ -578,7 +578,7 @@ const caseWithInterviews = {
   ...sampleFictionalCase,
   interviews: [bookInterview],
   claims: sampleFictionalCase.claims.map((claim) =>
-    claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+    claim.id === 'claim-caretaker' ? { ...claim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] } : claim
   ),
 };
 
@@ -633,13 +633,13 @@ describe('parseCase（聴取）', () => {
     const caseData = {
       ...caseWithInterviews,
       claims: caseWithInterviews.claims.map((claim) =>
-        claim.id === 'claim-neighbor' ? { ...claim, interviewId: bookInterview.id } : claim
+        claim.id === 'claim-neighbor' ? { ...claim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-newspaper'] }] } : claim
       ),
     };
 
-    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-neighbor')?.interviewId).toBe(
-      bookInterview.id
-    );
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-neighbor')?.sources).toEqual([
+      { interviewId: bookInterview.id, viaPersonIds: ['person-newspaper'] },
+    ]);
   });
 });
 
@@ -687,7 +687,9 @@ const caseWithQuote = {
   ...caseWithInterviews,
   interviews: [videoInterview],
   claims: caseWithInterviews.claims.map((claim) =>
-    claim.id === 'claim-caretaker' ? { ...claim, quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } } : claim
+    claim.id === 'claim-caretaker'
+      ? { ...claim, sources: [{ interviewId: videoInterview.id, viaPersonIds: ['person-book'], quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } }] }
+      : claim
   ),
 };
 
@@ -706,19 +708,113 @@ describe('parseCase（聴取の本文と証言の引用）', () => {
     const caseData = {
       ...caseWithQuote,
       claims: caseWithQuote.claims.map((claim) =>
-        claim.id === 'claim-caretaker' ? { ...claim, quote: { text: '', seconds: -1 } } : claim
+        claim.id === 'claim-caretaker'
+          ? { ...claim, sources: [{ interviewId: videoInterview.id, viaPersonIds: [], quote: { text: '', seconds: -1 } }] }
+          : claim
       ),
     };
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/quote\.text[\s\S]*quote\.seconds/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/sources\.0\.quote\.text[\s\S]*sources\.0\.quote\.seconds/);
   });
 
   it('引用の原文が本文に見つからない証言も、拒否せずに受け付ける（本文をあとから書き換えた場合に、ケースを開けなくしないため）', () => {
     const caseData = { ...caseWithQuote, interviews: [{ ...videoInterview, transcript: '書き換えた本文' }] };
 
-    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-caretaker')?.quote?.text).toBe(
+    expect(parseCase(toJsonData(caseData)).claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]?.quote?.text).toBe(
       'あの夜は別荘が真っ暗でした'
     );
+  });
+});
+
+/** 新聞の記事として、隣家の住人の証言を報じた資料です。 */
+const newspaperInterview = { id: 'interview-newspaper', title: '架空日報 1998年8月14日 朝刊', interviewerPersonId: 'person-newspaper' };
+
+describe('parseCase（証言の出典）', () => {
+  it('1件の証言に、資料ごとの経由と引用を持つ複数の出典を保持して受け付ける', () => {
+    // 前提: 管理人の同じ発言が、書籍と新聞の両方に載っている
+    const caseData = {
+      ...caseWithInterviews,
+      interviews: [bookInterview, newspaperInterview],
+      claims: caseWithInterviews.claims.map((claim) =>
+        claim.id === 'claim-caretaker'
+          ? {
+              ...claim,
+              sources: [
+                { interviewId: bookInterview.id, viaPersonIds: ['person-book'] },
+                { interviewId: newspaperInterview.id, viaPersonIds: ['person-newspaper'], quote: { text: '別荘は真っ暗だった' } },
+              ],
+            }
+          : claim
+      ),
+    };
+
+    expect(parseCase(toJsonData(caseData))).toEqual(caseData);
+  });
+
+  it('証言を資料・引用・経由を1つずつ持っていた頃のデータは、1件の出典に移して受け付ける', () => {
+    // 前提: 以前の版では、証言そのものが interviewId・quote・viaPersonIds を持っていた
+    const legacyData = {
+      ...sampleFictionalCase,
+      interviews: [videoInterview],
+      claims: sampleFictionalCase.claims.map(({ sources, ...claim }) => {
+        const viaPersonIds = sources.flatMap((source) => source.viaPersonIds);
+        return claim.id === 'claim-caretaker'
+          ? { ...claim, viaPersonIds, interviewId: videoInterview.id, quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } }
+          : { ...claim, viaPersonIds };
+      }),
+    };
+
+    const loadedCase = parseCase(toJsonData(legacyData));
+
+    // 検証: 資料にひもづく証言は、資料・経由・引用をまとめた1件の出典になる
+    expect(loadedCase.claims.find((claim) => claim.id === 'claim-caretaker')?.sources).toEqual([
+      { interviewId: videoInterview.id, viaPersonIds: ['person-book'], quote: { text: 'あの夜は別荘が真っ暗でした', seconds: 5 } },
+    ]);
+    // 検証: 資料の無い証言のうち、経由のあるものは経由だけの出典に、経由も無いものは出典なしになる
+    expect(loadedCase.claims.find((claim) => claim.id === 'claim-police-camera')?.sources).toEqual([
+      { viaPersonIds: ['person-police', 'person-newspaper'] },
+    ]);
+    expect(loadedCase.claims.find((claim) => claim.id === 'claim-report')?.sources).toEqual([]);
+    expect(loadedCase.claims.every((claim) => !('viaPersonIds' in claim) && !('interviewId' in claim))).toBe(true);
+  });
+
+  it('出典と、以前の版の資料・引用・経由の項目を両方持つ証言は拒否する（どちらが正しいか決められないため）', () => {
+    const caseData = {
+      ...caseWithInterviews,
+      claims: caseWithInterviews.claims.map((claim) =>
+        claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+      ),
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow('出典（sources）と、以前の版の項目（viaPersonIds・interviewId・quote）を両方持っています: claim-caretaker');
+  });
+
+  it('同じ資料を2つの出典で参照する証言は拒否する', () => {
+    const caseData = {
+      ...caseWithInterviews,
+      claims: caseWithInterviews.claims.map((claim) =>
+        claim.id === 'claim-caretaker'
+          ? {
+              ...claim,
+              sources: [
+                { interviewId: bookInterview.id, viaPersonIds: ['person-book'] },
+                { interviewId: bookInterview.id, viaPersonIds: [] },
+              ],
+            }
+          : claim
+      ),
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow('同じ資料を2つの出典で参照しています: claim-caretaker');
+  });
+
+  it('資料・経由・引用のどれも持たない出典は拒否する', () => {
+    const caseData = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) => (claim.id === 'claim-report' ? { ...claim, sources: [{ viaPersonIds: [] }] } : claim)),
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow('資料・経由・引用のどれも持たない出典があります: claim-report');
   });
 });
 
