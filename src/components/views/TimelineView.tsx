@@ -114,16 +114,31 @@ function SortableItem({
   );
 }
 
-/** 書き足す位置を示すボタンです。 */
-function AddButton({ label, children, onClick }: { label?: string; children: ReactNode; onClick: () => void }) {
+/**
+ * 項目の前に書き足す位置を示すボタンです。
+ *
+ * 証言のカードの間ごとに置くため、同じ文言が繰り返されてカードの本文より目立たないようにします（#79）。
+ * - 広い画面（md 以上）: 普段は「＋」のアイコンと細い線だけを示し、行にマウスを乗せたとき、
+ *   またはキーボードのフォーカスが来たときだけ「ここに書き足す」の文言を示します。
+ *   文言を薄い色にする方法は、コントラスト（WCAG 2.2 AA の 4.5:1）を満たさなくなるため取りません。
+ * - 狭い画面（タッチ端末）: ホバーが無いため、常に文言を示します。
+ * 読み上げには、どの画面でも aria-label の名前が届きます。
+ */
+function SlotAddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex min-h-6 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      className="group/add flex min-h-6 w-full items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {children}
+      <Plus className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="md:sr-only md:group-hover/add:not-sr-only md:group-focus-visible/add:not-sr-only">ここに書き足す</span>
+      {/* 普段の広い画面で、書き足せる位置を示す細い線です。文言を示している間は隠します。 */}
+      <span
+        aria-hidden="true"
+        className="hidden h-px flex-1 bg-border md:block md:group-hover/add:hidden md:group-focus-visible/add:hidden"
+      />
     </button>
   );
 }
@@ -202,10 +217,7 @@ export function TimelineView({ target }: TimelineViewProps) {
       {composer?.type === 'before' && composer.index === index ? (
         <BoardComposer defaults={{ insertIndex: index }} onClose={closeComposer} />
       ) : (
-        <AddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', index })}>
-          <Plus className="size-3.5" aria-hidden="true" />
-          ここに書き足す
-        </AddButton>
+        <SlotAddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', index })} />
       )}
     </li>
   );
