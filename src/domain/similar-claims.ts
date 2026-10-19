@@ -88,12 +88,13 @@ function scoreTime(a: Claim, b: Claim): ScoredReason | undefined {
   return { score: SIMILARITY_WEIGHTS.time * (1 - gapMs / NEAR_TIME_WINDOW_MS), reason: { kind: 'nearTime', gapMs } };
 }
 
-/** 仮説が、支える・反する・対象の人物の観点のいずれかでひもづけている証言のIDです。 */
+/** 仮説が、支える・反する・対象の人物の観点・主唱者の立場の変化の根拠のいずれかでひもづけている証言のIDです。 */
 function claimIdsOfHypothesis(hypothesis: Hypothesis): Set<Id> {
   return new Set([
     ...hypothesis.supportingClaimIds,
     ...hypothesis.opposingClaimIds,
     ...hypothesis.targets.flatMap((target) => Object.values(target.claimIds).flat()),
+    ...(hypothesis.stanceChanges ?? []).flatMap((change) => change.basisClaimIds),
   ]);
 }
 

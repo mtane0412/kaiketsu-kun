@@ -20,7 +20,6 @@
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
 import { buildClaimCrossChecks, crossCheckLabelFor, type ClaimCrossCheckView } from '@/domain/cross-checks';
-import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -38,9 +37,10 @@ const SECTION_LABEL = '照合';
  * 編集・削除のボタンの、読み上げ用の名前を組み立てます。
  * 1件の証言が複数の照合を持ち、同じ相手との間にも種類の異なる照合を登録できるため、
  * ボタンの名前には相手の証言の名前と照合の種類を含めて、どの照合への操作かを区別できるようにします。
+ * 撤回・訂正の照合では、種類の代わりに、開いている証言が撤回・訂正した側かされた側かを含めます（crossCheckLabelFor）。
  */
-function actionLabelOf(view: ClaimCrossCheckView, action: string): string {
-  return `「${claimLabelOf(view.other)}」との照合（${CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}）を${action}`;
+function actionLabelOf(view: ClaimCrossCheckView, claimId: Id, action: string): string {
+  return `「${claimLabelOf(view.other)}」との照合（${crossCheckLabelFor(view.crossCheck, claimId)}）を${action}`;
 }
 
 /** 入力フォームの状態です。編集の場合は、対象の照合のIDを持ちます。 */
@@ -94,14 +94,14 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  aria-label={actionLabelOf(view, '編集')}
+                  aria-label={actionLabelOf(view, claimId, '編集')}
                   onClick={() => setForm({ kind: 'edit', crossCheckId: view.crossCheck.id })}
                 >
                   編集
                 </Button>
                 <DeleteConfirmButton
                   iconOnly
-                  label={actionLabelOf(view, '削除')}
+                  label={actionLabelOf(view, claimId, '削除')}
                   title="この照合を削除しますか？"
                   description="この照合をケースから削除します。この操作は取り消せません。照合した証言は削除しません。"
                   onConfirm={() => handleDelete(view.crossCheck.id)}

@@ -126,6 +126,29 @@ describe('findSimilarClaims', () => {
     expect(byId.get('claim-report')?.sharedHypotheses).toEqual([]);
   });
 
+  it('第三者の説の、主唱者の立場の変化の根拠にひもづけた証言どうしも、同じ仮説を使っている目印として返す', () => {
+    // 前提: 架空の書籍の説の撤回の根拠に、隣家の住人の証言と新聞の記事の証言をひもづけたケース
+    const target: Case = {
+      ...sampleFictionalCase,
+      hypotheses: [
+        {
+          id: 'hypothesis-book-theory',
+          title: '持ち主は自分で姿を消した',
+          status: 'open',
+          supportingClaimIds: [],
+          opposingClaimIds: [],
+          targets: [],
+          proponentPersonId: 'person-book',
+          stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-neighbor', 'claim-report'] }],
+        },
+      ],
+    };
+
+    const similarReport = findSimilarClaims(target, 'claim-neighbor').find((similar) => similar.view.claim.id === 'claim-report');
+
+    expect(similarReport?.sharedHypotheses.map((hypothesis) => hypothesis.id)).toEqual(['hypothesis-book-theory']);
+  });
+
   it('照合や仮説でつながっているだけで、何も共有しない証言は含めない', () => {
     const target: Case = {
       ...sampleFictionalCase,

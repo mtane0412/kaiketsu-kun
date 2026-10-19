@@ -7,6 +7,7 @@ import {
   buildHypothesisList,
   detachClaimFromHypotheses,
   findHypothesesUsingClaim,
+  insertStanceChange,
 } from './hypotheses';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case, Hypothesis } from './types';
@@ -174,6 +175,19 @@ describe('第三者の説', () => {
     expect(bookTheory?.stanceChanges).toEqual([
       { id: 'stance-withdrawn', kind: 'withdrawn', at: '2020-05', basisClaimIds: [], note: '著者が誤りを認めた' },
     ]);
+  });
+
+  it('立場の変化を加えるときは、時期の順の位置に入れ、時期の分からない変化は末尾に加える', () => {
+    // 前提: 2020年の「再び主張」を先に記録してあり、後から2019年の「撤回」が見つかった
+    const reaffirmed = { id: 'stance-reaffirmed', kind: 'reaffirmed' as const, at: '2020', basisClaimIds: [] };
+    const withdrawn = { id: 'stance-withdrawn', kind: 'withdrawn' as const, at: '2019-03', basisClaimIds: [] };
+    const undated = { id: 'stance-revised', kind: 'revised' as const, basisClaimIds: [] };
+
+    const afterWithdrawn = insertStanceChange([reaffirmed], withdrawn);
+    const afterUndated = insertStanceChange(afterWithdrawn, undated);
+
+    expect(afterWithdrawn.map((change) => change.id)).toEqual(['stance-withdrawn', 'stance-reaffirmed']);
+    expect(afterUndated.map((change) => change.id)).toEqual(['stance-withdrawn', 'stance-reaffirmed', 'stance-revised']);
   });
 
   it('立場の変化を持たない仮説は、証言を削除しても立場の変化の項目を持たないままにする', () => {

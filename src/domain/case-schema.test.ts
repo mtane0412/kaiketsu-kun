@@ -771,6 +771,21 @@ describe('parseCase（照合）', () => {
     expect(parseCase(toJsonData(caseData)).crossChecks).toEqual([revision]);
   });
 
+  it('同じ2件の証言の間で、撤回・訂正を両方向に登録した場合は拒否する', () => {
+    // 前提: AがBを撤回し、かつBがAを撤回することはありえない
+    const caseData = {
+      ...sampleFictionalCase,
+      crossChecks: [
+        { id: 'cross-check-forward', claimIds: ['claim-report', 'claim-neighbor'], kind: 'revises' },
+        { id: 'cross-check-backward', claimIds: ['claim-neighbor', 'claim-report'], kind: 'revises' },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(
+      /同じ2件の証言の間で、撤回・訂正を両方向に登録することはできません: cross-check-backward/
+    );
+  });
+
   it('照合の種類が決められた値でない場合は拒否する', () => {
     const caseData = {
       ...sampleFictionalCase,
@@ -901,6 +916,13 @@ describe('parseCase（仮説）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(
       /立場の変化に同じ証言を2回以上ひもづけることはできません: hypothesis-caretaker/
     );
+  });
+
+  it('1つの仮説の中で、立場の変化のIDが重複している場合は拒否する', () => {
+    const change = { id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: [] };
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({ ...thirdPartyFields, stanceChanges: [change, change] });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/立場の変化のIDが重複しています: hypothesis-caretaker/);
   });
 
   it('立場の変化の種類・時期が決められた形でない場合は拒否する', () => {

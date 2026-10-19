@@ -166,7 +166,8 @@ describe('CrossCheckSection', () => {
     const user = userEvent.setup();
     renderNeighborCrossCheck();
 
-    await user.click(screen.getByRole('button', { name: /との照合（撤回・訂正している）を編集/ }));
+    // 検証: 操作のボタンの名前にも、開いている証言がどちらの側かを含める
+    await user.click(screen.getByRole('button', { name: /との照合（この証言が撤回・訂正した証言）を編集/ }));
     const direction = within(screen.getByRole('region', { name: '照合の編集' })).getByRole('group', { name: '撤回・訂正の向き' });
     expect(within(direction).getByRole('radio', { name: 'この証言が、相手の証言を撤回・訂正している' })).toBeChecked();
     await user.click(within(direction).getByRole('radio', { name: '相手の証言が、この証言を撤回・訂正している' }));

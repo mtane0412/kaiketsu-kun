@@ -1,7 +1,8 @@
 /**
  * 仮説の詳細に並べる「主唱者の立場の変化」
  *
- * 第三者の説（主唱者を持つ仮説）について、主唱者が説を撤回・修正・再び主張したことを、根拠の証言とともに記録した順に並べます。
+ * 第三者の説（主唱者を持つ仮説）について、主唱者が説を撤回・修正・再び主張したことを、根拠の証言とともに起きた順に並べます。
+ * 記録するときは、時期の順の位置に入れます（insertStanceChange）。時期の分からない変化は末尾に加えます。
  * 各行には、種類・時期・メモと、根拠の証言へのリンクを並べ、記録を削除するボタンを置きます。
  * 「立場の変化を記録」から、入力フォーム（HypothesisStanceChangeForm）を開いて1件ずつ記録します。
  *
@@ -13,7 +14,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { HypothesisStanceChangeView } from '@/domain/hypotheses';
+import { insertStanceChange, type HypothesisStanceChangeView } from '@/domain/hypotheses';
 import { HYPOTHESIS_STANCE_CHANGE_KIND_LABELS } from '@/domain/labels';
 import { formatTimeRef } from '@/domain/time-ref';
 import type { Hypothesis, HypothesisStanceChange, Id } from '@/domain/types';
@@ -43,7 +44,7 @@ export function HypothesisStanceSection({ stanceChanges, tab, update }: Hypothes
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const handleSave = (change: HypothesisStanceChange) => {
-    update((current) => ({ ...current, stanceChanges: [...(current.stanceChanges ?? []), change] }));
+    update((current) => ({ ...current, stanceChanges: insertStanceChange(current.stanceChanges ?? [], change) }));
     setIsFormOpen(false);
   };
 

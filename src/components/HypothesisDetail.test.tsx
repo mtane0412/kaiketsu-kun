@@ -239,6 +239,22 @@ describe('HypothesisDetail（第三者の説）', () => {
     expect(findBookTheory()).not.toHaveProperty('proposedAt');
   });
 
+  it('立場の変化を記録した説を「読み手（自分）」に戻すときは、立場の変化を取り除くことを示し、取り除いて保存する', async () => {
+    openCaseWithBookTheory({
+      ...bookTheory,
+      stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-report'] }],
+    });
+    const user = userEvent.setup();
+    render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
+
+    const editRegion = screen.getByRole('region', { name: '仮説の編集' });
+    await user.selectOptions(within(editRegion).getByRole('combobox', { name: '主唱者' }), '');
+    expect(editRegion).toHaveTextContent('保存すると、主唱者の立場の変化1件を取り除きます。');
+    await user.click(within(editRegion).getByRole('button', { name: '仮説を保存' }));
+
+    expect(findBookTheory()).not.toHaveProperty('stanceChanges');
+  });
+
   it('唱えた時期を解釈できない場合は、理由を示して保存しない', async () => {
     openCaseWithBookTheory();
     const user = userEvent.setup();

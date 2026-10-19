@@ -240,6 +240,31 @@ describe('ClaimDetail', () => {
     expect(within(hypothesis).getByRole('listitem')).toHaveTextContent('主唱者の撤回の根拠');
   });
 
+  it('立場の変化の根拠にした証言の削除の確認では、仮説からひもづけを外すことを伝える', async () => {
+    // 前提: 新聞の記事の証言は、架空の書籍の説の撤回の根拠にだけひもづいている
+    openTestCase({
+      ...sampleFictionalCase,
+      hypotheses: [
+        {
+          id: 'hypothesis-book-theory',
+          title: '持ち主は自分で姿を消した',
+          status: 'open',
+          supportingClaimIds: [],
+          opposingClaimIds: [],
+          targets: [],
+          proponentPersonId: 'person-book',
+          stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-report'] }],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-report" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた仮説1件から、ひもづけを外します。');
+  });
+
   it('撤回・訂正の照合は、開いている証言が撤回・訂正された側であることを示す', () => {
     // 前提: 防犯カメラの証言が、新聞の記事の証言を訂正したケース
     openTestCase({

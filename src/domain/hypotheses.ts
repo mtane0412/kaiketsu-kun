@@ -8,12 +8,14 @@
  *   第三者の説には、主唱者と、主唱者の最新の立場の変化を添えます
  * - 仮説の詳細に並べる、支える証言・反する証言、対象の人物ごとの動機・機会・手段の証言、主唱者の立場の変化ごとの根拠の証言（buildHypothesisDetail）
  * - 証言の詳細に並べる、その証言を使っている仮説（findHypothesesUsingClaim）
- * あわせて、証言を削除するときに仮説からひもづけを外す操作（detachClaimFromHypotheses）を持ちます。
+ * あわせて、証言を削除するときに仮説からひもづけを外す操作（detachClaimFromHypotheses）と、
+ * 主唱者の立場の変化を時期の順の位置に加える操作（insertStanceChange）を持ちます。
  *
  * 証言を並べる順は、証言の詳細と同じく時系列の並び順（buildTimeline）です。
  * 注意: 判断（有力・否定）は仮説の側に置きます。証言そのものの真偽は判定しません。
  */
 import { buildTimeline, type ClaimView } from './case-views';
+import { compareTimeRef } from './time-ref';
 import type {
   Case,
   Hypothesis,
@@ -174,6 +176,20 @@ export function findHypothesesUsingClaim(target: Case, claimId: Id): HypothesisU
     ];
     return uses.length > 0 ? [{ hypothesis, uses }] : [];
   });
+}
+
+/**
+ * 主唱者の立場の変化 change を、時期の順の位置に加えた一覧を返します。
+ *
+ * 立場の変化は起きた順に並べて持ち、最後の要素を最新の立場として扱います（buildHypothesisList の latestStanceChange）。
+ * 後から見つかった古い変化を記録しても順が崩れないよう、時期を持つ変化は、時期がそれより後の最初の変化の前に入れます。
+ * 時期の同じ変化の間では、記録した順を保ちます。時期の分からない変化は、起きた順を決められないため末尾に加えます。
+ */
+export function insertStanceChange(changes: HypothesisStanceChange[], change: HypothesisStanceChange): HypothesisStanceChange[] {
+  const { at } = change;
+  const index =
+    at === undefined ? -1 : changes.findIndex((existing) => existing.at !== undefined && compareTimeRef(existing.at, at) > 0);
+  return index === -1 ? [...changes, change] : [...changes.slice(0, index), change, ...changes.slice(index)];
 }
 
 /**

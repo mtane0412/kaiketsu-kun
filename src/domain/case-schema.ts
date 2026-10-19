@@ -363,6 +363,16 @@ export function findCaseViolations(target: Case): string[] {
     if (crossCheck.claimIds[0] === crossCheck.claimIds[1]) {
       violations.push(`同じ証言どうしは照合できません: ${crossCheck.id}`);
     }
+    // 撤回・訂正は向きを持つため、逆向きの撤回・訂正が先に登録されていれば矛盾として拒否する
+    const [revisingId, revisedId] = crossCheck.claimIds;
+    const hasReverseRevision =
+      crossCheck.kind === 'revises' &&
+      target.crossChecks
+        .slice(0, target.crossChecks.indexOf(crossCheck))
+        .some((other) => other.kind === 'revises' && other.claimIds[0] === revisedId && other.claimIds[1] === revisingId);
+    if (hasReverseRevision) {
+      violations.push(`同じ2件の証言の間で、撤回・訂正を両方向に登録することはできません: ${crossCheck.id}`);
+    }
   }
   for (const hypothesis of target.hypotheses) {
     hypothesis.supportingClaimIds.forEach((id) => check(claimIds, id, '証言'));
@@ -397,6 +407,9 @@ export function findCaseViolations(target: Case): string[] {
     const stanceChanges = hypothesis.stanceChanges ?? [];
     if (hypothesis.proponentPersonId === undefined && stanceChanges.length > 0) {
       violations.push(`主唱者の無い仮説に、主唱者の立場の変化は指定できません: ${hypothesis.id}`);
+    }
+    if (new Set(stanceChanges.map((change) => change.id)).size !== stanceChanges.length) {
+      violations.push(`立場の変化のIDが重複しています: ${hypothesis.id}`);
     }
     for (const stanceChange of stanceChanges) {
       stanceChange.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));

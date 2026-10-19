@@ -3,7 +3,8 @@
  *
  * 仮説の詳細（HypothesisDetail）と登録（NewHypothesisDetail）で使い、仮説（Hypothesis）の見出し・説明・主唱者・唱えた時期・状態・否定の理由を入力します。
  * 主唱者の初期値は「読み手（自分）」です。主唱者に人物を選ぶと第三者の説になり、唱えた時期の欄を表示します。
- * 主唱者を「読み手（自分）」に戻して保存するときは、唱えた時期を取り除きます（読み手自身の仮説は唱えた時期を持てないためです）。
+ * 主唱者を「読み手（自分）」に戻して保存するときは、唱えた時期と主唱者の立場の変化を取り除きます
+ * （読み手自身の仮説は、どちらも持てないためです）。立場の変化を記録済みの場合は、取り除く件数を保存の前に示します。
  * 否定の理由の欄は、状態に「否定された」を選んだときだけ表示し、入力を必須にします。
  * 否定以外の状態で保存するときは、否定の理由を取り除きます（否定されていない仮説は否定の理由を持てないためです）。
  *
@@ -50,6 +51,9 @@ export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps
   const [isProposedAtInvalid, setIsProposedAtInvalid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorId = `${formId}-error`;
+  /** 記録済みの主唱者の立場の変化の件数です。読み手自身の仮説に戻すと取り除くことを、保存の前に示すために使います。 */
+  const stanceChangeCount =
+    currentCase.hypotheses.find((hypothesis) => hypothesis.id === initial?.id)?.stanceChanges?.length ?? 0;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -62,7 +66,8 @@ export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps
       setIsProposedAtInvalid(true);
       return;
     }
-    // フォームを開いた後に詳細でひもづけた証言・対象の人物・立場の変化を上書きしないよう、最新の仮説から引き継ぐ
+    // フォームを開いた後に詳細でひもづけた証言・対象の人物・立場の変化を上書きしないよう、最新の仮説から引き継ぐ。
+    // ただし読み手自身の仮説に戻す場合は、立場の変化を持てないため引き継がない
     const latest = currentCase.hypotheses.find((hypothesis) => hypothesis.id === initial?.id);
     const trimmedDescription = description.trim();
     const hypothesis: Hypothesis = {
@@ -76,7 +81,7 @@ export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps
       targets: latest?.targets ?? [],
       ...(hasProponent ? { proponentPersonId } : {}),
       ...(parsedProposedAt !== undefined ? { proposedAt: parsedProposedAt } : {}),
-      ...(latest?.stanceChanges !== undefined ? { stanceChanges: latest.stanceChanges } : {}),
+      ...(hasProponent && latest?.stanceChanges !== undefined ? { stanceChanges: latest.stanceChanges } : {}),
     };
 
     try {
@@ -112,6 +117,10 @@ export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps
           ))}
         </select>
       </div>
+
+      {proponentPersonId === '' && stanceChangeCount > 0 && (
+        <p className="text-xs text-destructive">保存すると、主唱者の立場の変化{stanceChangeCount}件を取り除きます。</p>
+      )}
 
       {proponentPersonId !== '' && (
         <TextField
