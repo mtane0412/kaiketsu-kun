@@ -8,14 +8,25 @@
  * 列と、列の人物にとっての証言の役割（発言・言及）は、証言の順の表示（buildPersonLanes）と同じです。
  * 日時を持たない証言は、時刻軸に置けないため帯にせず、件数だけを数えます。
  *
+ * 帯は、日時の精度で2つの段（track）に分けます。
+ * - fine: 時刻（時・分）まで書いた証言。所在を確かめられる細かさの証言です。
+ * - coarse: 年・月・日までの日時や、日付で書いた期間の証言。その期間全体の長い帯になります。
+ * 同じ段の中でだけ重なる帯を横に並べます。粗い証言の長い帯が、同じ時間帯の細かい帯を覆ったり、細かい帯の幅を狭めたりしないためです。
+ *
  * 注意: 時刻は time-ref.ts と同じく、すべてUTCとして扱います。
  */
 import { buildPersonLanes, type LaneRole, type PersonLane } from './case-views';
 import type { ClaimView } from './case-views';
 import { PERSON_KINDS } from './person-kind';
-import { DAY_MS, HOUR_MS, intervalsOverlap, MINUTE_MS, toInterval, type Interval } from './time-ref';
+import { DAY_MS, hasClockTime, HOUR_MS, intervalsOverlap, MINUTE_MS, toInterval, type Interval } from './time-ref';
 import type { TimelineKey } from './timeline-order';
 import type { Case, Id, PersonKind } from './types';
+
+/**
+ * 帯を置く段です。時刻まで書いた証言は fine、日付・月・年までの証言と日付の期間は coarse です。
+ * 段ごとに、重なる帯を横に並べる位置を割り当てます。
+ */
+export type BandTrack = 'fine' | 'coarse';
 
 /** 時刻軸の1本の帯（ある人物の列に置いた、1件の証言の日時の区間）です。 */
 export type PersonTimeBand = {
@@ -24,9 +35,11 @@ export type PersonTimeBand = {
   /** 列の人物にとっての証言の役割です。 */
   role: LaneRole;
   interval: Interval;
-  /** 同じ列で重なる帯を横に並べるための位置（0始まり）です。 */
+  /** 帯を置く段です。 */
+  track: BandTrack;
+  /** 同じ列・同じ段で重なる帯を横に並べるための位置（0始まり）です。 */
   column: number;
-  /** その列の帯を横に並べる位置の数です。列の中のすべての帯で同じ値です。 */
+  /** この帯と重なり合う帯のまとまりの中で、帯を横に並べる位置の数です。まとまりの中のすべての帯で同じ値です。 */
   columnCount: number;
 };
 
@@ -42,23 +55,62 @@ export type PersonTimeAxis = {
   undatedCount: number;
 };
 
+/** 横に並べる位置を割り当てる前の帯です。位置を割り当て済みの帯（PersonTimeBand）も渡せます。 */
+type UnplacedBand = Omit<PersonTimeBand, 'column' | 'columnCount'>;
+
+/** 帯を、区間の始まりが早い順（同じなら終わりが早い順）に並べる比較関数です。 */
+function compareBands(a: { interval: Interval }, b: { interval: Interval }): number {
+  return a.interval.start - b.interval.start || a.interval.end - b.interval.end;
+}
+
 /**
- * 同じ列の帯に、重ならないよう横に並べる位置を割り当てます。
+ * 同じ列・同じ段の帯に、重ならないよう横に並べる位置を割り当てます。
  * 帯を始まりの早い順に見て、空いている（その位置の最後の帯が、この帯の始まりより前に終わっている）最初の位置に置きます。
+ * 帯の終わりは、区間の終わりと「始まり＋最小の長さ」の遅い方として扱います。
+ *
+ * 位置の数（columnCount）は、互いに重なり合う帯のまとまりごとに数えます。
+ * 列の全体で数えると、ある時間帯に帯が集まっただけで、別の時間帯の帯まで細くなるためです。
  */
-function assignColumns(bands: Omit<PersonTimeBand, 'column' | 'columnCount'>[]): PersonTimeBand[] {
-  const sorted = bands.toSorted(
-    (a, b) => a.interval.start - b.interval.start || a.interval.end - b.interval.end
-  );
-  /** 位置ごとの、最後に置いた帯の終わりです。 */
-  const columnEnds: number[] = [];
-  const placed = sorted.map((band) => {
+function assignColumns(bands: readonly UnplacedBand[], minVisibleMs: number): PersonTimeBand[] {
+  const placed: PersonTimeBand[] = [];
+  /** いまのまとまりの、位置ごとの最後に置いた帯の終わりです。 */
+  let columnEnds: number[] = [];
+  /** いまのまとまりの最初の帯の、placed の中の位置です。 */
+  let clusterStart = 0;
+  /** いまのまとまりを閉じ、まとまりの帯に位置の数を書き込みます。 */
+  const closeCluster = () => {
+    for (let index = clusterStart; index < placed.length; index += 1) {
+      placed[index] = { ...placed[index]!, columnCount: columnEnds.length };
+    }
+    clusterStart = placed.length;
+    columnEnds = [];
+  };
+
+  for (const band of bands.toSorted(compareBands)) {
+    // どの位置の帯とも重ならない帯は、新しいまとまりの始まりにする
+    if (columnEnds.every((end) => end < band.interval.start)) closeCluster();
     const free = columnEnds.findIndex((end) => end < band.interval.start);
     const column = free === -1 ? columnEnds.length : free;
-    columnEnds[column] = band.interval.end;
-    return { ...band, column };
-  });
-  return placed.map((band) => ({ ...band, columnCount: columnEnds.length }));
+    columnEnds[column] = Math.max(band.interval.end, band.interval.start + minVisibleMs);
+    // 位置の数は、まとまりを閉じるときに書き込む
+    placed.push({ ...band, column, columnCount: 0 });
+  }
+  closeCluster();
+  return placed;
+}
+
+/**
+ * 1人の列の帯に、横に並べる位置を割り当て直します。段（track）ごとに別々に割り当て、始まりの早い順に並べて返します。
+ *
+ * 画面では、短い区間の帯も見出しを読める最小の高さで描くため、区間が重ならない帯どうしでも、描くと重なることがあります。
+ * minVisibleMs に、その最小の高さが表示する範囲の中で占める長さを渡すと、描いて重なる帯も別の位置に置きます。
+ *
+ * @param minVisibleMs 帯の最小の長さ（ミリ秒）です。0 の場合は、区間そのものの重なりだけで位置を決めます。
+ */
+export function arrangeBands(bands: readonly UnplacedBand[], minVisibleMs: number): PersonTimeBand[] {
+  return (['fine', 'coarse'] as const)
+    .flatMap((track) => assignColumns(bands.filter((band) => band.track === track), minVisibleMs))
+    .toSorted(compareBands);
 }
 
 /**
@@ -71,18 +123,20 @@ export function buildPersonTimeAxis(
   shownKinds: ReadonlySet<PersonKind> = new Set(PERSON_KINDS)
 ): PersonTimeAxis {
   const { lanes, rows } = buildPersonLanes(target, shownKinds);
-  const datedRows = rows.flatMap((row) =>
-    row.view.claim.when === undefined ? [] : [{ ...row, interval: toInterval(row.view.claim.when) }]
-  );
+  const datedRows = rows.flatMap((row) => {
+    const when = row.view.claim.when;
+    if (when === undefined) return [];
+    const track: BandTrack = hasClockTime(when) ? 'fine' : 'coarse';
+    return [{ ...row, interval: toInterval(when), track }];
+  });
 
   const bandsByPerson: Record<Id, PersonTimeBand[]> = {};
   for (const lane of lanes) {
-    bandsByPerson[lane.personId] = assignColumns(
-      datedRows.flatMap(({ key, view, roles, interval }) => {
-        const role = roles[lane.personId];
-        return role === undefined ? [] : [{ key, view, role, interval }];
-      })
-    );
+    const laneBands = datedRows.flatMap(({ key, view, roles, interval, track }) => {
+      const role = roles[lane.personId];
+      return role === undefined ? [] : [{ key, view, role, interval, track }];
+    });
+    bandsByPerson[lane.personId] = arrangeBands(laneBands, 0);
   }
 
   const extent =
