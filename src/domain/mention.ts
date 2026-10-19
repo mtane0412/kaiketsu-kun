@@ -5,7 +5,7 @@
  * `@[表示名](種類:ID)` の形式のトークンとして含みます。
  * メモのメンションは、エンティティ同士の関連（case-views.ts の findRelatedEntities）の元になります。
  * Claim の placeId・mentionedPersonIds は、本文のトークンから導出します。
- * 発言者（Claim.speaker）と経由（Claim.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
+ * 発言者（Claim.speaker）と経由（ClaimSource.viaPersonIds）は本文から導出しません。入力欄の「発言者」で選びます。
  *
  * 本文には、ケースのエンティティ（人物・場所）のほかに、日時のメンションも書けます。
  * 日時のメンションはケースのエンティティを指さず、時刻参照（TimeRef）そのものをIDとして持ちます

@@ -14,6 +14,7 @@
  * 裏付けの有無を読み違える原因になるため、早く失敗させます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
+import { viaPersonIdsOf } from './claim-sources';
 import { buildTimeline, type ClaimView } from './case-views';
 import type { Case, Id, Person, Relationship } from './types';
 
@@ -114,7 +115,7 @@ export function buildBasisClaimCandidates(target: Case, personIds: Id[], selecte
   return views.filter((view) => {
     if (selectedClaimIds.includes(view.claim.id)) return true;
     const speakerIds = view.claim.speaker.kind === 'person' ? view.claim.speaker.personIds : [];
-    const involvedIds = [...speakerIds, ...view.claim.viaPersonIds, ...view.claim.mentionedPersonIds];
+    const involvedIds = [...speakerIds, ...viaPersonIdsOf(view.claim), ...view.claim.mentionedPersonIds];
     return personIds.some((personId) => involvedIds.includes(personId));
   });
 }

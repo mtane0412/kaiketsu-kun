@@ -3,16 +3,16 @@
  *
  * Web の記事や動画から証言を拾う場面で、証言が資料のどこに書いてあったか、どこで話されていたかに戻れるようにします。
  * - 聴取（Interview）は、ユーザーが貼り付けた本文（transcript）と、資料のURL（url）を持ちます。
- * - 証言（Claim）は、本文から書き起こした場合に、引用（quote。原文と、動画であれば秒数）を持ちます。
+ * - 証言の出典（ClaimSource）は、本文から書き起こした場合に、引用（quote。原文と、動画であれば秒数）を持ちます。
  *
  * 引用は本文の中の位置ではなく原文の文字列で持ち、表示のたびに本文から探します（findQuoteRange）。
  * 位置で持つと、本文をあとから書き換えたときにずれるためです。同じ文字列が本文に複数ある場合は、最初の箇所を引用とみなします。
- * 本文に原文が見つからない引用は、黙って無視せず、見つからないことを示します（checkClaimQuote）。
+ * 本文に原文が見つからない引用は、黙って無視せず、見つからないことを示します（checkSourceQuote）。
  *
  * 動画の位置は、YouTube の「文字起こしを表示」からコピーした形式（時刻だけの行と文の行が交互に並ぶ）から補います。
  * YouTube の字幕は、公式APIでは動画の所有者しか取得できないため、文字起こしは貼り付けで受け付けます。
  */
-import type { Case, Claim, Id } from './types';
+import type { Case, ClaimSource, Id } from './types';
 
 /** 時刻だけの行です（例「0:05」「12:34」「1:02:03」）。 */
 const TIMESTAMP_LINE_PATTERN = /^\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*$/;
@@ -219,17 +219,17 @@ export function youtubeEmbedUrl(url: string, startSeconds?: number): string | un
 }
 
 /**
- * 証言の引用を、ひもづけた聴取の本文と照らし合わせた結果です。
+ * 証言の出典の引用を、出典の聴取の本文と照らし合わせた結果です。
  * - found: 本文に引用の原文がある
  * - notFound: 本文に引用の原文が無い（本文をあとから書き換えた場合など）
  * - noTranscript: 聴取にひもづいていないか、聴取に本文が無いため、照らし合わせられない
  */
 export type QuoteCheck = 'found' | 'notFound' | 'noTranscript';
 
-/** 証言の引用を、ひもづけた聴取の本文と照らし合わせます。引用の無い証言は渡さないでください。 */
-export function checkClaimQuote(target: Case, claim: Claim): QuoteCheck {
-  if (claim.quote === undefined) throw new Error(`引用の無い証言は照らし合わせられません: ${claim.id}`);
-  const transcript = target.interviews.find((interview) => interview.id === claim.interviewId)?.transcript;
+/** 証言の出典の引用を、出典の聴取の本文と照らし合わせます。引用の無い出典は渡さないでください。 */
+export function checkSourceQuote(target: Case, source: ClaimSource): QuoteCheck {
+  if (source.quote === undefined) throw new Error(`引用の無い出典は照らし合わせられません: ${source.interviewId ?? '資料なし'}`);
+  const transcript = target.interviews.find((interview) => interview.id === source.interviewId)?.transcript;
   if (transcript === undefined) return 'noTranscript';
-  return findQuoteRange(transcript, claim.quote.text) ? 'found' : 'notFound';
+  return findQuoteRange(transcript, source.quote.text) ? 'found' : 'notFound';
 }

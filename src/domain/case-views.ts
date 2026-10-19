@@ -13,6 +13,7 @@
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
+import { viaChainsOf, viaPersonIdsOf } from './claim-sources';
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
 import { PERSON_KINDS } from './person-kind';
@@ -28,8 +29,10 @@ export type ClaimView = {
   speakerLabel: string;
   /** 発言者の人物です。ユーザーの推測の場合は空です。 */
   speakerPersons: Person[];
-  /** 発言者の発言をユーザーに伝えた人物です。伝えた順に並びます。 */
+  /** 発言者の発言をユーザーに伝えた人物です。すべての出典の経由の人物を、最初に現れた順に重複なく並べます。 */
   viaPersons: Person[];
+  /** 出典ごとの経由（伝えた順の人物）です。経由の無い出典は含みません（src/domain/claim-sources.ts の viaChainsOf）。 */
+  viaChains: Person[][];
   /** この証言が述べる場所です。 */
   place?: Place;
   mentionedPersons: Person[];
@@ -72,9 +75,14 @@ function findOrThrow<T extends { id: Id }>(items: T[], id: Id, entityName: strin
   return found;
 }
 
-/** 経由した人物の名前（伝えた順）を「（県警 → 架空日報 朝刊 による）」の形にします。経由が無い場合は空文字列を返します。 */
-export function formatViaLabel(viaNames: string[]): string {
-  return viaNames.length > 0 ? `（${viaNames.join(' → ')} による）` : '';
+/**
+ * 出典ごとの経由した人物の名前（伝えた順）を「（県警 → 架空日報 朝刊 による）」の形にします。
+ * 経由の異なる出典が複数ある場合は「（新聞A による／新聞B → ジャーナリスト による）」のように「／」で区切ります。
+ * 経由が無い場合は空文字列を返します。
+ */
+export function formatViaLabel(viaNameChains: string[][]): string {
+  const chains = viaNameChains.filter((chain) => chain.length > 0);
+  return chains.length > 0 ? `（${chains.map((chain) => `${chain.join(' → ')} による`).join('／')}）` : '';
 }
 
 /** 証言の発言者の表示名を返します。複数の人物は「、」でつなぎ、発言者がいない証言はユーザーの推測とします。 */
@@ -89,8 +97,8 @@ function speakerLabelOf(target: Case, claim: Claim): string {
  * 例「県道の防犯カメラ（県警 → 架空日報 朝刊 による）」。一覧のように、カードを使わずに証言を並べる箇所で使用します。
  */
 export function describeClaimAttribution(target: Case, claim: Claim): string {
-  const viaNames = claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物').name);
-  return `${speakerLabelOf(target, claim)}${formatViaLabel(viaNames)}`;
+  const viaNameChains = viaChainsOf(claim).map((chain) => chain.map((id) => findOrThrow(target.persons, id, '人物').name));
+  return `${speakerLabelOf(target, claim)}${formatViaLabel(viaNameChains)}`;
 }
 
 /** 証言の参照先を解決します。 */
@@ -103,7 +111,8 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     speakerLabel: speakerLabelOf(target, claim),
     speakerPersons:
       claim.speaker.kind === 'person' ? claim.speaker.personIds.map((id) => findOrThrow(target.persons, id, '人物')) : [],
-    viaPersons: claim.viaPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
+    viaPersons: viaPersonIdsOf(claim).map((id) => findOrThrow(target.persons, id, '人物')),
+    viaChains: viaChainsOf(claim).map((chain) => chain.map((id) => findOrThrow(target.persons, id, '人物'))),
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
   };
@@ -182,7 +191,7 @@ export function buildTimeline(target: Case): Timeline {
  * 証言者別ビューを組み立てます。
  * 人物（ケースへの登録順）、ユーザーの推測の順にグループを並べます。
  * 証言が1件も無い発言者のグループは作りません。複数の人物が述べた証言は、それぞれの人物のグループに入れます。
- * 経由した人物（Claim.viaPersonIds）は発言者ではないため、その人物のグループには入れません。
+ * 経由した人物（出典の viaPersonIds）は発言者ではないため、その人物のグループには入れません。
  * グループの中の証言は、時系列ボードの並び順で並べます。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
@@ -258,7 +267,7 @@ function laneRolesOf(claim: Claim, isShown: (personId: Id) => boolean): Partial<
  * 人物の動きビューを組み立てます。
  * 行は証言で、時系列ボードの並び順（buildTimeline）のとおりに並べます。
  * 列は、いずれかの証言に発言者か言及された人物として登場する人物で、列の並び順（resolvePersonLaneOrder）のとおりに並べます。
- * 経由した人物（Claim.viaPersonIds）は、証言を伝えただけで動きの主体ではないため、列にも役割にも含めません。
+ * 経由した人物（出典の viaPersonIds）は、証言を伝えただけで動きの主体ではないため、列にも役割にも含めません。
  * どの人物も登場しない証言（人物に言及しないユーザーの推測など）は、置く列が無いため行にしません。
  *
  * @param shownKinds 列にする人物の種別です。省略した場合は、すべての種別を列にします。
@@ -432,7 +441,7 @@ export type ClaimDetail = {
 /** 証言が触れている人物（発言者・経由した人物・言及している人物）のIDを、重複なく返します。 */
 export function personIdsOf(claim: Claim): Id[] {
   const speakerIds = claim.speaker.kind === 'person' ? claim.speaker.personIds : [];
-  return [...new Set([...speakerIds, ...claim.viaPersonIds, ...claim.mentionedPersonIds])];
+  return [...new Set([...speakerIds, ...viaPersonIdsOf(claim), ...claim.mentionedPersonIds])];
 }
 
 /**
@@ -532,7 +541,7 @@ export function buildPersonDetail(target: Case, personId: Id): PersonDetail | un
       },
       {
         label: 'この人物を経由して伝わった証言',
-        claims: views.filter((view) => view.claim.viaPersonIds.includes(personId)),
+        claims: views.filter((view) => viaPersonIdsOf(view.claim).includes(personId)),
       },
       {
         label: 'この人物に言及している証言',

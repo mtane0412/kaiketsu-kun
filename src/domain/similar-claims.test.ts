@@ -54,17 +54,17 @@ describe('findSimilarClaims', () => {
     const secondClaim: Claim = {
       id: 'claim-caretaker-second',
       speaker: { kind: 'person', personIds: ['person-caretaker'] },
-      viaPersonIds: [],
       content: '鍵は自分しか持っていない。',
       mentionedPersonIds: [],
-      interviewId: 'interview-caretaker',
+      sources: [{ interviewId: 'interview-caretaker', viaPersonIds: [] }],
     };
     const target: Case = {
       ...sampleFictionalCase,
       interviews: [{ id: 'interview-caretaker', title: '管理人への聴取' }],
       claims: [
         ...sampleFictionalCase.claims.map((claim) =>
-          claim.id === 'claim-caretaker' ? { ...claim, interviewId: 'interview-caretaker' } : claim
+          // 前提: 書籍の出典に加えて、管理人への聴取も2つ目の出典に持つ
+          claim.id === 'claim-caretaker' ? { ...claim, sources: [...claim.sources, { interviewId: 'interview-caretaker', viaPersonIds: [] }] } : claim
         ),
         secondClaim,
       ],
@@ -85,7 +85,7 @@ describe('findSimilarClaims', () => {
         {
           id: 'claim-unrelated',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '湖の水位は例年どおりだった。',
           mentionedPersonIds: [],
         },
@@ -99,7 +99,7 @@ describe('findSimilarClaims', () => {
     const extraClaims: Claim[] = Array.from({ length: MAX_SIMILAR_CLAIMS }, (_, index) => ({
       id: `claim-extra-${index}`,
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       content: `別荘の持ち主を見かけた（${index + 1}件目）。`,
       mentionedPersonIds: ['person-owner'],
       when: '1998-08-12T21:00',
@@ -134,7 +134,7 @@ describe('findSimilarClaims', () => {
         {
           id: 'claim-unrelated',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '湖の水位は例年どおりだった。',
           mentionedPersonIds: [],
         },

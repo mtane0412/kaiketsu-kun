@@ -11,6 +11,13 @@
  *    照らし合わせは描画のたびにケースの現在の状態に対して行うため、候補から人物を新規作成した後の候補では、その人物が登録済みになります。
  * 4. 採用: 候補を入力済みにした証言の入力欄（ClaimForm）を候補の下に開き、ユーザーが確かめてから保存します。保存した候補は一覧から外します。
  *    破棄: ケースを変えずに、候補を一覧から外します。
+ * 5. 同じかもしれない既存の証言: 抽出のときに、本文に名前が出てくる人物・場所に触れる既存の証言も LLM に渡し
+ *    （src/domain/claim-extraction.ts の selectExistingClaimsForExtraction）、候補ごとに同じ事柄を述べていそうな証言を示します。
+ *    - 同じ証言（同じ発言者の同じ機会の発言が別の資料にも載ったもの）だとユーザーが判断した場合は、「この証言に出典を書き足す」で
+ *      新しい証言を作らずに、既存の証言にこの資料・経由・引用の出典を書き足します（src/domain/claim-sources.ts の addClaimSource）。
+ *      この資料をすでに出典に持つ証言には、書き足せないため、その旨だけを示します。
+ *    - 同じではないが関係する場合は、従来どおり「採用」で新しい証言にし、入力欄の上で既存の証言との照合の種類を選べます。
+ *      照合は既定では作らず、ユーザーが選んだ場合だけ、証言とあわせて保存します（食い違いや裏付けを自動では判定しない方針のためです）。
  *
  * 入力した API キーとモデルは、次の抽出のためにブラウザに保存します（src/lib/llm-settings.ts）。
  * API キーとモデルの入力欄は、ケース設定のメニューの「LLM の設定」と共通です（LlmSettingsFields）。一覧にないモデルは送りません。
@@ -21,24 +28,30 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
+import { buildTimeline, claimLabelOf, describeClaimAttribution } from '@/domain/case-views';
 import {
   buildClaimCandidates,
   candidateToClaimDraft,
+  selectExistingClaimsForExtraction,
   type ClaimCandidate,
   type ExtractedClaim,
   type ResolvedName,
 } from '@/domain/claim-extraction';
+import { addClaimSource, sourceForInterview } from '@/domain/claim-sources';
+import { CROSS_CHECK_KINDS } from '@/domain/cross-checks';
+import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import { formatInterviewLabel } from '@/domain/interviews';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
-import type { Id } from '@/domain/types';
+import type { CrossCheckKind, Id } from '@/domain/types';
 import { MAX_EXTRACTION_TEXT_LENGTH, MAX_SOURCE_NAME_LENGTH, requestClaimExtraction } from '@/lib/claim-extraction-api';
 import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
-import { useCurrentCase } from '@/stores/useCaseStore';
+import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
 import { ClaimForm, type ClaimDefaults } from './forms/ClaimForm';
-import { FormError } from './forms/fields';
+import { FormError, INPUT_CLASS, LABEL_CLASS } from './forms/fields';
+import { createEntry } from './forms/mention-entries';
 import { findModelError, LlmSettingsFields, loadInitialLlmSettings, useOpenRouterModels } from './LlmSettingsFields';
 
 /** 抽出に送る本文です。scope は、本文の範囲を選んで送るか、全文を送るかです。 */
@@ -53,8 +66,14 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'done'; extracted: ExtractedClaim[]; settledKeys: ReadonlySet<string> };
 
-/** 採用して入力欄を開いている候補です。新規作成するエンティティのIDを保つため、入力欄の初期値は採用した時点で作ります。 */
-type Adopting = { key: string; defaults: ClaimDefaults };
+/**
+ * 採用して入力欄を開いている候補です。新規作成するエンティティのIDを保つため、入力欄の初期値は採用した時点で作ります。
+ * crossCheckKinds は、同じかもしれない既存の証言ごとに選んだ照合の種類です（選んでいない証言は含みません）。
+ */
+type Adopting = { key: string; defaults: ClaimDefaults; crossCheckKinds: Partial<Record<Id, CrossCheckKind>> };
+
+/** 照合を作らない場合の、選択肢の値です。 */
+const NO_CROSS_CHECK = '';
 
 type ClaimExtractionProps = {
   interviewId: Id;
@@ -102,6 +121,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   const [phase, setPhase] = useState<Phase>({ kind: 'confirm' });
   const [error, setError] = useState<string | null>(null);
   const [adopting, setAdopting] = useState<Adopting | null>(null);
+  const upsertMany = useCaseStore((state) => state.upsertMany);
 
   const interview = currentCase.interviews.find((item) => item.id === interviewId);
   if (interview === undefined) throw new Error(`資料が見つかりません: ${interviewId}`);
@@ -133,6 +153,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
         sourceName,
         personNames: currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
         placeNames: currentCase.places.map((place) => place.name),
+        existingClaims: selectExistingClaimsForExtraction(currentCase, interviewId, source.text),
         ...trimmed,
       });
       setPhase({ kind: 'done', extracted, settledKeys: new Set() });
@@ -153,6 +174,41 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
     setAdopting({
       key: candidate.key,
       defaults: { interviewId, quote: candidate.quote, draft, speaker, newEntities, ...(title !== undefined && { title }) },
+      crossCheckKinds: {},
+    });
+  };
+
+  /**
+   * 候補を新しい証言にせず、既存の証言 claimId の出典に、この資料・経由・引用を書き足します。
+   * 経由は、候補を入力欄の初期値に直したときの経由（資料の媒体を含みます）から、既存の証言の発言者を除いたものです。
+   * 経由に未登録の人物がいる場合は、その人物もあわせて新規作成します。
+   */
+  const addSourceTo = (candidate: ClaimCandidate, claimId: Id) => {
+    const existing = currentCase.claims.find((claim) => claim.id === claimId);
+    if (existing === undefined) throw new Error(`証言が見つかりません: ${claimId}`);
+    const { speaker, newEntities } = candidateToClaimDraft(currentCase, interviewId, candidate, nanoid);
+    const existingSpeakerIds = existing.speaker.kind === 'person' ? existing.speaker.personIds : [];
+    const viaPersonIds = speaker.viaPersonIds.filter((personId) => !existingSpeakerIds.includes(personId));
+    const viaEntries = newEntities
+      .filter((entity) => viaPersonIds.includes(entity.id))
+      .map((entity) => createEntry(entity.kind, entity.id, entity.name));
+    try {
+      const updated = addClaimSource(existing, { interviewId, viaPersonIds, quote: candidate.quote });
+      upsertMany([...viaEntries, { key: 'claims', entity: updated }]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      return;
+    }
+    setError(null);
+    settle(candidate.key);
+  };
+
+  /** 採用中の候補で、既存の証言 claimId との照合の種類を選び直します。kind が undefined の場合は照合を作りません。 */
+  const chooseCrossCheck = (claimId: Id, kind: CrossCheckKind | undefined) => {
+    setAdopting((current) => {
+      if (current === null) return current;
+      const { [claimId]: _previous, ...others } = current.crossCheckKinds;
+      return { ...current, crossCheckKinds: kind === undefined ? others : { ...others, [claimId]: kind } };
     });
   };
 
@@ -192,6 +248,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
         </form>
       )}
 
+      {phase.kind === 'done' && <FormError message={error} />}
       {phase.kind === 'done' && (
         <CandidateList
           interviewId={interviewId}
@@ -202,6 +259,8 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
           onAdopt={adopt}
           onCancelAdopt={() => setAdopting(null)}
           onSettle={settle}
+          onAddSource={addSourceTo}
+          onChooseCrossCheck={chooseCrossCheck}
         />
       )}
     </section>
@@ -218,13 +277,35 @@ type CandidateListProps = {
   onAdopt: (candidate: ClaimCandidate) => void;
   onCancelAdopt: () => void;
   onSettle: (key: string) => void;
+  /** 候補を、既存の証言の出典として書き足します。 */
+  onAddSource: (candidate: ClaimCandidate, claimId: Id) => void;
+  /** 採用中の候補で、既存の証言との照合の種類を選びます。 */
+  onChooseCrossCheck: (claimId: Id, kind: CrossCheckKind | undefined) => void;
 };
 
 /** 原文とケースに照らし合わせた候補の一覧です。確かめ終えた候補は示しません。 */
-function CandidateList({ interviewId, extracted, settledKeys, mediaName, adopting, onAdopt, onCancelAdopt, onSettle }: CandidateListProps) {
+function CandidateList({
+  interviewId,
+  extracted,
+  settledKeys,
+  mediaName,
+  adopting,
+  onAdopt,
+  onCancelAdopt,
+  onSettle,
+  onAddSource,
+  onChooseCrossCheck,
+}: CandidateListProps) {
   const currentCase = useCurrentCase();
   const { candidates, discardedCount } = buildClaimCandidates(currentCase, interviewId, extracted);
   const remaining = candidates.filter((candidate) => !settledKeys.has(candidate.key));
+  const claimViewById = new Map(buildTimeline(currentCase).items.map(({ view }) => [view.claim.id, view]));
+  /** 既存の証言を、「発言者（経由）: 証言の名前」の1行で示します。 */
+  const sameClaimLabelOf = (claimId: Id): string => {
+    const view = claimViewById.get(claimId);
+    if (view === undefined) throw new Error(`証言が見つかりません: ${claimId}`);
+    return `${describeClaimAttribution(currentCase, view.claim)}: ${claimLabelOf(view)}`;
+  };
 
   return (
     <div className="space-y-2">
@@ -255,11 +336,53 @@ function CandidateList({ interviewId, extracted, settledKeys, mediaName, adoptin
               {candidate.overlapsTranscribed && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">書き起こし済みの範囲と重なります。同じ証言を二重に登録しないよう確かめてください。</p>
               )}
+              {candidate.sameClaimIds.length > 0 && (
+                <div className="space-y-1 rounded bg-muted/40 px-2 py-1.5 text-xs">
+                  <p className="text-muted-foreground">
+                    次の既存の証言と同じかもしれません。同じ発言が別の資料にも載ったものなら、新しい証言にせず出典を書き足してください。
+                  </p>
+                  <ul aria-label="同じかもしれない既存の証言" className="space-y-1">
+                    {candidate.sameClaimIds.map((claimId) => {
+                      const label = sameClaimLabelOf(claimId);
+                      const claim = claimViewById.get(claimId)?.claim;
+                      const alreadySourced = claim !== undefined && sourceForInterview(claim, interviewId) !== undefined;
+                      return (
+                        <li key={claimId} className="flex items-start justify-between gap-2">
+                          <span>{label}</span>
+                          {alreadySourced ? (
+                            <span className="shrink-0 text-muted-foreground">この資料をすでに出典に持っています</span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              aria-label={`この証言に出典を書き足す: ${label}`}
+                              onClick={() => onAddSource(candidate, claimId)}
+                              className="shrink-0"
+                            >
+                              この証言に出典を書き足す
+                            </Button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
 
               {adopting?.key === candidate.key ? (
-                <section aria-label="候補からの証言の書き足し" className="border-t pt-2">
+                <section aria-label="候補からの証言の書き足し" className="space-y-2 border-t pt-2">
+                  {candidate.sameClaimIds.map((claimId) => (
+                    <CrossCheckChoice
+                      key={claimId}
+                      label={sameClaimLabelOf(claimId)}
+                      value={adopting.crossCheckKinds[claimId]}
+                      onChange={(kind) => onChooseCrossCheck(claimId, kind)}
+                    />
+                  ))}
                   <ClaimForm
                     defaults={adopting.defaults}
+                    withEntries={(claimId) => crossCheckEntriesOf(claimId, adopting.crossCheckKinds)}
                     onDone={() => onSettle(candidate.key)}
                     autoFocus
                     compact
@@ -284,6 +407,48 @@ function CandidateList({ interviewId, extracted, settledKeys, mediaName, adoptin
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * 採用した候補から保存する証言 claimId と、選んだ既存の証言との照合を、証言とあわせて保存する要素にします。
+ * 照合の claimIds は、新しい証言・既存の証言の順にします（照合は向きを持たないため、並びに意味はありません）。
+ */
+function crossCheckEntriesOf(claimId: Id, crossCheckKinds: Adopting['crossCheckKinds']): UpsertEntry[] {
+  return Object.entries(crossCheckKinds).flatMap(([existingClaimId, kind]): UpsertEntry[] =>
+    kind === undefined ? [] : [{ key: 'crossChecks', entity: { id: nanoid(), claimIds: [claimId, existingClaimId], kind } }]
+  );
+}
+
+type CrossCheckChoiceProps = {
+  /** 既存の証言を示す1行です。 */
+  label: string;
+  value: CrossCheckKind | undefined;
+  onChange: (kind: CrossCheckKind | undefined) => void;
+};
+
+/** 採用した候補と、同じかもしれない既存の証言1件との照合の種類を選ぶ欄です。既定は「照合を作らない」です。 */
+function CrossCheckChoice({ label, value, onChange }: CrossCheckChoiceProps) {
+  const fieldId = useId();
+  return (
+    <div>
+      <label htmlFor={fieldId} className={LABEL_CLASS}>
+        「{label}」との照合
+      </label>
+      <select
+        id={fieldId}
+        value={value ?? NO_CROSS_CHECK}
+        onChange={(event) => onChange(CROSS_CHECK_KINDS.find((kind) => kind === event.target.value))}
+        className={INPUT_CLASS}
+      >
+        <option value={NO_CROSS_CHECK}>照合を作らない</option>
+        {CROSS_CHECK_KINDS.map((kind) => (
+          <option key={kind} value={kind}>
+            {CROSS_CHECK_KIND_LABELS[kind]}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

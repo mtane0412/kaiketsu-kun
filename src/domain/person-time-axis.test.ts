@@ -2,9 +2,9 @@
  * 人物の動きビューの時刻軸（人物ごとの証言の帯・目盛り・表示範囲）のテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildPersonTimeAxis, buildTimeTicks, placeInRange, resolveAxisRange } from './person-time-axis';
+import { arrangeBands, buildPersonTimeAxis, buildTimeTicks, placeInRange, resolveAxisRange } from './person-time-axis';
 import { sampleFictionalCase } from './sample-fictional-case';
-import { toInterval } from './time-ref';
+import { MINUTE_MS, toInterval } from './time-ref';
 import type { Case, Claim, TimeRef } from './types';
 
 /** 散歩していた人物（person-walker）の発言としての証言を作ります。 */
@@ -12,7 +12,7 @@ function makeWalkClaim(id: string, when?: TimeRef): Claim {
   const claim: Claim = {
     id,
     speaker: { kind: 'person', personIds: ['person-walker'] },
-    viaPersonIds: [],
+    sources: [],
     content: `${id}の内容`,
     mentionedPersonIds: [],
   };
@@ -95,11 +95,91 @@ describe('buildPersonTimeAxis', () => {
     const position = Object.fromEntries(
       (axis.bandsByPerson['person-walker'] ?? []).map((band) => [band.view.claim.id, [band.column, band.columnCount]])
     );
-    // 検証: 19:10〜19:40 と 19:30 は重なるため別の位置に、重ならない 20:00 は空いた最初の位置に置く
+    // 検証: 19:10〜19:40 と 19:30 は重なるため別の位置に置く。
+    // 重ならない 20:00 は、重なる帯が無いため、列の幅をすべて使う（位置の数は重なり合う帯のまとまりごとに数える）
     expect(position).toEqual({
       'claim-walking': [0, 2],
       'claim-at-shop': [1, 2],
-      'claim-at-home': [0, 2],
+      'claim-at-home': [0, 1],
+    });
+  });
+});
+
+describe('buildPersonTimeAxis の精度による段の分け方', () => {
+  /** 散歩していた人物の帯を、証言のIDごとの [段, 位置, 位置の数] にします。 */
+  function placementsOf(claims: Claim[]) {
+    const axis = buildPersonTimeAxis(makeWalkCase(claims));
+    return Object.fromEntries(
+      (axis.bandsByPerson['person-walker'] ?? []).map((band) => [
+        band.view.claim.id,
+        [band.track, band.column, band.columnCount],
+      ])
+    );
+  }
+
+  it('時刻を持つ証言は細かい段（fine）に、日付だけ・月だけの証言は粗い段（coarse）に置く', () => {
+    expect(
+      placementsOf([
+        makeWalkClaim('claim-fought-today', '2008-07-01'),
+        makeWalkClaim('claim-seen-at-shop', '2008-07-01T21:00'),
+        makeWalkClaim('claim-in-july', '2008-07'),
+      ])
+    ).toEqual({
+      'claim-fought-today': ['coarse', 0, 2],
+      'claim-seen-at-shop': ['fine', 0, 1],
+      'claim-in-july': ['coarse', 1, 2],
+    });
+  });
+
+  it('時刻で書いた区間は細かい段に、日付で書いた期間は粗い段に置く', () => {
+    expect(
+      placementsOf([
+        makeWalkClaim('claim-night-walk', '2008-07-01T20:00/2008-07-02T03:00'),
+        makeWalkClaim('claim-few-days', '2008-07-01/03'),
+      ])
+    ).toEqual({
+      'claim-night-walk': ['fine', 0, 1],
+      'claim-few-days': ['coarse', 0, 1],
+    });
+  });
+
+  it('粗い証言は、重なる細かい証言の位置の数を増やさない（細かい帯の幅を狭めないため）', () => {
+    const placements = placementsOf([
+      makeWalkClaim('claim-fought-today', '2008-07-01'),
+      makeWalkClaim('claim-accident', '2008-07-01T21:30'),
+      makeWalkClaim('claim-accident-other-paper', '2008-07-01T21:40'),
+    ]);
+
+    expect(placements['claim-accident']).toEqual(['fine', 0, 1]);
+    expect(placements['claim-accident-other-paper']).toEqual(['fine', 0, 1]);
+  });
+});
+
+describe('arrangeBands', () => {
+  /** 帯を、証言のIDごとの [位置, 位置の数] にします。 */
+  function positionsOf(bands: ReturnType<typeof arrangeBands>) {
+    return Object.fromEntries(bands.map((band) => [band.view.claim.id, [band.column, band.columnCount]]));
+  }
+
+  const bands = () =>
+    buildPersonTimeAxis(
+      makeWalkCase([
+        makeWalkClaim('claim-accident', '2008-07-01T21:30'),
+        makeWalkClaim('claim-accident-other-paper', '2008-07-01T21:40'),
+      ])
+    ).bandsByPerson['person-walker'] ?? [];
+
+  it('最小の長さを0にすると、区間が重ならない帯は同じ位置に置く', () => {
+    expect(positionsOf(arrangeBands(bands(), 0))).toEqual({
+      'claim-accident': [0, 1],
+      'claim-accident-other-paper': [0, 1],
+    });
+  });
+
+  it('画面に描く最小の長さ（ここでは30分）の間に始まる帯は、描くと重なるため別の位置に置く', () => {
+    expect(positionsOf(arrangeBands(bands(), 30 * MINUTE_MS))).toEqual({
+      'claim-accident': [0, 2],
+      'claim-accident-other-paper': [1, 2],
     });
   });
 });

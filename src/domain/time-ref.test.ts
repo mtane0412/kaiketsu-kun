@@ -2,7 +2,7 @@
  * 時刻参照（TimeRef）の解釈・表示・並べ替えのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { compareTimeRef, formatTimeRef, intervalsOverlap, isValidTimeRef, toInterval } from './time-ref';
+import { compareTimeRef, formatTimeRef, hasClockTime, intervalsOverlap, isValidTimeRef, toInterval } from './time-ref';
 
 describe('isValidTimeRef', () => {
   it.each(['1998', '1998-08', '1998-08-12', '1998-08-12T19:00'])(
@@ -169,5 +169,24 @@ describe('compareTimeRef', () => {
     const dated = '1998-08-12';
 
     expect([undefined, dated].sort(compareTimeRef)).toEqual([dated, undefined]);
+  });
+});
+
+describe('hasClockTime', () => {
+  it('時刻まで書いた日時と、時刻で書いた区間は true を返す', () => {
+    expect(hasClockTime('2008-07-01T21:00')).toBe(true);
+    expect(hasClockTime('2008-07-01T21:00/21:40')).toBe(true);
+    expect(hasClockTime('2008-07-01T20:00/2008-07-02T03:00')).toBe(true);
+  });
+
+  it('年・月・日までの日時と、日付で書いた期間は false を返す', () => {
+    expect(hasClockTime('2008')).toBe(false);
+    expect(hasClockTime('2008-07')).toBe(false);
+    expect(hasClockTime('2008-07-01')).toBe(false);
+    expect(hasClockTime('2008-07-01/03')).toBe(false);
+  });
+
+  it('始まりか終わりの片方だけが時刻を持つ区間は、粗い方に合わせて false を返す', () => {
+    expect(hasClockTime('2008-07-01T21:00/2008-07-03')).toBe(false);
   });
 });

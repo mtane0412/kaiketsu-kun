@@ -35,20 +35,18 @@ const neighborInterview: Interview = { id: 'interview-neighbor', title: '隣家�
 const firstStatement: Claim = {
   id: 'claim-caretaker-first',
   speaker: { kind: 'person', personIds: ['person-caretaker'] },
-  viaPersonIds: ['person-police'],
   content: '見回りは夜10時ごろで、別荘には明かりがついていた。',
   mentionedPersonIds: [],
-  interviewId: firstInterview.id,
+  sources: [{ interviewId: firstInterview.id, viaPersonIds: ['person-police'] }],
 };
 
 /** 記事に載った、隣家の住人の証言です。 */
 const neighborStatement: Claim = {
   id: 'claim-neighbor-article',
   speaker: { kind: 'person', personIds: ['person-neighbor'] },
-  viaPersonIds: [],
   content: '夜9時ごろ、別荘のほうで車の音がした。',
   mentionedPersonIds: [],
-  interviewId: neighborInterview.id,
+  sources: [{ interviewId: neighborInterview.id, viaPersonIds: [] }],
 };
 
 /** 登録順を、日時の順とわざと逆にしたケースです（日時不明 → 書籍 → 初回 → 隣家の住人）。 */
@@ -57,7 +55,7 @@ const caseData: Case = {
   interviews: [undatedInterview, bookInterview, firstInterview, neighborInterview],
   claims: [
     ...sampleFictionalCase.claims.map((claim) =>
-      claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+      claim.id === 'claim-caretaker' ? { ...claim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] } : claim
     ),
     firstStatement,
     neighborStatement,
@@ -88,6 +86,22 @@ describe('buildPersonInterviews', () => {
 
   it('発言者が複数の資料は、発言者のどの人物の供述の変遷にも並べる', () => {
     expect(buildPersonInterviews(caseData, 'person-neighbor').map((view) => view.interview.id)).toEqual(['interview-neighbor']);
+  });
+
+  it('2つ目以降の出典の資料にも並べる（同じ発言が複数の資料に載った場合）', () => {
+    // 前提: 隣家の住人の記事の証言が、初回の聴取の資料にも載っている
+    const twoSourcesCase: Case = {
+      ...caseData,
+      claims: caseData.claims.map((claim) =>
+        claim.id === neighborStatement.id
+          ? { ...claim, sources: [...claim.sources, { interviewId: firstInterview.id, viaPersonIds: ['person-police'] }] }
+          : claim
+      ),
+    };
+
+    const interviewIds = buildPersonInterviews(twoSourcesCase, 'person-neighbor').map((view) => view.interview.id);
+    expect(new Set(interviewIds)).toEqual(new Set([neighborInterview.id, firstInterview.id]));
+    expect(buildInterviewView(twoSourcesCase, firstInterview.id)?.claims.map((view) => view.claim.id)).toContain(neighborStatement.id);
   });
 
   it('証言の無い人物では、空の一覧を返す', () => {

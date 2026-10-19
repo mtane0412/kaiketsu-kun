@@ -7,7 +7,7 @@
  * - 人物: 両方の証言が触れている人物（発言者・経由・言及）の集合の Jaccard 係数 × 重み
  * - 場所: 同じ場所なら重み
  * - 日時: 区間が重なれば重み。重ならなければ、間隔が NEAR_TIME_WINDOW_MS に近づくほど0へ直線的に減らす
- * - 聴取: 同じ聴取で得た証言なら重み
+ * - 聴取: 出典の聴取を1つでも共有していれば重み
  * 何も共有しない（点数が0の）証言は含めません。
  *
  * 照合（CrossCheck）と仮説（Hypothesis）は読み手の判断であり、証言の一次データではないため、点数には混ぜません。
@@ -15,6 +15,7 @@
  * 注意: 重みは実際のケースで試しながら調整する前提の暫定値です。
  */
 import { buildTimeline, personIdsOf, type ClaimView } from './case-views';
+import { interviewIdsOf } from './claim-sources';
 import { DAY_MS, intervalsOverlap, toInterval } from './time-ref';
 import type { Case, Claim, CrossCheckKind, Hypothesis, Id, Person, Place } from './types';
 
@@ -122,7 +123,7 @@ export function findSimilarClaims(target: Case, claimId: Id): SimilarClaim[] {
         ? { score: SIMILARITY_WEIGHTS.place, reason: { kind: 'samePlace' as const, place: self.place } }
         : undefined,
       scoreTime(a, b),
-      a.interviewId !== undefined && a.interviewId === b.interviewId
+      interviewIdsOf(a).some((interviewId) => interviewIdsOf(b).includes(interviewId))
         ? { score: SIMILARITY_WEIGHTS.interview, reason: { kind: 'sameInterview' as const } }
         : undefined,
     ].filter((item): item is ScoredReason => item !== undefined);

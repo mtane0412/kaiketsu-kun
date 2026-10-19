@@ -33,7 +33,7 @@ const caseWithInterviews: Case = {
   ...sampleFictionalCase,
   interviews: [bookInterview, pressConference],
   claims: sampleFictionalCase.claims.map((claim) =>
-    claim.id === 'claim-caretaker' ? { ...claim, interviewId: bookInterview.id } : claim
+    claim.id === 'claim-caretaker' ? { ...claim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] } : claim
   ),
 };
 
@@ -114,7 +114,7 @@ describe('InterviewDetail', () => {
         interviews: [...caseWithInterviews.interviews, videoInterview],
         claims: caseWithInterviews.claims.map((claim) =>
           claim.id === 'claim-caretaker'
-            ? { ...claim, interviewId: videoInterview.id, quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 } }
+            ? { ...claim, sources: [{ interviewId: videoInterview.id, viaPersonIds: ['person-book'], quote: { text: '0:05\nあの夜は別荘が真っ暗でした', seconds: 5 } }] }
             : claim
         ),
       });

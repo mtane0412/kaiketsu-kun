@@ -74,7 +74,7 @@ describe('validateCaseFile', () => {
         {
           id: 'claim-mismatch',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '持ち主は庭にいたはずだ。',
           mentionedPersonIds: ['person-owner'],
         },
@@ -104,11 +104,9 @@ describe('validateCaseFile', () => {
         {
           id: 'claim-misquoted',
           speaker: { kind: 'person', personIds: ['person-neighbor'] },
-          viaPersonIds: [],
           content: '夜10時ごろ、庭に人影を見た。',
           mentionedPersonIds: [],
-          interviewId: 'interview-article',
-          quote: { text: '夜10時ごろ、庭に人影を見た' },
+          sources: [{ interviewId: 'interview-article', viaPersonIds: [], quote: { text: '夜10時ごろ、庭に人影を見た' } }],
         },
       ],
       timelineOrder: [...sampleFictionalCase.timelineOrder, 'claim:claim-misquoted'],
@@ -129,7 +127,7 @@ describe('validateCaseFile', () => {
         {
           id: 'claim-neighbor',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '持ち主は夜10時に別荘を出たはずだ。',
           mentionedPersonIds: [],
         },
@@ -174,7 +172,7 @@ describe('validateCaseFile', () => {
         {
           id: 'claim-later',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '@[2000年](date:2000) に別荘は売りに出された。',
           mentionedPersonIds: [],
           when: '2000',
@@ -182,7 +180,7 @@ describe('validateCaseFile', () => {
         {
           id: 'claim-earlier',
           speaker: { kind: 'user' },
-          viaPersonIds: [],
+          sources: [],
           content: '@[1990年](date:1990) に別荘が建てられた。',
           mentionedPersonIds: [],
           when: '1990',

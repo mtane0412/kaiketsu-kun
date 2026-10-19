@@ -4,6 +4,7 @@
  * 人物には、種別（人物・組織・記録・媒体・物。新規登録の既定値は人物）を選べます。
  * 人物には、電話番号・車両ナンバーなどの識別子を複数登録できます（IdentifierField）。
  * 人物には、画像が無い場合にアイコンへ表示する1文字を指定できます（省略した場合は名前の先頭の文字。src/domain/person-icon.ts を参照）。
+ * アイコンの文字がケースの他の人物と重なる場合は、重なる人物と、名前から選んだ重ならない文字の候補を示して、指定を促します。
  * メモには「@」で他の人物・場所を書けます（メンション。形式は src/domain/mention.ts を参照）。
  * メモのメンションは、エンティティ同士の関連の元になります。未登録の名前は候補の一覧から新規作成でき、
  * 新しいエンティティは編集中のエンティティと同時に保存します。
@@ -25,10 +26,11 @@ import {
   type MentionKind,
 } from '@/domain/mention';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
-import { firstCharacter } from '@/domain/person-icon';
+import { findIconTextCollisions, firstCharacter, personIconText, suggestIconTexts } from '@/domain/person-icon';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from '@/domain/person-kind';
 import type { Coordinates, Id, Person, PersonKind, Place } from '@/domain/types';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
+import { Button } from '@/components/ui/button';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { CoordinateField } from './CoordinateField';
 import { IdentifierField, identifiersToRows, rowsToIdentifiers } from './IdentifierField';
@@ -170,11 +172,13 @@ export function PersonForm({ initial, onDone, actions }: FormProps<Person>) {
       <TextField label="別名（読点区切り）" value={aliases} onChange={setAliases} placeholder="旧姓、偽名など" />
       <IdentifierField rows={identifierRows} onChange={setIdentifierRows} />
       <ImageField label="画像" shape="round" value={imageDataUrl} onChange={setImageDataUrl} />
-      <TextField
-        label="アイコンの文字（1文字。画像が無い場合に表示）"
+      <IconTextField
+        personId={initial?.id}
+        pendingPersons={newEntries.flatMap((entry) => (entry.key === 'persons' ? [entry.entity] : []))}
+        name={name}
+        imageDataUrl={imageDataUrl}
         value={iconText}
         onChange={setIconText}
-        placeholder="未入力の場合は名前の先頭の文字"
       />
       {noteField}
       <FormError message={error} />
@@ -183,6 +187,76 @@ export function PersonForm({ initial, onDone, actions }: FormProps<Person>) {
         <SubmitButton label="人物を保存" />
       </div>
     </form>
+  );
+}
+
+type IconTextFieldProps = {
+  /** 編集中の人物のIDです。新規登録では省略します。重なりの相手から自分自身を除くために使います。 */
+  personId: Id | undefined;
+  /** メモのメンションから新しく作り、この人物と同時に保存する人物です。まだケースに無いため、別に渡します。 */
+  pendingPersons: Person[];
+  /** 入力中の名前です。 */
+  name: string;
+  /** 入力中の画像です。画像があるとアイコンに文字を表示しないため、重なりを案内しません。 */
+  imageDataUrl: string | undefined;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+/**
+ * 人物のアイコンの文字の入力欄です。
+ * 入力中の名前・アイコンの文字から決まるアイコンの文字が、ケースの他の人物（同時に保存する人物を含む）と重なる場合は、
+ * 重なる人物の名前と、重ならない文字の候補（押すとその文字を入れるボタン）を、欄の説明として示します。
+ * 案内は、入力中に現れたことが読み上げで伝わるよう、ライブリージョンの中に表示します。
+ * 重なっていても保存はできます（見分けにくいだけで、データとしては誤りではないため）。
+ */
+function IconTextField({ personId, pendingPersons, name, imageDataUrl, value, onChange }: IconTextFieldProps) {
+  const savedPersons = useCurrentCase().persons;
+  const noticeId = useId();
+  const otherPersons = [...savedPersons, ...pendingPersons].filter((person) => person.id !== personId);
+  const typedIconText = firstCharacter(value);
+  const target = { name, imageDataUrl, ...(typedIconText ? { iconText: typedIconText } : {}) };
+  const collisions = findIconTextCollisions(otherPersons, target);
+  const suggestions = collisions.length > 0 ? suggestIconTexts(name, otherPersons) : [];
+
+  return (
+    <div className="grid gap-1.5">
+      <TextField
+        label="アイコンの文字（1文字。画像が無い場合に表示）"
+        value={value}
+        onChange={onChange}
+        placeholder="未入力の場合は名前の先頭の文字"
+        describedBy={collisions.length > 0 ? noticeId : undefined}
+      />
+      <div aria-live="polite" className="grid gap-1.5 empty:hidden">
+        {collisions.length > 0 && (
+          <>
+            <p id={noticeId} className="text-xs text-muted-foreground">
+              アイコンの文字「{personIconText(target)}」が、
+              {collisions.map((person) => `「${person.name}」`).join('、')}
+              と同じです。見分けられるよう、別の1文字を指定してください。
+            </p>
+            {suggestions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">候補:</span>
+                {suggestions.map((suggestion) => (
+                  <Button
+                    key={suggestion}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`アイコンの文字を「${suggestion}」にする`}
+                    onClick={() => onChange(suggestion)}
+                  >
+                    {suggestion}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

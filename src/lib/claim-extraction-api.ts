@@ -7,7 +7,12 @@
  * デプロイ先のキーで呼ぶと、誰でも呼べる API の費用がデプロイ先にかかるためです。
  */
 import { z } from 'zod';
-import { ExtractionResultSchema, type ExtractedClaim } from '@/domain/claim-extraction';
+import {
+  ExtractionResultSchema,
+  MAX_EXISTING_CLAIM_SUMMARY_LENGTH,
+  MAX_EXISTING_CLAIMS_FOR_EXTRACTION,
+  type ExtractedClaim,
+} from '@/domain/claim-extraction';
 
 /**
  * 1回の抽出で LLM に送る本文の上限の文字数です。
@@ -39,6 +44,14 @@ export const ExtractionRequestSchema = z.object({
   personNames: names,
   /** 登録済みの場所の名前です。 */
   placeNames: names,
+  /**
+   * LLM に「同じ事柄を述べていそうな証言」を探させる、既存の証言のIDと要約です
+   * （src/domain/claim-extraction.ts の selectExistingClaimsForExtraction）。
+   * 要約は、上限の文字数で切ったうえで省略の「…」を付けるため、上限より1文字長いものまで受け付けます。
+   */
+  existingClaims: z
+    .array(z.object({ id: z.string().min(1).max(MAX_NAME_LENGTH), summary: z.string().max(MAX_EXISTING_CLAIM_SUMMARY_LENGTH + 1) }))
+    .max(MAX_EXISTING_CLAIMS_FOR_EXTRACTION),
   /** OpenRouter の API キーです。 */
   apiKey: nonBlank,
   /** OpenRouter のモデルのID（例「anthropic/claude-sonnet-5」）です。 */

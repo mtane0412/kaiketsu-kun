@@ -26,7 +26,7 @@ beforeEach(async () => {
 const statementWithHeading: Claim = {
   id: 'claim-extortion',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
-  viaPersonIds: [],
+  sources: [],
   title: 'Zによる恐喝事件があった',
   content: 'Zは被害者の自宅を訪れ、現金を渡すよう繰り返し迫った。被害者は数回にわたって現金を渡したという。',
   mentionedPersonIds: [],
@@ -254,7 +254,7 @@ function StoreBoard() {
 const searchStatement: Claim = {
   id: 'claim-police-search',
   speaker: { kind: 'person', personIds: ['person-newspaper'] },
-  viaPersonIds: [],
+  sources: [],
   content: '警察が別荘を捜索した。',
   mentionedPersonIds: [],
   when: '1998-08-15',
@@ -356,7 +356,7 @@ describe('TimelineView への書き足し', () => {
     expect(within(appendedClaim).getByText('（架空日報 朝刊 による）')).toBeInTheDocument();
     expect(openedCase().claims.at(-1)).toMatchObject({
       speaker: { kind: 'person', personIds: ['person-neighbor'] },
-      viaPersonIds: ['person-newspaper'],
+      sources: [{ viaPersonIds: ['person-newspaper'] }],
       content: '持ち主は几帳面な人だった。',
     });
   });
@@ -599,6 +599,68 @@ describe('PersonLaneView の時刻軸', () => {
     // 検証: 夜7時の管理人の帯は範囲の外のため描かず、夜9時の隣家の住人の帯は描く
     expect(within(within(timeAxis).getByRole('region', { name: '管理人' })).queryByRole('link')).not.toBeInTheDocument();
     expect(within(within(timeAxis).getByRole('region', { name: '隣家の住人' })).getByRole('link')).toBeInTheDocument();
+  });
+
+  /** 散歩していた人物が、日付だけの証言と時刻のある証言に登場するケースです。 */
+  const walkCase: Case = {
+    ...sampleFictionalCase,
+    persons: [{ id: 'person-walker', name: '散歩していた人', kind: 'individual' }],
+    claims: [
+      {
+        id: 'claim-fought-today',
+        speaker: { kind: 'person', personIds: ['person-walker'] },
+        sources: [],
+        title: '今日、けんかをした',
+        content: '今日、けんかをした。',
+        mentionedPersonIds: [],
+        when: '2008-07-01',
+      },
+      {
+        id: 'claim-accident',
+        speaker: { kind: 'person', personIds: ['person-walker'] },
+        sources: [],
+        title: '車をぶつけた',
+        content: '車をぶつけた。',
+        mentionedPersonIds: [],
+        when: '2008-07-01T21:30',
+      },
+    ],
+    relationships: [],
+    interviews: [],
+    crossChecks: [],
+    hypotheses: [],
+    tasks: [],
+    timelineOrder: [],
+    personLaneOrder: [],
+  };
+
+  it('日付だけの証言は列の端の細い段に、時刻のある証言は残りの幅に描き、互いに覆わない', async () => {
+    await openTestCase(walkCase);
+    const user = userEvent.setup();
+    render(<PersonLaneView target={walkCase} />);
+    const timeAxis = await switchToTimeAxis(user);
+
+    const walkerColumn = within(timeAxis).getByRole('region', { name: '散歩していた人' });
+    const coarseBand = within(walkerColumn).getByRole('link', { name: /今日、けんかをした/ });
+    const fineBand = within(walkerColumn).getByRole('link', { name: /車をぶつけた/ });
+    // 検証: 2本の帯は別々の段に置かれ、時刻のある証言の帯は、粗い段の幅を空けた位置から描く
+    expect(coarseBand.closest('[data-track]')).toHaveAttribute('data-track', 'coarse');
+    expect(fineBand.closest('[data-track]')).toHaveAttribute('data-track', 'fine');
+    expect(screen.getByText(/列の左端の細い帯は、日付だけ・期間で述べた証言です/)).toBeInTheDocument();
+  });
+
+  it('帯には、帯の幅に関わらず読めるよう、日時と見出しの全文をホバー・フォーカスで示す要素を持たせる', async () => {
+    await openTestCase(walkCase);
+    const user = userEvent.setup();
+    render(<PersonLaneView target={walkCase} />);
+    const timeAxis = await switchToTimeAxis(user);
+
+    const coarseBand = within(timeAxis).getByRole('link', { name: /今日、けんかをした/ });
+    coarseBand.focus();
+
+    expect(coarseBand).toHaveFocus();
+    expect(within(coarseBand).getByText('2008年7月1日')).toBeInTheDocument();
+    expect(within(coarseBand).getByText('今日、けんかをした', { selector: '[data-band-popup] *' })).toBeInTheDocument();
   });
 
   it('「証言の順」に戻すと、証言の順の表を表示する', async () => {

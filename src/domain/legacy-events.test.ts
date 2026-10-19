@@ -10,7 +10,7 @@ function makeContemporaryClaim(id: string, options: { when?: TimeRef; eventId?: 
   const claim: LegacyClaim = {
     id,
     speaker: { kind: 'user' },
-    viaPersonIds: [],
+    sources: [],
     content: options.content ?? `${id}の内容`,
     mentionedPersonIds: [],
   };
