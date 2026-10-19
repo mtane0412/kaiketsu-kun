@@ -442,8 +442,13 @@ export type RelatedClaimGroup = {
   id: Id;
   /** エンティティの現在の名前です。 */
   label: string;
-  /** 同じエンティティに触れている他の証言です。時系列の並び順に並びます。 */
+  /** 同じエンティティに、発言者・言及・場所として触れている他の証言です。時系列の並び順に並びます。 */
   claims: ClaimView[];
+  /**
+   * 同じ人物に、経由としてだけ触れている他の証言です。時系列の並び順に並びます。場所のグループでは常に空です。
+   * 記事を転載した媒体のように、多くの証言の経由に現れる人物では、関係の薄い証言が長く並ぶため、claims と分けて持ちます。
+   */
+  viaOnlyClaims: ClaimView[];
 };
 
 /** 証言の詳細ページに表示する内容です。 */
@@ -467,6 +472,7 @@ export function personIdsOf(claim: Claim): Id[] {
  *
  * 証言から連想して次の証言へ進めるよう、時系列の前後の証言と、同じ人物・場所に触れている他の証言をまとめます。
  * グループは、発言者・経由した人物・言及している人物・場所の順に並べます。他の証言が無いエンティティのグループは作りません。
+ * 人物のグループでは、その人物に経由としてだけ触れている証言を、発言者・言及として触れている証言と分けて持ちます。
  * 注意: ケースに無いIDを渡すと undefined を返します。URLの直接入力や、削除済みの証言のURLを開いた場合に、
  * 呼び出し側が「見つからない」表示を出すためです。
  */
@@ -479,12 +485,20 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
   const others = views.filter((other) => other !== view);
   const persons = [...view.speakerPersons, ...view.viaPersons, ...view.mentionedPersons];
   const groups: RelatedClaimGroup[] = [
-    ...personIdsOf(view.claim).map((id) => ({
-      kind: 'person' as const,
-      id,
-      label: findOrThrow(persons, id, '人物').name,
-      claims: others.filter((other) => personIdsOf(other.claim).includes(id)),
-    })),
+    ...personIdsOf(view.claim).map((id) => {
+      const touching = others.filter((other) => personIdsOf(other.claim).includes(id));
+      // 発言者・言及として触れていない証言は、経由としてだけ触れている（personIdsOf に含まれるため）
+      const isDirect = (other: ClaimView) =>
+        other.claim.mentionedPersonIds.includes(id) ||
+        (other.claim.speaker.kind === 'person' && other.claim.speaker.personIds.includes(id));
+      return {
+        kind: 'person' as const,
+        id,
+        label: findOrThrow(persons, id, '人物').name,
+        claims: touching.filter(isDirect),
+        viaOnlyClaims: touching.filter((other) => !isDirect(other)),
+      };
+    }),
     ...(view.place
       ? [
           {
@@ -492,6 +506,7 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
             id: view.place.id,
             label: view.place.name,
             claims: others.filter((other) => other.claim.placeId === view.place?.id),
+            viaOnlyClaims: [],
           },
         ]
       : []),
@@ -501,7 +516,7 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
     view,
     previous: views[index - 1],
     next: views[index + 1],
-    relatedClaimGroups: groups.filter((group) => group.claims.length > 0),
+    relatedClaimGroups: groups.filter((group) => group.claims.length > 0 || group.viaOnlyClaims.length > 0),
   };
 }
 

@@ -587,7 +587,7 @@ describe('buildClaimDetail', () => {
     // 検証: 発言者・経由した人物・言及している人物・場所の順に並び、この証言自身は含めない
     expect(detail?.relatedClaimGroups.map((group) => [group.kind, group.label, group.claims.map((view) => view.claim.id)])).toEqual([
       ['person', '隣家の住人', ['claim-user-guess']],
-      ['person', '架空日報 朝刊', ['claim-police-camera', 'claim-report']],
+      ['person', '架空日報 朝刊', ['claim-report']],
       ['person', '別荘の持ち主', ['claim-caretaker', 'claim-police-camera', 'claim-report', 'claim-user-guess']],
       ['place', '湖畔の別荘', ['claim-caretaker']],
     ]);
@@ -601,6 +601,40 @@ describe('buildClaimDetail', () => {
     expect(labels).toContain('架空日報 朝刊');
     expect(labels).not.toContain('県警');
     expect(labels).not.toContain('県道の防犯カメラ');
+  });
+
+  it('人物に経由としてだけ触れている他の証言は、発言者・言及として触れている証言と分けて返す', () => {
+    // 前提: 架空日報 朝刊は、架空日報の記述では発言者、防犯カメラの記録では経由の一段としてだけ現れる
+    const detail = buildClaimDetail(sampleFictionalCase, 'claim-neighbor');
+
+    const newspaper = detail?.relatedClaimGroups.find((group) => group.label === '架空日報 朝刊');
+    expect(newspaper?.claims.map((view) => view.claim.id)).toEqual(['claim-report']);
+    expect(newspaper?.viaOnlyClaims.map((view) => view.claim.id)).toEqual(['claim-police-camera']);
+    // 検証: 場所のグループには経由が無いため、経由としてだけ触れている証言は常に空になる
+    expect(detail?.relatedClaimGroups.find((group) => group.kind === 'place')?.viaOnlyClaims).toEqual([]);
+  });
+
+  it('経由としてだけ触れている証言しか無い人物も、グループを作る', () => {
+    // 前提: 県警を経由とする証言を1件足す。防犯カメラの記録から見ると、県警に発言者・言及として触れる他の証言は無い
+    const caseData: Case = {
+      ...sampleFictionalCase,
+      claims: [
+        ...sampleFictionalCase.claims,
+        {
+          id: 'claim-police-briefing',
+          speaker: { kind: 'person', personIds: ['person-neighbor'] },
+          sources: [{ viaPersonIds: ['person-police'] }],
+          content: '県警の聞き取りに、夜は窓を閉めていたと答えた。',
+          mentionedPersonIds: [],
+        },
+      ],
+    };
+
+    const detail = buildClaimDetail(caseData, 'claim-police-camera');
+
+    const police = detail?.relatedClaimGroups.find((group) => group.label === '県警');
+    expect(police?.claims).toEqual([]);
+    expect(police?.viaOnlyClaims.map((view) => view.claim.id)).toEqual(['claim-police-briefing']);
   });
 
   it('ケースに無い証言のIDを渡すと undefined を返す（URLの直接入力で、削除済みの証言を開いた場合）', () => {

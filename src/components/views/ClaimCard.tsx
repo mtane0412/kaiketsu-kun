@@ -4,7 +4,7 @@
  * 時系列ビュー・証言者別ビュー・人物の動きビューで共有します。
  * 人物の動きビューでは、人物がどこにいたかを追えるよう、述べる場所を下段ではなくカードの上部に目立たせます（emphasizePlace）。
  * ユーザーの推測は、人物の発言と見分けられるよう破線の枠と「推測」の表示で区別します。
- * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します。
+ * 本文のメンションは、種類ごとに色分けして「@現在の名前」の形で表示します（証言の詳細と共有する ClaimContentSegments）。
  * 発言者と本文のメンションには、エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
  * 言及している人物は、名前を並べる代わりにアイコンを並べます（名前はアイコンの説明とツールチップで示します）。
  * 見出しのある証言は、見出しを表示し、その下に本文を表示します。
@@ -41,19 +41,12 @@ import { useId, useState, type ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, isLongClaimContent, type ClaimView } from '@/domain/case-views';
 import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
-import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
+import { ClaimContentSegments, MENTION_STYLES } from '../ClaimContentSegments';
 import { expandOnClippedFocus } from '../clipping';
 import { EntityAvatar } from '../EntityAvatar';
-import { claimHref, interviewHref, mentionHref, personHref, type TabKey } from '../routes';
+import { claimHref, interviewHref, personHref, type TabKey } from '../routes';
 import { useCaseId } from '../useCaseId';
-
-/** 本文のメンションの色です。種類ごとの意味を持つ色は globals.css のトークンに集約しています。 */
-const MENTION_STYLES: Record<SegmentKind, string> = {
-  person: 'bg-mention-person text-mention-person-foreground',
-  place: 'bg-mention-place text-mention-place-foreground',
-  date: 'bg-mention-date text-mention-date-foreground',
-};
 
 /**
  * 照合の件数を「裏付け1・食い違い1」の形にします。件数が0の種類は書きません。
@@ -111,24 +104,7 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
       onFocus={expandOnClippedFocus(isCollapsed, () => setIsExpanded(true))}
       className={`${ABOVE_CARD_LINK} whitespace-pre-line text-foreground ${isCollapsed ? 'line-clamp-4' : ''}`}
     >
-      {view.contentSegments.map((segment, index) =>
-        segment.type !== 'mention' ? (
-          segment.text
-        ) : segment.kind === 'date' ? (
-          // 日時はケースのエンティティではないため、開く先が無い。リンクにせず、色だけを人物・場所とそろえる
-          <span key={index} className={`rounded px-0.5 ${MENTION_STYLES.date}`}>
-            @{segment.label}
-          </span>
-        ) : (
-          <Link
-            key={index}
-            href={mentionHref(caseId, segment.kind, segment.id, tab)}
-            className={`${ABOVE_CARD_LINK} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
-          >
-            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
-          </Link>
-        )
-      )}
+      <ClaimContentSegments segments={view.contentSegments} tab={tab} linkClassName={ABOVE_CARD_LINK} />
     </p>
   );
 
