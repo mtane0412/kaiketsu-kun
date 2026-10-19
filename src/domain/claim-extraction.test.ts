@@ -251,6 +251,58 @@ describe('candidateToClaimDraft', () => {
     expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper'] });
   });
 
+  describe('転載の原典を持つ資料（湖畔新聞の記事を、ジャーナリストのブログが転載したもの）', () => {
+    /** 湖畔新聞の記事を、ジャーナリストがブログに転載した資料のケースです。 */
+    function createReprintCase(): Case {
+      const base = createCase();
+      return {
+        ...base,
+        persons: [...base.persons, { id: 'person-journalist', name: '転載したジャーナリスト', kind: 'individual' }],
+        interviews: [
+          {
+            id: 'interview-article',
+            interviewerPersonId: 'person-journalist',
+            origin: { publisherPersonId: 'person-newspaper', publishedAt: '1998-08-14' },
+            transcript: articleTranscript,
+          },
+        ],
+      };
+    }
+
+    it('発言者のいる候補は、経由の最後に原典の媒体と転載した媒体をこの順に足す', () => {
+      const target = createReprintCase();
+      const [candidate] = buildClaimCandidates(target, 'interview-article', [extracted({ speakerName: '県警', quote: '県警によると' })])
+        .candidates;
+
+      const result = candidateToClaimDraft(target, 'interview-article', candidate!, sequentialIds());
+
+      expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper', 'person-journalist'] });
+    });
+
+    it('候補の経由に転載した媒体が先に挙がっていても、媒体は「原典の媒体 → 転載した媒体」の順に並べる', () => {
+      // 前提: LLM が経由に転載したジャーナリストだけを挙げた候補
+      const target = createReprintCase();
+      const [candidate] = buildClaimCandidates(target, 'interview-article', [
+        extracted({ speakerName: '県警', viaNames: ['転載したジャーナリスト'], quote: '県警によると' }),
+      ]).candidates;
+
+      const result = candidateToClaimDraft(target, 'interview-article', candidate!, sequentialIds());
+
+      expect(result.speaker).toEqual({ personIds: ['person-police'], viaPersonIds: ['person-newspaper', 'person-journalist'] });
+    });
+
+    it('発言者の分からない候補（記者の地の文）は、原典の媒体を発言者にし、転載した媒体を経由にする', () => {
+      const target = createReprintCase();
+      const [candidate] = buildClaimCandidates(target, 'interview-article', [
+        extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
+      ]).candidates;
+
+      const result = candidateToClaimDraft(target, 'interview-article', candidate!, sequentialIds());
+
+      expect(result.speaker).toEqual({ personIds: ['person-newspaper'], viaPersonIds: ['person-journalist'] });
+    });
+  });
+
   it('発言者の分からない候補（記者の地の文など）は、媒体を発言者にする', () => {
     const target = createCase();
     const [candidate] = buildClaimCandidates(target, 'interview-article', [

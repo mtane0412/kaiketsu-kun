@@ -20,33 +20,73 @@ beforeEach(async () => {
 });
 
 describe('ClaimDetail', () => {
-  it('証言の内容を1つのフォームで編集でき、本文の日時のメンションを保持する', async () => {
+  it('本文・出典・照合を先に示し、編集のフォームは「編集」を押すまで開かない', () => {
+    // 前提: 隣家の住人の証言は、架空日報 朝刊を経由し、2件の照合に含まれる
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    // 検証: 読むための情報が最初に並び、編集の入力欄はまだ無い
+    const claimSection = screen.getByRole('region', { name: '証言' });
+    expect(claimSection).toHaveTextContent('明かりがついていて、庭に');
+    expect(claimSection).toHaveTextContent('1998年8月12日 21:00');
+    expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
+    const sources = screen.getByRole('region', { name: '出典' });
+    expect(sources).toHaveTextContent('経由: 架空日報 朝刊');
+    const crossCheck = screen.getByRole('region', { name: '照合' });
+    expect(claimSection.compareDocumentPosition(sources)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(sources.compareDocumentPosition(crossCheck)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('「編集」で開いたフォームで保存すると、本文の日時のメンションを保持して保存し、読む表示に戻って「保存しました」と伝える', async () => {
     const user = userEvent.setup();
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    // 検証: 日時は専用の欄ではなく、本文のメンションとして読み込む
-    expect(screen.getByLabelText('内容')).toHaveValue(
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
+
+    // 検証: 日時は専用の欄ではなく、本文のメンションとして読み込み、本文の欄にフォーカスが移る
+    const contentField = screen.getByLabelText('内容');
+    expect(contentField).toHaveValue(
       '@1998年8月12日 21:00ごろ、@湖畔の別荘の明かりがついていて、庭に@別荘の持ち主の姿が見えた。'
     );
+    expect(contentField).toHaveFocus();
 
-    await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
+    await user.type(contentField, ' 窓は開いていた。');
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
     const afterSave = openedCase().claims.find((claim) => claim.id === 'claim-neighbor');
     expect(afterSave?.content).toContain('窓は開いていた。');
     expect(afterSave?.when).toBe('1998-08-12T21:00');
     expect(screen.getByRole('status')).toHaveTextContent('保存しました');
+    // 検証: フォームを閉じて保存後の本文を示し、フォーカスを「編集」に戻す
+    expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '証言' })).toHaveTextContent('窓は開いていた。');
+    expect(screen.getByRole('button', { name: 'この証言を編集' })).toHaveFocus();
   });
 
-  it('「この証言を削除」を、「発言者」と「証言を保存」より前に置く', () => {
-    // 検証: 削除が「発言者」と「証言を保存」の中間に浮かないよう、行の左端に置くこと
+  it('「やめる」を押すと、保存せずに読む表示に戻り、フォーカスを「編集」に戻す', async () => {
+    const user = userEvent.setup();
     render(<ClaimDetail claimId="claim-neighbor" />);
 
-    const deleteButton = screen.getByRole('button', { name: 'この証言を削除' });
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
+    await user.type(screen.getByLabelText('内容'), ' 窓は開いていた。');
+    await user.click(screen.getByRole('button', { name: 'やめる' }));
+
+    expect(openedCase().claims.find((claim) => claim.id === 'claim-neighbor')?.content).not.toContain('窓は開いていた。');
+    expect(screen.queryByLabelText('内容')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'この証言を編集' })).toHaveFocus();
+  });
+
+  it('編集のフォームでは、「やめる」を「発言者」と「証言を保存」より前に置く', async () => {
+    // 検証: 「やめる」が「発言者」と「証言を保存」の中間に浮かないよう、行の左端に置くこと
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-neighbor" />);
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
+
+    const cancelButton = screen.getByRole('button', { name: 'やめる' });
     const speaker = screen.getByRole('button', { name: /^発言者:/ });
     const saveButton = screen.getByRole('button', { name: '証言を保存' });
 
-    expect(deleteButton.compareDocumentPosition(speaker)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(cancelButton.compareDocumentPosition(speaker)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(speaker.compareDocumentPosition(saveButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
@@ -56,6 +96,43 @@ describe('ClaimDetail', () => {
     const beforeAndAfter = screen.getByRole('navigation', { name: '時系列の前後の証言' });
     expect(within(beforeAndAfter).getByRole('link', { name: /^前の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-police-camera');
     expect(within(beforeAndAfter).getByRole('link', { name: /^次の証言/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-report');
+  });
+
+  it('日時を持たない前後の証言には、日時が無く、ボード上の並び順での前後であることを示す', () => {
+    // 前提: 隣家の住人の証言の次は、日時を持たない架空日報の記述。前の防犯カメラの記録は日時を持つ
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const beforeAndAfter = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(within(beforeAndAfter).getByRole('link', { name: /^次の証言/ })).toHaveTextContent('日時なし（ボード上の並び順での前後です）');
+    expect(within(beforeAndAfter).getByRole('link', { name: /^前の証言/ })).not.toHaveTextContent('日時なし');
+  });
+
+  it('この証言が日時を持たない場合は、前後がボード上の並び順であることを示す', () => {
+    // 前提: 架空日報の記述は日時を持たない
+    render(<ClaimDetail claimId="claim-report" />);
+
+    const beforeAndAfter = screen.getByRole('navigation', { name: '時系列の前後の証言' });
+    expect(beforeAndAfter).toHaveTextContent('この証言は日時を持たないため、前後はボード上の並び順です。');
+  });
+
+  it('人物に経由としてだけ触れている他の証言は、折りたたんで分けて示す', async () => {
+    // 前提: 架空日報 朝刊は、架空日報の記述では発言者、防犯カメラの記録では経由としてだけ現れる
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-neighbor" />);
+
+    const newspaper = screen.getByRole('region', { name: '「架空日報 朝刊」に触れている他の証言' });
+    // 検証: 見出しの件数は、経由としてだけ触れている証言も含めた件数にする（折りたたんだ証言だけのグループで0件と示さないため）
+    expect(within(newspaper).getByRole('heading')).toHaveTextContent('人物・2件');
+    expect(within(newspaper).getByRole('link', { name: /12日夜から/ })).toBeInTheDocument();
+    // 検証: 経由としてだけ触れている証言は、開くまで並べない
+    expect(within(newspaper).queryByRole('link', { name: /車が別荘の方向へ走る/ })).not.toBeInTheDocument();
+
+    await user.click(within(newspaper).getByRole('button', { name: '経由としてだけ触れている証言（1件）' }));
+
+    expect(within(newspaper).getByRole('link', { name: /車が別荘の方向へ走る/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/claims/claim-police-camera'
+    );
   });
 
   it('同じ人物・場所に触れている他の証言を、人物・場所ごとにまとめてリンクにする', () => {
@@ -286,7 +363,7 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    const quoteSection = screen.getByRole('region', { name: '引用' });
+    const quoteSection = screen.getByRole('region', { name: '出典' });
     expect(within(quoteSection).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
     const videoLink = within(quoteSection).getByRole('link', { name: '12:34 から動画を開く' });
     expect(videoLink).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc&t=754s');
@@ -298,10 +375,8 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('12:34\nあの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    const quoteSection = screen.getByRole('region', { name: '引用' });
+    const quoteSection = screen.getByRole('region', { name: '出典' });
     expect(within(quoteSection).getByRole('blockquote')).toHaveTextContent(/^あの夜は別荘が真っ暗でした$/);
-    expect(within(screen.getByRole('group', { name: '引用' })).queryByText(/^12:34/)).not.toBeInTheDocument();
-    expect(within(screen.getByRole('group', { name: '引用' })).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
     expect(within(quoteSection).queryByText(/資料の本文に見つかりません/)).not.toBeInTheDocument();
   });
 
@@ -309,7 +384,7 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', { ...videoInterview, url: 'https://example.com/news/1' }));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    const quoteSection = screen.getByRole('region', { name: '引用' });
+    const quoteSection = screen.getByRole('region', { name: '出典' });
     expect(within(quoteSection).getByRole('link', { name: '資料を開く' })).toHaveAttribute('href', 'https://example.com/news/1');
   });
 
@@ -317,7 +392,7 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('あの夜は明かりがついていました'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/資料の本文に見つかりません/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '出典' })).getByText(/資料の本文に見つかりません/)).toBeInTheDocument();
   });
 
   it('聴取に本文が無い場合は、引用を照らし合わせられないことを示す', async () => {
@@ -325,14 +400,41 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした', interviewWithoutTranscript));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    expect(within(screen.getByRole('region', { name: '引用' })).getByText(/照らし合わせられません/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '出典' })).getByText(/照らし合わせられません/)).toBeInTheDocument();
   });
 
-  it('引用を持たない証言では、引用の欄を表示しない', async () => {
+  it('出典を持たない証言では、出典の欄を表示しない', async () => {
+    // 前提: 架空日報の記述は、資料・経由・引用のどれも持たない
+    await openTestCase(sampleFictionalCase);
+    resetMockNavigation('/cases/case-lakeside/claims/claim-report');
+    render(<ClaimDetail claimId="claim-report" />);
+
+    expect(screen.queryByRole('region', { name: '出典' })).not.toBeInTheDocument();
+  });
+
+  it('引用のない出典では、資料と経由だけを示す', async () => {
+    // 前提: サンプルの管理人の証言は、架空の書籍を経由し、引用を持たない
     await openTestCase(sampleFictionalCase);
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    expect(screen.queryByRole('region', { name: '引用' })).not.toBeInTheDocument();
+    const sources = screen.getByRole('region', { name: '出典' });
+    expect(sources).toHaveTextContent('資料なし');
+    expect(within(sources).queryByRole('blockquote')).not.toBeInTheDocument();
+  });
+
+  it('引用の原文を、読む表示でも編集中でも1回だけ示す', async () => {
+    const user = userEvent.setup();
+    await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
+    render(<ClaimDetail claimId="claim-caretaker" />);
+
+    // 検証: 読む表示では出典の欄にだけ示す（本文はフォームの内容欄ではなく、読む表示の本文として示す）
+    expect(screen.getAllByText('あの夜は別荘が真っ暗でした')).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
+
+    // 検証: 編集中はフォームの引用だけを示し、出典の欄は閉じる
+    expect(screen.queryByRole('region', { name: '出典' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: '引用' })).getByText('あの夜は別荘が真っ暗でした')).toBeInTheDocument();
   });
 
   it('編集で引用を保持し、「引用を外す」を押して保存すると、引用を持たない証言にする', async () => {
@@ -340,18 +442,20 @@ describe('ClaimDetail（引用）', () => {
     await openTestCase(caseWithQuote('あの夜は別荘が真っ暗でした'));
     render(<ClaimDetail claimId="claim-caretaker" />);
 
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
     expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]?.quote).toEqual({
       text: 'あの夜は別荘が真っ暗でした',
       seconds: 754,
     });
 
+    await user.click(screen.getByRole('button', { name: 'この証言を編集' }));
     await user.click(screen.getByRole('button', { name: '引用を外す' }));
     await user.click(screen.getByRole('button', { name: '証言を保存' }));
     expect(openedCase().claims.find((claim) => claim.id === 'claim-caretaker')?.sources[0]).not.toHaveProperty('quote');
   });
 
-  it('複数の出典に引用がある場合は、資料ごとに資料の名前を添えて引用を並べる', async () => {
+  it('複数の出典がある場合は、資料ごとに資料の名前と経由を添えて引用を並べる', async () => {
     // 前提: 管理人の同じ発言が、動画と新聞の記事の両方に載っている
     const newspaperInterview: Interview = { id: 'interview-newspaper', title: '架空日報の記事', transcript: '管理人は「別荘は真っ暗だった」と語った。' };
     const base = caseWithQuote('あの夜は別荘が真っ暗でした');
@@ -366,9 +470,10 @@ describe('ClaimDetail（引用）', () => {
     });
     render(<ClaimDetail claimId="claim-caretaker" />);
 
-    const quoteSection = screen.getByRole('region', { name: '引用' });
-    const videoQuote = within(quoteSection).getByRole('group', { name: '管理人へのインタビュー の引用' });
-    const newspaperQuote = within(quoteSection).getByRole('group', { name: '架空日報の記事 の引用' });
+    const quoteSection = screen.getByRole('region', { name: '出典' });
+    const videoQuote = within(quoteSection).getByRole('group', { name: '管理人へのインタビュー の出典' });
+    const newspaperQuote = within(quoteSection).getByRole('group', { name: '架空日報の記事 の出典' });
+    expect(newspaperQuote).toHaveTextContent('経由: 架空日報 朝刊');
     expect(within(videoQuote).getByRole('blockquote')).toHaveTextContent('あの夜は別荘が真っ暗でした');
     expect(within(newspaperQuote).getByRole('blockquote')).toHaveTextContent('別荘は真っ暗だった');
     expect(within(quoteSection).queryByText(/本文に見つかりません/)).not.toBeInTheDocument();

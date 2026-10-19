@@ -230,7 +230,38 @@ export type Interview = {
   url?: string;
   /** 記事の本文や動画の文字起こしです。ユーザーが貼り付け、証言を書き起こす元にします。 */
   transcript?: string;
+  /**
+   * 転載の原典です。原典（新聞の原紙など）が手に入らず、別の媒体に転載されたものを読んだ場合に持ちます。
+   * そのとき、資料そのものは転載した記事（ブログの投稿など）で、interviewerPersonId は転載した媒体、at は転載した日時です。
+   * 原典を持つ資料は、転載の誤り（打ち直しの誤字など）を含みうるため、原典で確かめるべき資料として示します。
+   */
+  origin?: InterviewOrigin;
+  /** 資料の格です。証言の確度を、発言者の種別とあわせて読み手が判断する材料にします（真偽の評価ではありません）。 */
+  grade?: InterviewGrade;
 };
+
+/**
+ * 転載された資料の原典の書誌です。分かっている項目だけを持ち、少なくとも1つは持ちます。
+ */
+export type InterviewOrigin = {
+  /** 原典の媒体です（新聞・雑誌・番組など。人物として登録します）。 */
+  publisherPersonId?: Id;
+  /** 原典の発行日（放送日）です。 */
+  publishedAt?: TimeRef;
+  /** 紙面・版・号などの書誌です（例「朝刊 社会面」）。 */
+  citation?: string;
+};
+
+/**
+ * 資料の格です。資料が、出来事からどれだけ近く、どれだけ検証を経ているかの区分です。
+ * - primary: 一次資料（判決文・公的記録・本人の手記など）
+ * - majorReport: 主要報道（全国紙・地方紙・放送局の報道）
+ * - specialist: 専門資料（鑑定書・専門家の解説・学術資料など）
+ * - secondaryReport: 二次報道（週刊誌・まとめ記事・報道を引いた解説など）
+ * - sns: SNS・個人の投稿・動画
+ * - unverified: 未確認（出どころを確かめられない資料）
+ */
+export type InterviewGrade = 'primary' | 'majorReport' | 'specialist' | 'secondaryReport' | 'sns' | 'unverified';
 
 /**
  * 照合の種類です。
