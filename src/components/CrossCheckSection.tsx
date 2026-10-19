@@ -2,10 +2,11 @@
  * 証言の詳細に並べる「照合」
  *
  * 開いている証言を含む照合（CrossCheck）の一覧と、登録・編集・削除をまとめます。
- * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている）を記録した一次データです。
+ * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている・撤回・訂正している）を記録した一次データです。
  * 自動では判定しません。どちらの証言が正しいかも判定しません。
  *
- * 各行には、照合の種類・相手の証言へのリンク・理由（ある場合）を並べます。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
+ * 各行には、照合の種類・相手の証言へのリンク・理由（ある場合）を並べます。
+ * 撤回・訂正の照合は向きを持つため、種類の代わりに、開いている証言が撤回・訂正した側かされた側かを示します（crossCheckLabelFor）。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
  * 開いているタブ（tab）はリンク先のURLに引き継ぎます。
  *
@@ -18,7 +19,7 @@
 
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
-import { buildClaimCrossChecks, type ClaimCrossCheckView } from '@/domain/cross-checks';
+import { buildClaimCrossChecks, crossCheckLabelFor, type ClaimCrossCheckView } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -84,7 +85,7 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
         <ul className="space-y-2">
           {crossChecks.map((view) => (
             <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
-              <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
+              <p className="text-xs font-semibold">{crossCheckLabelFor(view.crossCheck, claimId)}</p>
               <ClaimLink view={view.other} tab={tab} />
               {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
 

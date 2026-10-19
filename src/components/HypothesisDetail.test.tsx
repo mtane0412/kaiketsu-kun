@@ -187,6 +187,109 @@ describe('HypothesisDetail（対象の人物の動機・機会・手段）', () 
   });
 });
 
+/** 架空の書籍が2018年に唱えた説です。立場の変化はまだ記録していません。 */
+const bookTheory: Hypothesis = {
+  id: 'hypothesis-book-theory',
+  title: '持ち主は自分で姿を消した',
+  status: 'open',
+  supportingClaimIds: [],
+  opposingClaimIds: [],
+  targets: [],
+  proponentPersonId: 'person-book',
+  proposedAt: '2018',
+};
+
+/** サンプルのケースに、架空の書籍の説を加えて開きます。 */
+function openCaseWithBookTheory(theory: Hypothesis = bookTheory) {
+  openTestCase({ ...sampleFictionalCase, hypotheses: [...sampleFictionalCase.hypotheses, theory] });
+}
+
+/** 開いているケースから、架空の書籍の説を取り出します。 */
+function findBookTheory(): Hypothesis {
+  const hypothesis = openedCase().hypotheses.find((candidate) => candidate.id === 'hypothesis-book-theory');
+  if (!hypothesis) throw new Error('架空の書籍の説が見つかりません');
+  return hypothesis;
+}
+
+describe('HypothesisDetail（第三者の説）', () => {
+  it('主唱者と唱えた時期を選ぶと、第三者の説として保存する', async () => {
+    const user = userEvent.setup();
+    render(<HypothesisDetail hypothesisId="hypothesis-caretaker" />);
+
+    const editRegion = screen.getByRole('region', { name: '仮説の編集' });
+    // 検証: 主唱者を選ぶまでは、読み手自身の仮説のため、唱えた時期の欄を出さない
+    expect(within(editRegion).queryByRole('textbox', { name: '唱えた時期（任意）' })).not.toBeInTheDocument();
+    await user.selectOptions(within(editRegion).getByRole('combobox', { name: '主唱者' }), 'person-book');
+    await user.type(within(editRegion).getByRole('textbox', { name: '唱えた時期（任意）' }), '2018年');
+    await user.click(within(editRegion).getByRole('button', { name: '仮説を保存' }));
+
+    expect(findCaretakerHypothesis()).toMatchObject({ proponentPersonId: 'person-book', proposedAt: '2018' });
+  });
+
+  it('主唱者を「読み手（自分）」に戻すと、主唱者と唱えた時期を取り除いて保存する', async () => {
+    openCaseWithBookTheory();
+    const user = userEvent.setup();
+    render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
+
+    const editRegion = screen.getByRole('region', { name: '仮説の編集' });
+    await user.selectOptions(within(editRegion).getByRole('combobox', { name: '主唱者' }), '');
+    await user.click(within(editRegion).getByRole('button', { name: '仮説を保存' }));
+
+    expect(findBookTheory()).not.toHaveProperty('proponentPersonId');
+    expect(findBookTheory()).not.toHaveProperty('proposedAt');
+  });
+
+  it('唱えた時期を解釈できない場合は、理由を示して保存しない', async () => {
+    openCaseWithBookTheory();
+    const user = userEvent.setup();
+    render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
+
+    const editRegion = screen.getByRole('region', { name: '仮説の編集' });
+    const proposedAt = within(editRegion).getByRole('textbox', { name: '唱えた時期（任意）' });
+    await user.clear(proposedAt);
+    await user.type(proposedAt, 'ずっと前');
+    await user.click(within(editRegion).getByRole('button', { name: '仮説を保存' }));
+
+    expect(within(editRegion).getByRole('alert')).toHaveTextContent('唱えた時期を解釈できません');
+    expect(findBookTheory().proposedAt).toBe('2018');
+  });
+
+  it('読み手自身の仮説には、主唱者の立場の変化の節を出さない', () => {
+    render(<HypothesisDetail hypothesisId="hypothesis-caretaker" />);
+
+    expect(screen.queryByRole('region', { name: '主唱者の立場の変化' })).not.toBeInTheDocument();
+  });
+
+  it('主唱者の立場の変化（撤回など）を、時期・根拠の証言・メモとともに記録し、削除できる', async () => {
+    openCaseWithBookTheory();
+    const user = userEvent.setup();
+    render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
+
+    const stanceRegion = screen.getByRole('region', { name: '主唱者の立場の変化' });
+    await user.click(within(stanceRegion).getByRole('button', { name: '立場の変化を記録' }));
+    await user.click(within(stanceRegion).getByRole('radio', { name: '撤回' }));
+    await user.type(within(stanceRegion).getByRole('textbox', { name: '時期（任意）' }), '2020年5月');
+    await user.click(within(stanceRegion).getByRole('checkbox', { name: /12日夜から連絡が取れな/ }));
+    await user.type(within(stanceRegion).getByRole('textbox', { name: 'メモ（任意）' }), '著者が誤りを認めた');
+    await user.click(within(stanceRegion).getByRole('button', { name: '立場の変化を保存' }));
+
+    expect(findBookTheory().stanceChanges).toEqual([
+      { id: expect.any(String), kind: 'withdrawn', at: '2020-05', basisClaimIds: ['claim-report'], note: '著者が誤りを認めた' },
+    ]);
+    const [item] = within(stanceRegion).getAllByRole('listitem');
+    expect(item).toHaveTextContent('撤回');
+    expect(item).toHaveTextContent('2020年5月');
+    expect(within(item!).getByRole('link', { name: /12日夜から連絡が取れな/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/claims/claim-report?tab=hypotheses'
+    );
+
+    await user.click(within(stanceRegion).getByRole('button', { name: '撤回（2020年5月）の記録を削除' }));
+    await user.click(await screen.findByRole('button', { name: '削除する' }));
+    expect(findBookTheory()).not.toHaveProperty('stanceChanges');
+  });
+});
+
 describe('NewHypothesisDetail', () => {
   it('見出しと説明を入力して保存すると、検討中の仮説を登録し、その仮説の詳細へ移る', async () => {
     const user = userEvent.setup();

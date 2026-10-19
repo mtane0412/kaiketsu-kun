@@ -7,6 +7,8 @@
  * 相手の証言の選択肢は、開いている証言を除いたすべての証言を、時系列の並び順に並べます。
  * 照合は向きを持たないため、開いている証言を claimIds の1件目、選んだ相手を2件目として保存します。
  * 編集では、登録済みの照合の claimIds の並びを保ち、相手の側だけを差し替えます。
+ * ただし撤回・訂正（revises）は向きを持つため、種類に撤回・訂正を選んだときだけ「撤回・訂正の向き」の欄を表示し、
+ * 撤回・訂正した証言を claimIds の1件目、撤回・訂正された証言を2件目として保存します。
  *
  * 種類の選択欄（CrossCheckKindField）は、反応の記録（ReactionForm）でも使います。
  *
@@ -49,6 +51,11 @@ export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossChec
     initial === undefined ? '' : isSecond ? initial.claimIds[0] : initial.claimIds[1]
   );
   const [kind, setKind] = useState<CrossCheckKind>(initial?.kind ?? 'supports');
+  /**
+   * 撤回・訂正の照合で、開いている証言が撤回・訂正した側（後の発言）かどうかです。
+   * 撤回・訂正の照合を編集する場合は、登録済みの並び（1件目が撤回・訂正した証言）から初期値を決めます。
+   */
+  const [isRevisingSelf, setIsRevisingSelf] = useState(() => initial?.kind !== 'revises' || !isSecond);
   const [reason, setReason] = useState(initial?.reason ?? '');
   const [error, setError] = useState<string | null>(null);
 
@@ -61,9 +68,11 @@ export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossChec
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     // 未入力の理由はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
+    // 撤回・訂正は向きを持つため、選んだ向きで並べる。他の種類は、登録済みの並びを保つ
+    const placesSelfFirst = kind === 'revises' ? isRevisingSelf : !isSecond;
     const crossCheck: CrossCheck = {
       id: initial?.id ?? nanoid(),
-      claimIds: isSecond ? [otherClaimId, claimId] : [claimId, otherClaimId],
+      claimIds: placesSelfFirst ? [claimId, otherClaimId] : [otherClaimId, claimId],
       kind,
     };
     if (reason.trim()) crossCheck.reason = reason.trim();
@@ -101,6 +110,32 @@ export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossChec
 
       <CrossCheckKindField value={kind} onChange={setKind} />
 
+      {kind === 'revises' && (
+        <fieldset>
+          <legend className={LABEL_CLASS}>撤回・訂正の向き</legend>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${formId}-revision-direction`}
+                checked={isRevisingSelf}
+                onChange={() => setIsRevisingSelf(true)}
+              />
+              この証言が、相手の証言を撤回・訂正している
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${formId}-revision-direction`}
+                checked={!isRevisingSelf}
+                onChange={() => setIsRevisingSelf(false)}
+              />
+              相手の証言が、この証言を撤回・訂正している
+            </label>
+          </div>
+        </fieldset>
+      )}
+
       <TextField
         label="理由（任意）"
         value={reason}
@@ -123,19 +158,21 @@ export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossChec
 type CrossCheckKindFieldProps = {
   value: CrossCheckKind;
   onChange: (kind: CrossCheckKind) => void;
+  /** 選択肢に並べる種類です。省略するとすべての種類を並べます。 */
+  kinds?: readonly CrossCheckKind[];
 };
 
 /**
- * 照合の種類（裏付ける・食い違う・同じ事柄を述べている）を選ぶ欄です。
+ * 照合の種類（裏付ける・食い違う・同じ事柄を述べている・撤回・訂正している）を選ぶ欄です。
  */
-export function CrossCheckKindField({ value, onChange }: CrossCheckKindFieldProps) {
+export function CrossCheckKindField({ value, onChange, kinds = CROSS_CHECK_KINDS }: CrossCheckKindFieldProps) {
   /** 同じ画面に複数の欄が並んでもラジオボタンの組が混ざらないよう、この欄固有の名前を持ちます。 */
   const name = useId();
   return (
     <fieldset>
       <legend className={LABEL_CLASS}>種類</legend>
       <div className="space-y-1">
-        {CROSS_CHECK_KINDS.map((candidate) => (
+        {kinds.map((candidate) => (
           <label key={candidate} className="flex items-center gap-2 text-sm">
             <input type="radio" name={name} checked={value === candidate} onChange={() => onChange(candidate)} />
             {CROSS_CHECK_KIND_LABELS[candidate]}

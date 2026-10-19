@@ -2,7 +2,7 @@
  * 証言の詳細に並べる「この証言を使っている仮説」
  *
  * 開いている証言をひもづけている仮説を並べ、証言から仮説へたどれるようにします。
- * 各行には、仮説の詳細へのリンク・仮説の状態・この証言をひもづけている立場（支える証言・反する証言・「管理人の動機」など）を並べます。
+ * 各行には、仮説の詳細へのリンク・仮説の状態・この証言をひもづけている立場（支える証言・反する証言・「管理人の動機」・「主唱者の撤回の根拠」など）を並べます。
  * 並びと立場の導出は src/domain/hypotheses.ts の findHypothesesUsingClaim です。
  * どの仮説にも使われていない証言では、何も表示しません。
  */
@@ -10,7 +10,7 @@
 
 import Link from 'next/link';
 import { findHypothesesUsingClaim, type HypothesisClaimUse } from '@/domain/hypotheses';
-import { HYPOTHESIS_ASPECT_LABELS, HYPOTHESIS_STATUS_LABELS } from '@/domain/labels';
+import { HYPOTHESIS_ASPECT_LABELS, HYPOTHESIS_STANCE_CHANGE_KIND_LABELS, HYPOTHESIS_STATUS_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { hypothesisHref, type TabKey } from './routes';
@@ -21,9 +21,20 @@ const SECTION_LABEL = 'この証言を使っている仮説';
 
 /** 証言をひもづけている立場の表示名を返します。 */
 function claimUseLabelOf(use: HypothesisClaimUse): string {
-  if (use.kind === 'supporting') return '支える証言';
-  if (use.kind === 'opposing') return '反する証言';
-  return `${use.personName}の${HYPOTHESIS_ASPECT_LABELS[use.aspect]}`;
+  switch (use.kind) {
+    case 'supporting':
+      return '支える証言';
+    case 'opposing':
+      return '反する証言';
+    case 'aspect':
+      return `${use.personName}の${HYPOTHESIS_ASPECT_LABELS[use.aspect]}`;
+    case 'stanceBasis':
+      return `主唱者の${HYPOTHESIS_STANCE_CHANGE_KIND_LABELS[use.stanceChangeKind]}の根拠`;
+    default: {
+      const exhaustive: never = use;
+      throw new Error(`未知の立場です: ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }
 
 type HypothesisUsageSectionProps = {

@@ -16,6 +16,7 @@
  * 資料（聴取）の相手を持っていた頃のデータは、相手を取り除き、タイトルの無い資料は相手の名前をタイトルにします。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
+ * 主唱者・唱えた時期・立場の変化を持たない頃の仮説は、読み手自身の仮説として受け付けます。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
  * 関係の期間（since・until）を持たない頃のデータは、期間を持たない（すべての時点で成り立つ）関係として受け付けます。
  * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
@@ -210,7 +211,7 @@ const caseSchema = z.object({
       z.object({
         id: idSchema,
         claimIds: z.tuple([idSchema, idSchema]),
-        kind: z.enum(['supports', 'contradicts', 'sameSubject']),
+        kind: z.enum(['supports', 'contradicts', 'sameSubject', 'revises']),
         reason: z.string().optional(),
       })
     )
@@ -236,6 +237,20 @@ const caseSchema = z.object({
             }),
           })
         ),
+        // 主唱者・唱えた時期・立場の変化を持たない頃に保存した仮説も読み込めるよう、省略を許す（読み手自身の仮説として扱う）
+        proponentPersonId: idSchema.optional(),
+        proposedAt: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+        stanceChanges: z
+          .array(
+            z.object({
+              id: idSchema,
+              kind: z.enum(['withdrawn', 'revised', 'reaffirmed']),
+              at: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+              basisClaimIds: z.array(idSchema),
+              note: z.string().optional(),
+            })
+          )
+          .optional(),
       })
     )
     .optional(),
@@ -373,6 +388,21 @@ export function findCaseViolations(target: Case): string[] {
     const targetPersonIds = hypothesis.targets.map((hypothesisTarget) => hypothesisTarget.personId);
     if (new Set(targetPersonIds).size !== targetPersonIds.length) {
       violations.push(`同じ人物を仮説の対象に2回以上含めることはできません: ${hypothesis.id}`);
+    }
+    if (hypothesis.proponentPersonId !== undefined) check(personIds, hypothesis.proponentPersonId, '人物');
+    // 唱えた時期と立場の変化は、主唱者の行動を記録するもののため、読み手自身の仮説には持たせない
+    if (hypothesis.proponentPersonId === undefined && hypothesis.proposedAt !== undefined) {
+      violations.push(`主唱者の無い仮説に、唱えた時期は指定できません: ${hypothesis.id}`);
+    }
+    const stanceChanges = hypothesis.stanceChanges ?? [];
+    if (hypothesis.proponentPersonId === undefined && stanceChanges.length > 0) {
+      violations.push(`主唱者の無い仮説に、主唱者の立場の変化は指定できません: ${hypothesis.id}`);
+    }
+    for (const stanceChange of stanceChanges) {
+      stanceChange.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));
+      if (new Set(stanceChange.basisClaimIds).size !== stanceChange.basisClaimIds.length) {
+        violations.push(`立場の変化に同じ証言を2回以上ひもづけることはできません: ${hypothesis.id}`);
+      }
     }
   }
   for (const task of target.tasks) {
