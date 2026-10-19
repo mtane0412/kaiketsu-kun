@@ -11,6 +11,7 @@ import {
   BACKUP_STORAGE_KEY,
   CASE_KEY_PREFIX,
   CaseNotFoundError,
+  closeCaseDatabase,
   createEmptyCase,
   DATABASE_NAME,
   deleteCase,
@@ -137,6 +138,37 @@ describe('saveCase と loadCase', () => {
   });
 });
 
+describe('別のタブとの書き込みの重なり', () => {
+  it('別のタブが本文を書き換えて保存した後に、このタブで保存すると、本体と本文をこのタブの内容にそろえる', async () => {
+    // 前提: このタブで本文 a を保存した後、別のタブが同じ資料の本文を b に書き換えて保存した
+    const target = caseWithTranscripts();
+    await saveCase(target);
+    const otherTab = await openDB(DATABASE_NAME);
+    await otherTab.put('transcripts', { caseId: target.id, interviewId: 'interview-newspaper', text: '別のタブで書き換えた本文' });
+    await otherTab.put('revisions', 'revision-other-tab', target.id);
+    otherTab.close();
+
+    // このタブで、本文とは関係の無い変更を保存する
+    await saveCase({ ...target, name: 'このタブで改名したケース' });
+
+    // 検証: 本体だけがこのタブの内容になり、本文が別のタブの内容のまま残る、という食い違いを起こさない
+    await closeCaseDatabase();
+    expect(await loadCase(target.id)).toEqual({ ...target, name: 'このタブで改名したケース' });
+  });
+});
+
+describe('データベースを開けなかった場合', () => {
+  it('一度開けなくても、次の呼び出しで開き直す', async () => {
+    // 前提: 一時的な障害で、最初の1回だけデータベースを開けない
+    vi.spyOn(indexedDB, 'open').mockImplementationOnce(() => {
+      throw new DOMException('一時的に開けません', 'UnknownError');
+    });
+
+    await expect(listCaseSummaries()).rejects.toThrow('一時的に開けません');
+    expect(await listCaseSummaries()).toEqual([]);
+  });
+});
+
 describe('listCaseSummaries', () => {
   it('保存が無い場合は空の一覧を返す', async () => {
     expect(await listCaseSummaries()).toEqual([]);
@@ -246,8 +278,8 @@ describe('migrateLocalStorageCases', () => {
     const errors = await migrateLocalStorageCases();
 
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain('case-broken');
-    expect(errors[0]).toContain('ケースデータの形式が正しくありません');
+    expect(errors[0]!.caseId).toBe('case-broken');
+    expect(errors[0]!.message).toContain('ケースデータの形式が正しくありません');
     expect(localStorage.getItem(`${CASE_KEY_PREFIX}case-broken`)).toBe('{"id":"case-broken"}');
     expect(localStorage.getItem(`${BACKUP_STORAGE_KEY}:case-broken`)).toBe('{"id":"case-broken"}');
     expect((await listCaseSummaries()).map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
@@ -289,8 +321,39 @@ describe('migrateLocalStorageCases', () => {
 
     const errors = await migrateLocalStorageCases();
 
-    expect(errors[0]).toContain('ケースデータの形式が正しくありません');
+    expect(errors[0]!.message).toContain('ケースデータの形式が正しくありません');
     expect(localStorage.getItem(BACKUP_STORAGE_KEY)).not.toBeNull();
+    expect(await listCaseSummaries()).toEqual([]);
+  });
+
+  it('移した内容を読み出して元の内容と一致しない場合は、移した側を取り消し、LocalStorage に残して理由を返す', async () => {
+    // 前提: IndexedDB への書き込みで、本文が壊れて保存されてしまう
+    const withTranscripts = caseWithTranscripts();
+    storeInLocalStorage(withTranscripts);
+    const originalPut = IDBObjectStore.prototype.put;
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      const corrupted = this.name === 'transcripts' ? { ...(value as object), text: '壊れた本文' } : value;
+      return originalPut.call(this, corrupted, key);
+    });
+
+    const errors = await migrateLocalStorageCases();
+    put.mockRestore();
+
+    expect(errors[0]!.message).toContain('一致しませんでした');
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${withTranscripts.id}`)).not.toBeNull();
+    // 検証: 次の起動で「移し終えたもの」として、確かめずに LocalStorage から消すことのないよう、移した側を残さない
+    await expect(loadCase(withTranscripts.id)).rejects.toBeInstanceOf(CaseNotFoundError);
+    expect(await migrateLocalStorageCases()).toEqual([]);
+    expect(await loadCase(withTranscripts.id)).toEqual(withTranscripts);
+  });
+
+  it('1件だけ保存していた頃のデータから移したケースを削除しても、次の起動で戻さない', async () => {
+    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ state: { currentCase: sampleFictionalCase } }));
+    await migrateLocalStorageCases();
+    await deleteCase(sampleFictionalCase.id);
+
+    await migrateLocalStorageCases();
+
     expect(await listCaseSummaries()).toEqual([]);
   });
 

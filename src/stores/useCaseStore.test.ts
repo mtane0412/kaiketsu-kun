@@ -6,7 +6,7 @@ import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { openDB } from 'idb';
 import { DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
-import { flushPendingSaves, useCaseStore } from './useCaseStore';
+import { flushPendingSaves, initializeCaseStore, useCaseStore } from './useCaseStore';
 
 const newClaim: Claim = {
   id: 'claim-postman',
@@ -58,6 +58,29 @@ describe('openCase', () => {
     expect(useCaseStore.getState().loadError).toEqual({
       kind: 'invalid',
       message: expect.stringContaining('ケースデータの形式が正しくありません'),
+    });
+  });
+
+  it('別のケースを開くと、前のケースで保存に失敗した理由を消す（開いたケースには未保存の変更が無いため）', async () => {
+    useCaseStore.setState({ saveError: '変更をブラウザに保存できませんでした。' });
+    const otherCase: Case = { ...sampleFictionalCase, id: 'case-other', name: '別のケース' };
+    await saveCase(otherCase);
+
+    await useCaseStore.getState().openCase(otherCase.id);
+
+    expect(useCaseStore.getState().saveError).toBeNull();
+  });
+
+  it('LocalStorage から移せなかったケースを開こうとすると、見つからないとは言わずに、移せなかった理由を示す', async () => {
+    // 前提: ケース case-unmigrated は、検証に通らないため LocalStorage から移せず、LocalStorage に残っている
+    localStorage.setItem('testimony-board-case:case-unmigrated', '{"id":"case-unmigrated"}');
+    await initializeCaseStore();
+
+    await useCaseStore.getState().openCase('case-unmigrated');
+
+    expect(useCaseStore.getState().loadError).toEqual({
+      kind: 'migration',
+      message: expect.stringContaining('case-unmigrated'),
     });
   });
 

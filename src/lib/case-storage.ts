@@ -2,12 +2,13 @@
  * ケースのブラウザ保存
  *
  * 複数のケースを IndexedDB（データベース kaiketsu-kun）に保存し、IDを指定して読み書きします。
- * ストアは次の4つです。
+ * ストアは次の5つです。
  * - cases: ケースの本体（キーはケースのID）。資料の本文（Interview.transcript）は取り除いて保存します。
  * - transcripts: 資料の本文（キーは [ケースのID, 資料のID]）。ケースの一覧を、本文を読まずに表示するために分けます。
  * - summaries: ケースを開かずに一覧へ表示する情報（名前・証言の件数・更新日時。キーはケースのID）。
  * - backups: 検証に失敗した保存データの退避先（キーはケースのID）。
- * 1件の保存は、3つのストアを1つのトランザクションで書き換えます。途中で失敗した場合は、どのストアも書き換わりません。
+ * - revisions: ケースを最後に保存したときに振った版（キーはケースのID）。別のタブが同じケースを保存したことに気付くために使います。
+ * 1件の保存は、本体・本文・一覧・版を1つのトランザクションで書き換えます。途中で失敗した場合は、どのストアも書き換わりません。
  *
  * 以前は LocalStorage（容量はおよそ5MB）に保存していました。資料の本文が数百件になると容量を超えるため、IndexedDB へ移しました。
  * LocalStorage に残っているケースは migrateLocalStorageCases が IndexedDB へ移し、移せたことを確かめてから LocalStorage から消します。
@@ -35,6 +36,11 @@ export const CASE_KEY_PREFIX = 'testimony-board-case:';
 export const INDEX_STORAGE_KEY = 'testimony-board-cases';
 /** ケースを1件だけ保存していた頃のキーです。移行のためだけに読み出します。 */
 export const LEGACY_STORAGE_KEY = 'testimony-board-case';
+/**
+ * 1件だけ保存していた頃のデータを移し終えたことを示すキーです。
+ * 旧データは移行が誤っていた場合に備えて消さないため、移したケースを削除した後の起動で、もう一度移さないように使います。
+ */
+export const LEGACY_MIGRATED_STORAGE_KEY = 'testimony-board-case-legacy-migrated';
 /** LocalStorage から移せなかったデータを退避するキーです。ケースごとの退避では、この後ろに「:ケースのID」が続きます。 */
 export const BACKUP_STORAGE_KEY = 'testimony-board-case-backup';
 
@@ -63,6 +69,7 @@ interface CaseDatabaseSchema extends DBSchema {
   transcripts: { key: [Id, Id]; value: StoredTranscript };
   summaries: { key: Id; value: CaseSummary };
   backups: { key: Id; value: StoredBackup };
+  revisions: { key: Id; value: string };
 }
 
 type CaseDatabase = IDBPDatabase<CaseDatabaseSchema>;
@@ -89,28 +96,51 @@ const DEFAULT_CASE_NAME = '新しいケース';
 /** 開いているデータベースの接続です。最初に使うときに開き、以後は使い回します。 */
 let databasePromise: Promise<CaseDatabase> | null = null;
 
-/**
- * ケースごとに、最後に保存した（または読み出した）資料の本文です（資料のID → 本文）。
- * 入力のたびにケースを保存するため、変わっていない本文まで毎回書き直さないよう、変わった本文だけを書くために使います。
- * 注意: このデータベースの接続で保存・読み出しを確かめた内容だけを持ちます。持っていないケースは、本文のストアを丸ごと書き直します。
- */
-const writtenTranscripts = new Map<Id, Map<Id, string>>();
+/** このタブが最後に保存した（または読み出した）ケースの版と、そのときの資料の本文（資料のID → 本文）です。 */
+type WrittenTranscripts = { revision: string | undefined; transcripts: Map<Id, string> };
 
-/** データベースを開きます。初めて開く場合は、ストアを作ります。 */
+/**
+ * ケースごとに、このタブが最後に保存した（または読み出した）資料の本文です。
+ * 入力のたびにケースを保存するため、変わっていない本文まで毎回書き直さないよう、変わった本文だけを書くために使います。
+ * 注意: 保存するときにデータベースの版がここに持つ版と異なる場合は、別のタブが保存したものとして、本文のストアを丸ごと書き直します。
+ * 持っていないケースも同じく丸ごと書き直します。
+ */
+const writtenTranscripts = new Map<Id, WrittenTranscripts>();
+
+/**
+ * データベースを開きます。初めて開く場合は、ストアを作ります。
+ * 開けなかった場合と、ブラウザが接続を閉じた場合は、次の呼び出しで開き直します（一時的な障害で、以後の保存がすべて失敗しないためです）。
+ */
 function openCaseDatabase(): Promise<CaseDatabase> {
-  databasePromise ??= openDB<CaseDatabaseSchema>(DATABASE_NAME, DATABASE_VERSION, {
+  if (databasePromise !== null) return databasePromise;
+  const opening = openDB<CaseDatabaseSchema>(DATABASE_NAME, DATABASE_VERSION, {
     upgrade(database) {
       database.createObjectStore('cases');
       database.createObjectStore('transcripts', { keyPath: ['caseId', 'interviewId'] });
       database.createObjectStore('summaries', { keyPath: 'id' });
       database.createObjectStore('backups', { keyPath: 'id' });
+      database.createObjectStore('revisions');
     },
     // 別のタブが新しい版でデータベースを開こうとした場合は、その妨げにならないよう接続を閉じる（次に使うときに開き直す）
     blocking() {
       void closeCaseDatabase();
     },
+    // ブラウザが接続を閉じた場合（保存領域の削除など）は、閉じた接続を使い回さない
+    terminated() {
+      if (databasePromise === opening) forgetDatabase();
+    },
   });
-  return databasePromise;
+  databasePromise = opening;
+  opening.catch(() => {
+    if (databasePromise === opening) forgetDatabase();
+  });
+  return opening;
+}
+
+/** 開いた接続と、接続に結び付いた本文の記録を忘れます。次に使うときに開き直します。 */
+function forgetDatabase(): void {
+  databasePromise = null;
+  writtenTranscripts.clear();
 }
 
 /**
@@ -119,8 +149,7 @@ function openCaseDatabase(): Promise<CaseDatabase> {
  */
 export async function closeCaseDatabase(): Promise<void> {
   const opening = databasePromise;
-  databasePromise = null;
-  writtenTranscripts.clear();
+  forgetDatabase();
   if (opening === null) return;
   (await opening).close();
 }
@@ -165,37 +194,43 @@ function transcriptsOf(target: Case): Map<Id, string> {
 }
 
 /**
- * ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新します。
+ * ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新して、その項目を返します。
  * 資料の本文は本文のストアに分けて保存し、前回の保存から変わった本文だけを書き込みます。
  *
  * @param updatedAt 一覧に載せる更新日時です。省略すると現在の日時です（LocalStorage からの移行で、元の日時を引き継ぐために指定します）。
- * 注意: 本体・本文・一覧を1つのトランザクションで書き込むため、失敗した場合はどれも書き換わりません。
+ * 注意: 本体・本文・一覧・版を1つのトランザクションで書き込むため、失敗した場合はどれも書き換わりません。
  */
-export async function saveCase(target: Case, updatedAt: string = new Date().toISOString()): Promise<void> {
+export async function saveCase(target: Case, updatedAt: string = new Date().toISOString()): Promise<CaseSummary> {
   const database = await openCaseDatabase();
   const transcripts = transcriptsOf(target);
-  const previous = writtenTranscripts.get(target.id);
+  const summary: CaseSummary = { id: target.id, name: target.name, claimCount: target.claims.length, updatedAt };
+  const revision = nanoid();
 
-  const transaction = database.transaction(['cases', 'transcripts', 'summaries'], 'readwrite');
+  const transaction = database.transaction(['cases', 'transcripts', 'summaries', 'revisions'], 'readwrite');
   const transcriptStore = transaction.objectStore('transcripts');
+  const revisionStore = transaction.objectStore('revisions');
   const writes: Promise<unknown>[] = [
     transaction.objectStore('cases').put(withoutTranscripts(target), target.id),
-    transaction.objectStore('summaries').put({ id: target.id, name: target.name, claimCount: target.claims.length, updatedAt }),
+    transaction.objectStore('summaries').put(summary),
   ];
-  if (previous === undefined) {
-    // このケースの本文を保存したことが無い（前回の内容が分からない）ため、本文をすべて書き直す
+  const storedRevision = await revisionStore.get(target.id);
+  const written = writtenTranscripts.get(target.id);
+  if (written === undefined || written.revision !== storedRevision) {
+    // 前回の内容が分からない（このタブで保存・読み出しをしていない、または別のタブが保存した）ため、本文をすべて書き直す
     writes.push(transcriptStore.delete(transcriptRangeOf(target.id)));
     for (const [interviewId, text] of transcripts) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
   } else {
     for (const [interviewId, text] of transcripts) {
-      if (previous.get(interviewId) !== text) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
+      if (written.transcripts.get(interviewId) !== text) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
     }
-    for (const interviewId of previous.keys()) {
+    for (const interviewId of written.transcripts.keys()) {
       if (!transcripts.has(interviewId)) writes.push(transcriptStore.delete([target.id, interviewId]));
     }
   }
+  writes.push(revisionStore.put(revision, target.id));
   await Promise.all([...writes, transaction.done]);
-  writtenTranscripts.set(target.id, transcripts);
+  writtenTranscripts.set(target.id, { revision, transcripts });
+  return summary;
 }
 
 /**
@@ -205,10 +240,11 @@ export async function saveCase(target: Case, updatedAt: string = new Date().toIS
  */
 export async function loadCase(caseId: Id): Promise<Case> {
   const database = await openCaseDatabase();
-  const transaction = database.transaction(['cases', 'transcripts'], 'readonly');
-  const [stored, storedTranscripts] = await Promise.all([
+  const transaction = database.transaction(['cases', 'transcripts', 'revisions'], 'readonly');
+  const [stored, storedTranscripts, revision] = await Promise.all([
     transaction.objectStore('cases').get(caseId),
     transaction.objectStore('transcripts').getAll(transcriptRangeOf(caseId)),
+    transaction.objectStore('revisions').get(caseId),
     transaction.done,
   ]);
   if (stored === undefined) throw new CaseNotFoundError(caseId);
@@ -222,7 +258,7 @@ export async function loadCase(caseId: Id): Promise<Case> {
   }
 
   const transcripts = new Map(storedTranscripts.map((item) => [item.interviewId, item.text]));
-  writtenTranscripts.set(caseId, transcripts);
+  writtenTranscripts.set(caseId, { revision, transcripts });
   return {
     ...parsed,
     interviews: parsed.interviews.map((interview) => {
@@ -235,11 +271,12 @@ export async function loadCase(caseId: Id): Promise<Case> {
 /** ケースの本体・資料の本文・一覧の項目を消します。 */
 export async function deleteCase(caseId: Id): Promise<void> {
   const database = await openCaseDatabase();
-  const transaction = database.transaction(['cases', 'transcripts', 'summaries'], 'readwrite');
+  const transaction = database.transaction(['cases', 'transcripts', 'summaries', 'revisions'], 'readwrite');
   await Promise.all([
     transaction.objectStore('cases').delete(caseId),
     transaction.objectStore('transcripts').delete(transcriptRangeOf(caseId)),
     transaction.objectStore('summaries').delete(caseId),
+    transaction.objectStore('revisions').delete(caseId),
     transaction.done,
   ]);
   writtenTranscripts.delete(caseId);
@@ -276,7 +313,9 @@ function readLocalStorageUpdatedAt(): Map<Id, string> {
 
 /**
  * LocalStorage のケース1件を IndexedDB へ移し、移せたことを読み出して確かめてから、LocalStorage から消します。
- * IndexedDB に同じIDのケースが既にある場合は、前回の移行で移し終えたものとして上書きせず、LocalStorage の側だけを消します。
+ * 読み出した内容が元の内容と一致しない場合は、移した側を消してから例外を投げます（LocalStorage の側は残します）。
+ * そのため IndexedDB に同じIDのケースが既にある場合は、前回の移行で確かめ終えた後、LocalStorage から消す前に画面が閉じられたものとして、
+ * 上書きせずに LocalStorage の側だけを消します。
  */
 async function migrateLocalStorageCase(caseId: Id, stored: string, updatedAt: string | undefined): Promise<void> {
   const key = `${CASE_KEY_PREFIX}${caseId}`;
@@ -295,6 +334,7 @@ async function migrateLocalStorageCase(caseId: Id, stored: string, updatedAt: st
   await saveCase(migrated, updatedAt);
   const reloaded = await loadCase(caseId);
   if (JSON.stringify(reloaded) !== JSON.stringify(migrated)) {
+    await deleteCase(caseId);
     throw new Error('移した内容を読み出して確かめたところ、元の内容と一致しませんでした');
   }
   localStorage.removeItem(key);
@@ -302,10 +342,12 @@ async function migrateLocalStorageCase(caseId: Id, stored: string, updatedAt: st
 
 /**
  * ケースを1件だけ保存していた頃のデータを、ケースとして IndexedDB へ移します。
- * 旧データは、移行が誤っていた場合に備えて消しません。同じIDのケースが既にある場合は、二重に移行しないよう何もしません。
+ * 旧データは、移行が誤っていた場合に備えて消しません。代わりに、移し終えたことを LEGACY_MIGRATED_STORAGE_KEY に残し、二度目は移しません
+ * （移したケースを削除した後の起動で、削除したケースが戻らないようにするためです）。同じIDのケースが既にある場合も、二重に移行しないよう何もしません。
  * 移行できなかった場合は、旧データを退避用のキーへ写してから例外を投げます。
  */
 async function migrateSingleLegacyCase(stored: string): Promise<void> {
+  if (localStorage.getItem(LEGACY_MIGRATED_STORAGE_KEY) !== null) return;
   try {
     // 旧データは zustand の persist が保存した形（{ state: { currentCase } }）です
     const parsed: unknown = JSON.parse(stored);
@@ -313,8 +355,8 @@ async function migrateSingleLegacyCase(stored: string): Promise<void> {
     if (legacyCase === undefined) return;
 
     const migrated = parseCase(legacyCase);
-    if (await hasStoredCase(migrated.id)) return;
-    await saveCase(migrated);
+    if (!(await hasStoredCase(migrated.id))) await saveCase(migrated);
+    localStorage.setItem(LEGACY_MIGRATED_STORAGE_KEY, new Date().toISOString());
   } catch (error) {
     localStorage.setItem(BACKUP_STORAGE_KEY, stored);
     throw error;
@@ -322,19 +364,25 @@ async function migrateSingleLegacyCase(stored: string): Promise<void> {
 }
 
 /**
+ * LocalStorage から移せなかったデータ1件です。
+ * caseId は、移せなかったケースのIDです。1件だけ保存していた頃のデータは、読めないとIDも分からないため null です。
+ */
+export type MigrationFailure = { caseId: Id | null; message: string };
+
+/**
  * LocalStorage に保存していた頃のケースを、IndexedDB へ移します。
  * 移せなかったケースは LocalStorage に残し（退避用のキーにも写します）、ケースごとの理由を返します。移行の必要が無い場合と、すべて移せた場合は空の配列を返します。
  * すべてのケースを移し終えたら、LocalStorage の一覧のキーも消します。
  */
-export async function migrateLocalStorageCases(): Promise<string[]> {
-  const errors: string[] = [];
+export async function migrateLocalStorageCases(): Promise<MigrationFailure[]> {
+  const errors: MigrationFailure[] = [];
 
   const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
   if (legacy !== null) {
     try {
       await migrateSingleLegacyCase(legacy);
     } catch (error) {
-      errors.push(messageOf(error));
+      errors.push({ caseId: null, message: messageOf(error) });
     }
   }
 
@@ -352,9 +400,10 @@ export async function migrateLocalStorageCases(): Promise<string[]> {
       await migrateLocalStorageCase(caseId, stored, updatedAt.get(caseId));
     } catch (error) {
       remaining += 1;
-      errors.push(
-        `ケース ${caseId} を新しい保存先へ移せませんでした（LocalStorage のキー ${CASE_KEY_PREFIX}${caseId} に残しています）: ${messageOf(error)}`
-      );
+      errors.push({
+        caseId,
+        message: `ケース ${caseId} を新しい保存先へ移せませんでした（LocalStorage のキー ${CASE_KEY_PREFIX}${caseId} に残しています）: ${messageOf(error)}`,
+      });
     }
   }
   if (remaining === 0) localStorage.removeItem(INDEX_STORAGE_KEY);

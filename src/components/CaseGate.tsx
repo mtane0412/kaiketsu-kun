@@ -17,10 +17,46 @@ import { ArrowLeft, FileWarning, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, type ReactNode } from 'react';
 import type { Id } from '@/domain/types';
-import { DATABASE_NAME } from '@/lib/case-storage';
-import { initializeCaseStore, useCaseStore } from '@/stores/useCaseStore';
+import { CASE_KEY_PREFIX, DATABASE_NAME } from '@/lib/case-storage';
+import { initializeCaseStore, useCaseStore, type CaseLoadError } from '@/stores/useCaseStore';
 import { buttonVariants } from '@/components/ui/button';
 import { casesHref } from './routes';
+
+/** 保存データの場所を示す、等幅の短い表記です。 */
+function StorageName({ children }: { children: ReactNode }) {
+  return <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{children}</code>;
+}
+
+/** ケースを開けなかった理由ごとの、データの在りかと対処の案内です（見つからない場合は呼び出し元が別に案内します）。 */
+function LoadErrorGuidance({ kind, caseId }: { kind: Exclude<CaseLoadError['kind'], 'missing'>; caseId: Id }) {
+  switch (kind) {
+    case 'invalid':
+      return (
+        <>
+          保存データの形式が正しくないため、そのデータをブラウザのIndexedDB（データベース <StorageName>{DATABASE_NAME}</StorageName>{' '}
+          のストア <StorageName>backups</StorageName>、キー <StorageName>{caseId}</StorageName>
+          ）に退避しました。データモデルの変更が原因の場合は、退避したデータを変換して、ケースの一覧から「JSONを読み込む」で読み込んでください。
+        </>
+      );
+    case 'migration':
+      return (
+        <>
+          このケースを、以前の保存先（LocalStorage）から移せませんでした。データは LocalStorage のキー{' '}
+          <StorageName>
+            {CASE_KEY_PREFIX}
+            {caseId}
+          </StorageName>{' '}
+          に残しています。データを変換して、ケースの一覧から「JSONを読み込む」で読み込んでください。
+        </>
+      );
+    case 'storage':
+      return 'ブラウザの保存領域を読み書きできませんでした。プライベートブラウズでは保存領域を使えない場合があります。';
+    default: {
+      const exhaustive: never = kind;
+      return exhaustive;
+    }
+  }
+}
 
 export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode }) {
   const currentCase = useCaseStore((state) => state.currentCase);
@@ -34,7 +70,8 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
   }, [caseId, openCase]);
 
   if (loadError !== null) {
-    const isMissing = loadError.kind === 'missing';
+    const { kind } = loadError;
+    const isMissing = kind === 'missing';
     const Icon = isMissing ? SearchX : FileWarning;
     return (
       <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 p-6">
@@ -43,7 +80,7 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
           <h1 className="text-xl font-semibold tracking-tight">
             {isMissing ? 'ケースが見つかりません' : 'ケースを開けませんでした'}
           </h1>
-          {isMissing ? (
+          {kind === 'missing' ? (
             <p className="text-sm text-muted-foreground">
               URLが誤っているか、このブラウザからケースが削除されています。ケースのデータはブラウザごとに保存されるため、
               別のブラウザで作ったケースは、そのブラウザで書き出したJSONを読み込んでください。
@@ -51,17 +88,7 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                {loadError.kind === 'invalid' ? (
-                  <>
-                    保存データの形式が正しくないため、そのデータをブラウザのIndexedDB（データベース{' '}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{DATABASE_NAME}</code> のストア{' '}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">backups</code>、キー{' '}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{caseId}</code>
-                    ）に退避しました。データモデルの変更が原因の場合は、退避したデータを変換して、ケースの一覧から「JSONを読み込む」で読み込んでください。
-                  </>
-                ) : (
-                  'ブラウザの保存領域を読み書きできませんでした。プライベートブラウズでは保存領域を使えない場合があります。'
-                )}
+                <LoadErrorGuidance kind={kind} caseId={caseId} />
               </p>
               <pre className="max-h-48 overflow-auto rounded-md border bg-muted/50 p-3 text-xs whitespace-pre-wrap">
                 {loadError.message}

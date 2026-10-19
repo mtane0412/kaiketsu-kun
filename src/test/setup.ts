@@ -12,8 +12,8 @@ import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
-import { closeCaseDatabase } from '@/lib/case-storage';
+import { afterEach, beforeAll, vi } from 'vitest';
+import { closeCaseDatabase, createEmptyCase, saveCase } from '@/lib/case-storage';
 import { flushPendingSaves, resetCaseStoreInitialization, useCaseStore } from '@/stores/useCaseStore';
 
 /** DOM のある環境（jsdom）で動いているかどうかです。 */
@@ -32,6 +32,13 @@ if (hasDom) {
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
   }));
+
+  // fake-indexeddb は最初の読み書きに時間がかかるため、テストの時間に含めないよう、先に1回読み書きしておく
+  beforeAll(async () => {
+    await saveCase(createEmptyCase('準備のためのケース'));
+    await closeCaseDatabase();
+    globalThis.indexedDB = new IDBFactory();
+  });
 
   afterEach(async () => {
     cleanup();

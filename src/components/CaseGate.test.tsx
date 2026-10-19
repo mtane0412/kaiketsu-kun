@@ -75,6 +75,17 @@ describe('CaseGate', () => {
     expect(alert).toHaveTextContent('backups');
   });
 
+  it('LocalStorage から移せなかったケースでは、見つからないとは言わずに、データが LocalStorage に残っていることと理由を示す', async () => {
+    localStorage.setItem(`${CASE_KEY_PREFIX}case-unmigrated`, '{"id":"case-unmigrated"}');
+
+    renderInFrame('case-unmigrated');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('ケースを開けませんでした');
+    expect(alert).toHaveTextContent('以前の保存先（LocalStorage）から移せませんでした');
+    expect(alert).toHaveTextContent('ケースデータの形式が正しくありません');
+  });
+
   it('LocalStorage に保存していた頃のケースを、新しい保存先へ移してから開く', async () => {
     localStorage.setItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`, JSON.stringify(sampleFictionalCase));
 

@@ -38,6 +38,7 @@ import {
   migrateLocalStorageCases,
   saveCase,
   type CaseSummary,
+  type MigrationFailure,
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
@@ -172,6 +173,16 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** LocalStorage から移せなかったデータです。移せなかったケースを開こうとしたときに、「見つからない」ではなく理由を示すために使います。 */
+let migrationFailures: MigrationFailure[] = [];
+
+/** 一覧の項目を1件だけ差し替え、更新日時の新しい順に並べ直します（保存のたびに一覧を全件読み直さないためです）。 */
+function withSummary(summaries: CaseSummary[], summary: CaseSummary): CaseSummary[] {
+  return [summary, ...summaries.filter((item) => item.id !== summary.id)].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
+}
+
 export const useCaseStore = create<CaseStore>()((set, get) => {
   /** 積んである保存が終わった後の、ケースの一覧を読み直します。 */
   const reloadSummaries = async (): Promise<void> => {
@@ -192,8 +203,8 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
     set({ currentCase: nextCase });
     void enqueue(async () => {
       try {
-        await saveCase(nextCase);
-        set({ summaries: await listCaseSummaries(), saveError: null });
+        const summary = await saveCase(nextCase);
+        set({ summaries: withSummary(get().summaries, summary), saveError: null });
       } catch (error) {
         set({
           saveError: `変更をブラウザに保存できませんでした。画面を閉じる前に、ケース設定から JSON を書き出してください（${messageOf(error)}）`,
@@ -221,15 +232,21 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
       if (latestOpenRequest !== caseId) return;
 
       if ('opened' in result) {
-        set({ currentCase: result.opened, loadError: null });
+        // 前に開いていたケースの保存の失敗は、開いたケースとは関係が無いため消す
+        set({ currentCase: result.opened, loadError: null, saveError: null });
         return;
       }
-      set({ currentCase: null, loadError: { kind: loadErrorKindOf(result.error), message: messageOf(result.error) } });
+      const migrationFailure = migrationFailures.find((failure) => failure.caseId === caseId);
+      const loadError: CaseLoadError =
+        result.error instanceof CaseNotFoundError && migrationFailure !== undefined
+          ? { kind: 'migration', message: migrationFailure.message }
+          : { kind: loadErrorKindOf(result.error), message: messageOf(result.error) };
+      set({ currentCase: null, loadError });
     },
 
     closeCase: () => {
       latestOpenRequest = null;
-      set({ currentCase: null, loadError: null });
+      set({ currentCase: null, loadError: null, saveError: null });
     },
 
     refreshSummaries: reloadSummaries,
@@ -336,7 +353,7 @@ export function useCurrentCase(): Case {
 }
 
 /** LocalStorage からの移行の結果です。画面を開くたびに移行を繰り返さないよう、1回目の結果を使い回します。 */
-let migration: Promise<string[]> | null = null;
+let migration: Promise<MigrationFailure[]> | null = null;
 
 /**
  * 保存済みのデータを読み込む準備を行い、ケースの一覧を読み直します。
@@ -345,14 +362,17 @@ let migration: Promise<string[]> | null = null;
  * ブラウザ側（useEffect の中）から呼び出してください。
  */
 export async function initializeCaseStore(): Promise<void> {
+  const running = (migration ??= enqueue(migrateLocalStorageCases));
   try {
-    migration ??= enqueue(migrateLocalStorageCases);
-    const migrationErrors = await migration;
-    if (migrationErrors.length > 0) {
-      useCaseStore.setState({ loadError: { kind: 'migration', message: migrationErrors.join('\n') } });
+    migrationFailures = await running;
+    if (migrationFailures.length > 0) {
+      const message = migrationFailures.map((failure) => failure.message).join('\n');
+      useCaseStore.setState({ loadError: { kind: 'migration', message } });
     }
     await useCaseStore.getState().refreshSummaries();
   } catch (error) {
+    // 保存領域を開けなかった場合は、次に画面を開いたときに移行をやり直す
+    if (migration === running) migration = null;
     useCaseStore.setState({ loadError: { kind: 'storage', message: messageOf(error) } });
   }
 }
@@ -360,4 +380,5 @@ export async function initializeCaseStore(): Promise<void> {
 /** LocalStorage からの移行を、次の initializeCaseStore でもう一度行うようにします。テストで保存を空に戻すときに使います。 */
 export function resetCaseStoreInitialization(): void {
   migration = null;
+  migrationFailures = [];
 }
