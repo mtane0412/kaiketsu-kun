@@ -679,3 +679,41 @@ describe('buildPlaceDetail', () => {
     expect(buildPlaceDetail(sampleFictionalCase, 'place-deleted')).toBeUndefined();
   });
 });
+
+describe('証言が載っている資料の表示', () => {
+  /** 防犯カメラの記録を、架空日報の記事と書籍の2つの資料が伝え、資料にひもづかない経由も持つケースです。 */
+  const caseWithInterviews: Case = {
+    ...sampleFictionalCase,
+    interviews: [
+      { id: 'interview-newspaper', title: '別荘の事件を報じる記事', interviewerPersonId: 'person-newspaper', at: '1998-08-14', grade: 'majorReport' },
+      { id: 'interview-book', title: '湖畔の夏 第3章', interviewerPersonId: 'person-book', at: '2018-05' },
+    ],
+    claims: sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-police-camera'
+        ? {
+            ...claim,
+            sources: [
+              { interviewId: 'interview-newspaper', viaPersonIds: ['person-police', 'person-newspaper'] },
+              { viaPersonIds: ['person-police'] },
+              { interviewId: 'interview-book', viaPersonIds: ['person-book'] },
+            ],
+          }
+        : claim
+    ),
+  };
+
+  it('証言の表示に、資料ごとのIDと短い表示を出典の順に持たせ、資料にひもづかない出典は含めない', () => {
+    const view = buildTimeline(caseWithInterviews).items.find((item) => item.view.claim.id === 'claim-police-camera')?.view;
+
+    expect(view?.interviewSources).toEqual([
+      { interviewId: 'interview-newspaper', label: '架空日報 朝刊 1998年8月14日・主要報道' },
+      { interviewId: 'interview-book', label: '湖畔の夏 20年目の証言（架空の書籍） 2018年5月' },
+    ]);
+  });
+
+  it('資料にひもづかない証言では、資料の表示を持たない', () => {
+    const view = buildTimeline(caseWithInterviews).items.find((item) => item.view.claim.id === 'claim-user-guess')?.view;
+
+    expect(view?.interviewSources).toEqual([]);
+  });
+});

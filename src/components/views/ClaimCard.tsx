@@ -14,10 +14,15 @@
  * 本文のメンションと言及のアイコンは、その人物・場所の詳細ページへのリンクになります（証言から人物・場所へたどる導線です）。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
  *
+ * 証言が載っている資料は、カードの下段に資料の短い表示（例「架空日報 朝刊 1998年8月14日・主要報道」）で示します。
+ * 同じ媒体が日によって違う内容を報じる場合に、どの日の紙面かを、カードを開かずに見分けるためです。
+ * 資料が複数ある場合は、1件目だけを示して残りを「ほかN件」と件数で添えます（全件は証言の詳細で確認します）。
+ * 資料の表示は、その資料の詳細ページへのリンクになります。
+ *
  * 照合の件数（crossCheckCounts）を渡された場合は、カードの下段に種類別の件数を小さく示します（時系列ビューで使います）。
  * 照合の中身（相手と理由）は、証言の詳細で確認します。
  *
- * カードの下段（述べる場所・言及している人物・資料内の位置・照合）は、項目名を文字で書かずアイコンで示します。
+ * カードの下段（述べる場所・言及している人物・資料・資料内の位置・照合）は、項目名を文字で書かずアイコンで示します。
  * 1件のカードに「開く」「述べる場所」「言及」のような短い文字が散らばると、証言そのものより項目名が目に付くためです。
  * 項目名は読み上げのために sr-only の文字として残し、マウスにはツールチップ（title）で示します。
  *
@@ -30,7 +35,7 @@
  */
 'use client';
 
-import { AtSign, BookMarked, ChevronRight, GitCompareArrows, MapPin } from 'lucide-react';
+import { AtSign, BookMarked, ChevronRight, FileText, GitCompareArrows, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState, type ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, isLongClaimContent, type ClaimView } from '@/domain/case-views';
@@ -40,7 +45,7 @@ import type { SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import { expandOnClippedFocus } from '../clipping';
 import { EntityAvatar } from '../EntityAvatar';
-import { claimHref, mentionHref, personHref, type TabKey } from '../routes';
+import { claimHref, interviewHref, mentionHref, personHref, type TabKey } from '../routes';
 import { useCaseId } from '../useCaseId';
 
 /** 本文のメンションの色です。種類ごとの意味を持つ色は globals.css のトークンに集約しています。 */
@@ -97,6 +102,7 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
   const isCollapsed = isCollapsible && !isExpanded;
 
   const isUserSpeculation = claim.speaker.kind === 'user';
+  const [firstInterviewSource, ...otherInterviewSources] = view.interviewSources;
   const content = (
     // 本文はリンクの当たり判定より手前に置く（カード全体がリンクだと、本文をドラッグして選択・コピーできないため）
     <p
@@ -205,6 +211,19 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
                 </li>
               ))}
             </ul>
+          </DetailRow>
+        )}
+        {firstInterviewSource && (
+          <DetailRow label="資料" icon={<FileText className="size-3.5" />}>
+            <span className="flex flex-wrap items-center gap-x-1.5">
+              <Link
+                href={interviewHref(caseId, firstInterviewSource.interviewId, tab)}
+                className={`${ABOVE_CARD_LINK} underline decoration-current/30 underline-offset-2 hover:text-foreground hover:decoration-current`}
+              >
+                {firstInterviewSource.label}
+              </Link>
+              {otherInterviewSources.length > 0 && <span>ほか{otherInterviewSources.length}件</span>}
+            </span>
           </DetailRow>
         )}
         {claim.locator && (

@@ -10,10 +10,12 @@
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 人物・場所の詳細では、その人物・場所から証言を逆引きします（buildPersonDetail・buildPlaceDetail）。
  * 逆引きした証言は、証言の詳細と同じく時系列の並び順に並べます。
+ * 証言の表示（ClaimView）には、証言が載っている資料の短い表示（src/domain/interview-source-label.ts）を出典の順に持たせます。
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
-import { viaChainsOf, viaPersonIdsOf } from './claim-sources';
+import { interviewIdsOf, viaChainsOf, viaPersonIdsOf } from './claim-sources';
+import { formatInterviewSourceLabel } from './interview-source-label';
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
 import { PERSON_KINDS } from './person-kind';
@@ -36,6 +38,18 @@ export type ClaimView = {
   /** この証言が述べる場所です。 */
   place?: Place;
   mentionedPersons: Person[];
+  /**
+   * 証言が載っている資料です。出典の順に、資料のIDと資料の短い表示（src/domain/interview-source-label.ts）を並べます。
+   * 資料にひもづかない出典（経由だけの出典）は含みません。資料にひもづかない証言では空の配列です。
+   */
+  interviewSources: ClaimInterviewSource[];
+};
+
+/** 証言が載っている資料1件の表示です。 */
+export type ClaimInterviewSource = {
+  interviewId: Id;
+  /** 資料の短い表示です（例「架空日報 朝刊 1998年8月14日・主要報道」）。 */
+  label: string;
 };
 
 /** 時系列ボードの1項目（証言）です。 */
@@ -115,6 +129,10 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     viaChains: viaChainsOf(claim).map((chain) => chain.map((id) => findOrThrow(target.persons, id, '人物'))),
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
+    interviewSources: interviewIdsOf(claim).map((interviewId) => ({
+      interviewId,
+      label: formatInterviewSourceLabel(target, findOrThrow(target.interviews, interviewId, '資料')),
+    })),
   };
 }
 
