@@ -32,6 +32,7 @@ function createCase(overrides: Partial<Case> = {}): Case {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
     ...overrides,
@@ -82,7 +83,7 @@ describe('mergePersons', () => {
           ],
         },
       ],
-      tasks: [{ id: 'task-1', content: '車の持ち主を確かめる', status: 'todo', claimIds: [], personIds: ['person-man', 'person-suspect'], placeIds: [] }],
+      tasks: [{ id: 'task-1', content: '車の持ち主を確かめる', status: 'todo', claimIds: [], personIds: ['person-man', 'person-suspect'], placeIds: [], disputeIds: [] }],
       personLaneOrder: ['person-man', 'person-suspect'],
     });
   }
