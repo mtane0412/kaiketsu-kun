@@ -1,11 +1,12 @@
 /**
  * 仮説の詳細・登録
  *
- * ボード（CaseBoard）と入れ替えて表示します。仮説1件について、次の3つをこの1か所で行います。
- * 1. 見出し・説明・状態・否定の理由の編集と、仮説の削除（HypothesisForm）
+ * ボード（CaseBoard）と入れ替えて表示します。仮説1件について、次の4つをこの1か所で行います。
+ * 1. 見出し・説明・主唱者・唱えた時期・状態・否定の理由の編集と、仮説の削除（HypothesisForm）
  * 2. 仮説を支える証言・反する証言のひもづけ。証言を選ぶとすぐにひもづけ、外すボタンですぐに外します
  * 3. 対象の人物ごとに、動機・機会・手段の3つの観点で関連する証言を整理する表。
  *    人物を行、観点を列に並べ、被疑者どうしで、どの観点の証言がそろっているかを見比べられるようにします
+ * 4. 第三者の説（主唱者を持つ仮説）だけ、主唱者の立場の変化（撤回・修正など）の記録（HypothesisStanceSection）
  * 証言は時系列の並び順に並べます（導出は src/domain/hypotheses.ts の buildHypothesisDetail）。
  *
  * 仮説の登録（NewHypothesisDetail）は、見出し・説明・状態だけを入力し、保存すると、ひもづけを続けられるよう詳細へ移ります。
@@ -32,6 +33,7 @@ import { ClaimLink } from './ClaimLink';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { FormError, INPUT_CLASS } from './forms/fields';
 import { HypothesisForm } from './forms/HypothesisForm';
+import { HypothesisStanceSection } from './HypothesisStanceSection';
 import { boardHref, hypothesisHref, parseTab, personHref, TAB_SEARCH_PARAM, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
 import { DetailCloseLink } from './DetailCloseLink';
@@ -113,6 +115,10 @@ function LinkedClaimList({ views, tab, linkLabel, onRemove, emptyMessage }: Link
   );
 }
 
+/**
+ * 仮説1件の詳細を描画します。第三者の説では、主唱者の立場の変化の節も表示します。
+ * ケースに無い仮説のIDには、見つからないことを表示します。
+ */
 export function HypothesisDetail({ hypothesisId }: { hypothesisId: Id }) {
   const currentCase = useCurrentCase();
   const caseId = useCaseId();
@@ -229,6 +235,8 @@ export function HypothesisDetail({ hypothesisId }: { hypothesisId: Id }) {
       </section>
 
       <FormError message={error} />
+
+      {detail.proponent && <HypothesisStanceSection stanceChanges={detail.stanceChanges} tab={tab} update={update} />}
 
       {claimSection('支える証言', 'supportingClaimIds', detail.supporting)}
       {claimSection('反する証言', 'opposingClaimIds', detail.opposing)}

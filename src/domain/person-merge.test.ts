@@ -134,6 +134,19 @@ describe('mergePersons', () => {
     ]);
   });
 
+  it('第三者の説の主唱者も、まとめ先の人物に付け替える', () => {
+    // 前提: 「男」が唱えた説として登録した仮説がある
+    const base = caseWithDuplicate();
+    const target: Case = {
+      ...base,
+      hypotheses: [
+        { id: 'hypothesis-2', title: '事故だった', status: 'open', supportingClaimIds: [], opposingClaimIds: [], targets: [], proponentPersonId: 'person-man' },
+      ],
+    };
+
+    expect(mergePersons(target, 'person-man', 'person-suspect').hypotheses[0]?.proponentPersonId).toBe('person-suspect');
+  });
+
   it('まとめる人物の名前・別名・識別子・メモを、まとめ先の人物に引き継ぐ', () => {
     const merged = mergePersons(caseWithDuplicate(), 'person-man', 'person-suspect');
 

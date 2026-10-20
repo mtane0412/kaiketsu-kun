@@ -11,7 +11,7 @@
  * - 本文とメモのメンションは、IDだけを付け替え、表記（「男」など）は残します。表記は資料での書き方だからです。
  * - まとめる人物の名前と別名は、まとめ先の人物の別名に足します。本文に残した表記を、資料での表記として示すためです
  *   （src/domain/person-names.ts の isSourceNameOf）。識別子も引き継ぎ、メモはまとめ先のメモの後ろに足します。
- * - 仮説の対象に2人とも含まれていた場合は、観点ごとの証言をまとめ先の対象にまとめます。
+ * - 仮説の対象に2人とも含まれていた場合は、観点ごとの証言をまとめ先の対象にまとめます。第三者の説の主唱者も付け替えます。
  * - 2人の間に関係がある場合は、自分自身との関係になってしまうため、まとめずにエラーにします（関係を先に削除してもらいます）。
  *
  * 人物を分ける操作（1人の人物への参照の一部を、新しい人物に移す）は、ここでは扱いません。
@@ -121,7 +121,10 @@ export function mergePersons(target: Case, fromId: Id, intoId: Id): Case {
       fromPersonId: replaceId(relationship.fromPersonId, fromId, intoId),
       toPersonId: replaceId(relationship.toPersonId, fromId, intoId),
     })),
-    hypotheses: target.hypotheses.map((hypothesis) => {
+    hypotheses: target.hypotheses.map((current) => {
+      // 第三者の説の主唱者を付け替える
+      const hypothesis =
+        current.proponentPersonId === fromId ? { ...current, proponentPersonId: intoId } : current;
       const fromTarget = hypothesis.targets.find((item) => item.personId === fromId);
       if (fromTarget === undefined) return hypothesis;
       const intoTarget = hypothesis.targets.find((item) => item.personId === intoId);

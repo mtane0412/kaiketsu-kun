@@ -9,6 +9,7 @@
  *
  * 入力は、照合の種類と、証言のフォーム（ClaimForm）の見出し・本文・「発言者」です。
  * 反応の多くは否定のため、種類の初期値は「食い違う」にします。
+ * 撤回・訂正（revises）は同じ発言者が前の発言を改めるものであり、別の人物の反応ではないため、種類の選択肢に並べません。
  * 反応は別の人物の反応を記録するものであり、ユーザーの推測にはしないため、発言者を必須にします。
  * 反応の本文が一致・食い違いの中身を表すため、照合の理由は持たせません。
  * 反応の証言は、時系列の並び順で元の証言の直後に置きます（見比べやすくするためです）。
@@ -21,11 +22,15 @@
 
 import { nanoid } from 'nanoid';
 import { useState } from 'react';
+import { CROSS_CHECK_KINDS } from '@/domain/cross-checks';
 import { resolveTimelineOrder, timelineKeyOf } from '@/domain/timeline-order';
 import type { CrossCheckKind, Id } from '@/domain/types';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { ClaimForm } from './ClaimForm';
 import { CrossCheckKindField } from './CrossCheckForm';
+
+/** 反応として選べる照合の種類です。撤回・訂正は別の人物の反応ではないため含めません。 */
+const REACTION_KINDS: readonly CrossCheckKind[] = CROSS_CHECK_KINDS.filter((kind) => kind !== 'revises');
 
 type ReactionFormProps = {
   /** 反応の対象の証言のIDです。 */
@@ -46,7 +51,7 @@ export function ReactionForm({ claimId, onDone, onCancel }: ReactionFormProps) {
 
   return (
     <div className="space-y-3">
-      <CrossCheckKindField value={kind} onChange={setKind} />
+      <CrossCheckKindField value={kind} onChange={setKind} kinds={REACTION_KINDS} />
       <ClaimForm
         defaults={{ insertIndex }}
         onDone={onDone}

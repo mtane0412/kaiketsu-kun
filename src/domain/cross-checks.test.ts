@@ -2,7 +2,7 @@
  * 照合（証言同士の突き合わせの結果）から、証言の詳細・裏付けの無い証言・カードの印を導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildClaimCrossChecks, countCrossChecksByClaim, findUncorroboratedClaims } from './cross-checks';
+import { buildClaimCrossChecks, countCrossChecksByClaim, crossCheckLabelFor, findUncorroboratedClaims } from './cross-checks';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
@@ -61,11 +61,50 @@ describe('countCrossChecksByClaim', () => {
   it('証言ごとに、照合の件数を種類別に数える', () => {
     const count = countCrossChecksByClaim(caseWithThreeCrossChecks);
 
-    expect(count.get('claim-neighbor')).toEqual({ supports: 1, contradicts: 1, sameSubject: 1 });
-    expect(count.get('claim-report')).toEqual({ supports: 0, contradicts: 0, sameSubject: 1 });
+    expect(count.get('claim-neighbor')).toEqual({ supports: 1, contradicts: 1, sameSubject: 1, revises: 0 });
+    expect(count.get('claim-report')).toEqual({ supports: 0, contradicts: 0, sameSubject: 1, revises: 0 });
   });
 
   it('照合が無い証言は、結果に含めない', () => {
     expect(countCrossChecksByClaim(caseWithThreeCrossChecks).has('claim-user-guess')).toBe(false);
+  });
+
+  it('撤回・訂正の照合は、撤回・訂正した側とされた側の両方で数える', () => {
+    const count = countCrossChecksByClaim(caseWithRevision);
+
+    expect(count.get('claim-police-camera')).toEqual({ supports: 0, contradicts: 0, sameSubject: 0, revises: 1 });
+    expect(count.get('claim-report')).toEqual({ supports: 0, contradicts: 0, sameSubject: 0, revises: 1 });
+  });
+});
+
+/**
+ * サンプルのケースに、防犯カメラの証言が新聞の記事の証言を訂正したという照合を加えたケースです。
+ * 撤回・訂正の照合は向きを持ち、claimIds の1件目が撤回・訂正した証言（後の発言）、2件目が撤回・訂正された証言です。
+ */
+const caseWithRevision: Case = {
+  ...sampleFictionalCase,
+  crossChecks: [
+    {
+      id: 'cross-check-camera-revises-report',
+      claimIds: ['claim-police-camera', 'claim-report'],
+      kind: 'revises',
+      reason: '県警が、記事の時刻を防犯カメラの記録で訂正した。',
+    },
+  ],
+};
+
+describe('crossCheckLabelFor', () => {
+  it('撤回・訂正の照合は、開いている証言が撤回・訂正した側かされた側かで、名前を変える', () => {
+    const [crossCheck] = caseWithRevision.crossChecks;
+
+    expect(crossCheckLabelFor(crossCheck!, 'claim-police-camera')).toBe('この証言が撤回・訂正した証言');
+    expect(crossCheckLabelFor(crossCheck!, 'claim-report')).toBe('この証言を撤回・訂正した証言');
+  });
+
+  it('向きを持たない照合は、どちらの証言から見ても種類の名前を返す', () => {
+    const contradiction = sampleFictionalCase.crossChecks.find((crossCheck) => crossCheck.kind === 'contradicts');
+
+    expect(crossCheckLabelFor(contradiction!, contradiction!.claimIds[0])).toBe('食い違う');
+    expect(crossCheckLabelFor(contradiction!, contradiction!.claimIds[1])).toBe('食い違う');
   });
 });

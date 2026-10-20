@@ -4,7 +4,15 @@
  */
 import type { MentionKind } from './mention';
 import type { TaskLinkKind } from './tasks';
-import type { CrossCheckKind, HypothesisAspect, HypothesisStatus, InterviewGrade, PersonKind, TaskStatus } from './types';
+import type {
+  CrossCheckKind,
+  HypothesisAspect,
+  HypothesisStanceChangeKind,
+  HypothesisStatus,
+  InterviewGrade,
+  PersonKind,
+  TaskStatus,
+} from './types';
 
 /** 日時のメンション（ケースのエンティティではなく、日時そのものを指すメンション）の表示名です。 */
 export const DATE_MENTION_LABEL = '日時';
@@ -49,6 +57,7 @@ export const CROSS_CHECK_KIND_LABELS: Record<CrossCheckKind, string> = {
   supports: '裏付ける',
   contradicts: '食い違う',
   sameSubject: '同じ事柄を述べている',
+  revises: '撤回・訂正している',
 };
 
 /** 照合の種類の短い表示名です。時系列ボードのカードに件数を添えて示すときに使います。 */
@@ -56,6 +65,7 @@ export const CROSS_CHECK_KIND_SHORT_LABELS: Record<CrossCheckKind, string> = {
   supports: '裏付け',
   contradicts: '食い違い',
   sameSubject: '同じ事柄',
+  revises: '撤回・訂正',
 };
 
 /** 仮説の状態の表示名です。仮説の一覧・詳細と入力フォームで使います。 */
@@ -63,6 +73,13 @@ export const HYPOTHESIS_STATUS_LABELS: Record<HypothesisStatus, string> = {
   open: '検討中',
   likely: '有力',
   rejected: '否定された',
+};
+
+/** 第三者の説の主唱者の、立場の変化の種類の表示名です。仮説の詳細と、証言を使っている仮説の立場で使います。 */
+export const HYPOTHESIS_STANCE_CHANGE_KIND_LABELS: Record<HypothesisStanceChangeKind, string> = {
+  withdrawn: '撤回',
+  revised: '修正',
+  reaffirmed: '再び主張',
 };
 
 /** 被疑者を検討する観点の表示名です。仮説の詳細の表の列と、証言を使っている仮説の立場で使います。 */

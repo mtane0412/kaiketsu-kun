@@ -1,18 +1,31 @@
 /**
- * 仮説（読み手の見立て）から表示用の情報を導出するロジック
+ * 仮説（読み手の見立て・第三者の説）から表示用の情報を導出するロジック
  *
  * 仮説は、読み手が複数の見立てを並べて検討し、証言で1つずつ消していく作業を記録した一次データです。
+ * 主唱者（proponentPersonId）を持つ仮説は第三者の説で、主唱者と、主唱者の立場の変化（撤回・修正など）を添えて導出します。
  * このファイルは、仮説から次の3つを導出します。いずれも保存しません。
- * - 仮説の一覧（buildHypothesisList）。否定されていない仮説を有力・検討中の順に並べ、否定された仮説を別に分けます
- * - 仮説の詳細に並べる、支える証言・反する証言と、対象の人物ごとの動機・機会・手段の証言（buildHypothesisDetail）
+ * - 仮説の一覧（buildHypothesisList）。否定されていない仮説を有力・検討中の順に並べ、否定された仮説を別に分けます。
+ *   第三者の説には、主唱者と、主唱者の最新の立場の変化を添えます
+ * - 仮説の詳細に並べる、支える証言・反する証言、対象の人物ごとの動機・機会・手段の証言、主唱者の立場の変化ごとの根拠の証言（buildHypothesisDetail）
  * - 証言の詳細に並べる、その証言を使っている仮説（findHypothesesUsingClaim）
- * あわせて、証言を削除するときに仮説からひもづけを外す操作（detachClaimFromHypotheses）を持ちます。
+ * あわせて、証言を削除するときに仮説からひもづけを外す操作（detachClaimFromHypotheses）と、
+ * 主唱者の立場の変化を時期の順の位置に加える操作（insertStanceChange）を持ちます。
  *
  * 証言を並べる順は、証言の詳細と同じく時系列の並び順（buildTimeline）です。
  * 注意: 判断（有力・否定）は仮説の側に置きます。証言そのものの真偽は判定しません。
  */
 import { buildTimeline, type ClaimView } from './case-views';
-import type { Case, Hypothesis, HypothesisAspect, HypothesisStatus, Id, Person } from './types';
+import { compareTimeRef } from './time-ref';
+import type {
+  Case,
+  Hypothesis,
+  HypothesisAspect,
+  HypothesisStanceChange,
+  HypothesisStanceChangeKind,
+  HypothesisStatus,
+  Id,
+  Person,
+} from './types';
 
 /** 仮説の状態を、入力の選択肢に並べる順に並べたものです。 */
 export const HYPOTHESIS_STATUSES: readonly HypothesisStatus[] = ['open', 'likely', 'rejected'];
@@ -28,6 +41,10 @@ export type HypothesisListItem = {
   hypothesis: Hypothesis;
   /** 仮説が対象とする人物です。 */
   targetPersons: Person[];
+  /** 説を唱えた人物（主唱者）です。読み手自身の仮説では undefined です。 */
+  proponent: Person | undefined;
+  /** 主唱者の最新の立場の変化です。変化が無い場合と、読み手自身の仮説では undefined です。 */
+  latestStanceChange: HypothesisStanceChange | undefined;
 };
 
 /** 仮説の一覧です。否定された仮説は、区別して表示できるよう別に分けます。 */
@@ -44,22 +61,35 @@ export type HypothesisTargetView = {
   claims: Record<HypothesisAspect, ClaimView[]>;
 };
 
+/** 仮説の詳細に並べる、主唱者の立場の変化1件と、その根拠の証言です。 */
+export type HypothesisStanceChangeView = {
+  change: HypothesisStanceChange;
+  /** 根拠の証言です。時系列の並び順に並べます。 */
+  basis: ClaimView[];
+};
+
 /** 仮説の詳細です。 */
 export type HypothesisDetail = {
   hypothesis: Hypothesis;
   supporting: ClaimView[];
   opposing: ClaimView[];
   targets: HypothesisTargetView[];
+  /** 説を唱えた人物（主唱者）です。読み手自身の仮説では undefined です。 */
+  proponent: Person | undefined;
+  /** 主唱者の立場の変化です。記録した順（起きた順）に並べます。 */
+  stanceChanges: HypothesisStanceChangeView[];
 };
 
 /**
  * 証言が仮説にひもづいている立場です。
  * 対象の人物の観点にひもづいている場合は、観点と人物の名前を持ちます。
+ * 主唱者の立場の変化の根拠にひもづいている場合は、立場の変化の種類を持ちます。
  */
 export type HypothesisClaimUse =
   | { kind: 'supporting' }
   | { kind: 'opposing' }
-  | { kind: 'aspect'; aspect: HypothesisAspect; personName: string };
+  | { kind: 'aspect'; aspect: HypothesisAspect; personName: string }
+  | { kind: 'stanceBasis'; stanceChangeKind: HypothesisStanceChangeKind };
 
 /** 証言を使っている仮説1件と、その証言をひもづけている立場です。 */
 export type HypothesisUsage = {
@@ -74,11 +104,18 @@ function personOf(target: Case, personId: Id): Person {
   return person;
 }
 
+/** 仮説の主唱者を返します。読み手自身の仮説（主唱者を持たない仮説）には undefined を返します。 */
+function proponentOf(target: Case, hypothesis: Hypothesis): Person | undefined {
+  return hypothesis.proponentPersonId === undefined ? undefined : personOf(target, hypothesis.proponentPersonId);
+}
+
 /** 仮説の一覧を返します。同じ状態の仮説は、登録した順に並べます。 */
 export function buildHypothesisList(target: Case): HypothesisList {
   const toItem = (hypothesis: Hypothesis): HypothesisListItem => ({
     hypothesis,
     targetPersons: hypothesis.targets.map((hypothesisTarget) => personOf(target, hypothesisTarget.personId)),
+    proponent: proponentOf(target, hypothesis),
+    latestStanceChange: hypothesis.stanceChanges?.at(-1),
   });
 
   return {
@@ -112,12 +149,14 @@ export function buildHypothesisDetail(target: Case, hypothesisId: Id): Hypothesi
         means: viewsOf(hypothesisTarget.claimIds.means),
       },
     })),
+    proponent: proponentOf(target, hypothesis),
+    stanceChanges: (hypothesis.stanceChanges ?? []).map((change) => ({ change, basis: viewsOf(change.basisClaimIds) })),
   };
 }
 
 /**
  * 証言 claimId をひもづけている仮説を、ケースに登録した順に返します。
- * 立場は、支える・反する・対象の人物の観点（人物の順、動機・機会・手段の順）の順に並べます。
+ * 立場は、支える・反する・対象の人物の観点（人物の順、動機・機会・手段の順）・主唱者の立場の変化の根拠（記録した順）の順に並べます。
  */
 export function findHypothesesUsingClaim(target: Case, claimId: Id): HypothesisUsage[] {
   return target.hypotheses.flatMap((hypothesis) => {
@@ -131,14 +170,39 @@ export function findHypothesesUsingClaim(target: Case, claimId: Id): HypothesisU
           personName: personOf(target, hypothesisTarget.personId).name,
         }))
       ),
+      ...(hypothesis.stanceChanges ?? [])
+        .filter((change) => change.basisClaimIds.includes(claimId))
+        .map((change) => ({ kind: 'stanceBasis' as const, stanceChangeKind: change.kind })),
     ];
     return uses.length > 0 ? [{ hypothesis, uses }] : [];
   });
 }
 
 /**
- * 仮説の支える証言・反する証言・対象の人物の観点から、証言 claimId のひもづけを外した仮説の一覧を返します。
- * 証言を削除するときに使います。仮説そのものと対象の人物は残します。
+ * 主唱者の立場の変化 change を、時期の順の位置に加えた一覧を返します。
+ *
+ * 立場の変化は起きた順に並べて持ち、最後の要素を最新の立場として扱います（buildHypothesisList の latestStanceChange）。
+ * 並びは compareTimeRef の順（時期の早い順。時期の分からない変化は末尾）で、時期の同じ変化の間では記録した順を保ちます。
+ * 後から見つかった古い変化を記録しても順が崩れないよう、比較してそれより後になる最初の変化の前に入れます。
+ * 読み込んだデータの並べ直し（sortStanceChanges）と同じ順になります。
+ */
+export function insertStanceChange(changes: HypothesisStanceChange[], change: HypothesisStanceChange): HypothesisStanceChange[] {
+  const index = changes.findIndex((existing) => compareTimeRef(existing.at, change.at) > 0);
+  return index === -1 ? [...changes, change] : [...changes.slice(0, index), change, ...changes.slice(index)];
+}
+
+/**
+ * 主唱者の立場の変化を、起きた順（insertStanceChange と同じ順）に並べ直した一覧を返します。
+ * JSONを手で書いた場合など、時期の順に並んでいないデータを読み込むときに使います。並べ替えは安定で、時期の同じ変化の順は保ちます。
+ */
+export function sortStanceChanges(changes: HypothesisStanceChange[]): HypothesisStanceChange[] {
+  return [...changes].sort((a, b) => compareTimeRef(a.at, b.at));
+}
+
+/**
+ * 仮説の支える証言・反する証言・対象の人物の観点・主唱者の立場の変化の根拠から、証言 claimId のひもづけを外した仮説の一覧を返します。
+ * 証言を削除するときに使います。仮説そのもの・対象の人物・立場の変化は残します。
+ * 立場の変化を持たない仮説には、立場の変化の項目を足しません（JSONの書き出しと読み込みで形が変わらないようにするためです）。
  */
 export function detachClaimFromHypotheses(hypotheses: Hypothesis[], claimId: Id): Hypothesis[] {
   const without = (claimIds: Id[]) => claimIds.filter((id) => id !== claimId);
@@ -154,5 +218,10 @@ export function detachClaimFromHypotheses(hypotheses: Hypothesis[], claimId: Id)
         means: without(hypothesisTarget.claimIds.means),
       },
     })),
+    ...(hypothesis.stanceChanges === undefined
+      ? {}
+      : {
+          stanceChanges: hypothesis.stanceChanges.map((change) => ({ ...change, basisClaimIds: without(change.basisClaimIds) })),
+        }),
   }));
 }
