@@ -25,6 +25,7 @@
  */
 import { formatInterviewLabel } from './interviews';
 import { hasPersonMention, parseContent, replacePersonMentions } from './mention';
+import { resolvePersonLaneOrder } from './person-lane-order';
 import type { Case, Id, Person } from './types';
 
 /** 人物を参照している箇所1件です。key は、移す参照を選ぶときの識別子です（同じケースの中で一意です）。 */
@@ -63,6 +64,9 @@ const referenceKey = {
   personNote: (personId: Id) => `person:${personId}:note`,
   placeNote: (placeId: Id) => `place:${placeId}:note`,
 };
+
+/** 見出しも本文も無い証言を、参照元として示す文です。空欄のままだと、何の参照か読めないためです。 */
+const UNTITLED_CLAIM_SUBJECT = '（見出しと本文の無い証言）';
 
 /** 参照元の文の冒頭として示す文字数です。長い本文で一覧が読みにくくならないよう、ここで切ります。 */
 const SUBJECT_LENGTH = 40;
@@ -158,7 +162,7 @@ export function describePersonReference(target: Case, reference: PersonReference
     case 'claimVia':
     case 'claimMention': {
       const claim = findById(target.claims, reference.claimId);
-      const subject = claim.title ?? truncate(contentWithWrittenLabels(claim.content));
+      const subject = claim.title ?? (truncate(contentWithWrittenLabels(claim.content).trim()) || UNTITLED_CLAIM_SUBJECT);
       if (reference.kind === 'claimSpeaker') return { group: '証言', subject, role: '発言者' };
       if (reference.kind === 'claimMention') return { group: '証言', subject, role: '本文での言及' };
       const interviewId = claim.sources[reference.sourceIndex]?.interviewId;
@@ -204,11 +208,12 @@ function replaceInList(ids: Id[], fromId: Id, toId: Id): Id[] {
 /**
  * 人物 fromId を参照している箇所のうち、moveKeys で選んだ参照だけを新しい人物 newPerson に移したケースを返します。
  * 新しい人物はケースの人物の末尾に足します。規則はこのファイル冒頭のコメントを参照してください。
- * 存在しない人物・既にあるIDの新しい人物・人物 fromId を参照していない箇所を選んだ場合は、エラーにします。
+ * 存在しない人物・既にあるIDの新しい人物・名前が空の新しい人物・人物 fromId を参照していない箇所を選んだ場合は、エラーにします。
  */
 export function splitPerson(target: Case, fromId: Id, newPerson: Person, moveKeys: string[]): Case {
   if (!target.persons.some((person) => person.id === fromId)) throw new Error(`人物が見つかりません: ${fromId}`);
   if (target.persons.some((person) => person.id === newPerson.id)) throw new Error(`同じIDの人物が既にあります: ${newPerson.id}`);
+  if (newPerson.name.trim() === '') throw new Error('新しい人物の名前を入力してください');
   const referenceKeys = new Set(listPersonReferences(target, fromId).map((reference) => reference.key));
   const unknownKey = moveKeys.find((key) => !referenceKeys.has(key));
   if (unknownKey !== undefined) throw new Error(`この人物を参照していない箇所です: ${unknownKey}`);
@@ -219,11 +224,10 @@ export function splitPerson(target: Case, fromId: Id, newPerson: Person, moveKey
   const moveNote = (note: string | undefined, key: string) =>
     note !== undefined && moves.has(key) ? replacePersonMentions(note, fromId, toId) : note;
 
-  const lanePosition = target.personLaneOrder.indexOf(fromId);
-  const personLaneOrder =
-    lanePosition === -1
-      ? target.personLaneOrder
-      : [...target.personLaneOrder.slice(0, lanePosition + 1), toId, ...target.personLaneOrder.slice(lanePosition + 1)];
+  // 並び順に載っていない人物は登録順で末尾に並ぶため、画面に出ている並び（resolvePersonLaneOrder）を基準に、元の人物の直後へ入れる
+  const laneOrder = resolvePersonLaneOrder(target);
+  const lanePosition = laneOrder.indexOf(fromId);
+  const personLaneOrder = [...laneOrder.slice(0, lanePosition + 1), toId, ...laneOrder.slice(lanePosition + 1)];
 
   return {
     ...target,

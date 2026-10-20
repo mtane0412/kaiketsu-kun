@@ -67,14 +67,21 @@ describe('PersonDetail の、人物を分ける操作', () => {
     for (const checkbox of within(section).getAllByRole('checkbox')) expect(checkbox).not.toBeChecked();
   });
 
-  it('新しい人物の名前を入れるまでは、分けるボタンを押せない', async () => {
+  it('新しい人物の名前を入れ、移す参照を1件以上選ぶまでは、分けるボタンを押せない', async () => {
     const user = userEvent.setup();
     render(<PersonDetail personId="person-neighbor" />);
 
     const section = await openSplitter(user);
-    expect(within(section).getByRole('button', { name: '分ける' })).toBeDisabled();
+    const splitButton = within(section).getByRole('button', { name: '分ける' });
+    await user.click(within(section).getByRole('checkbox', { name: /発言者/ }));
+    // 空白だけの名前では押せない
     await user.type(within(section).getByLabelText('新しい人物の名前'), '  ');
-    expect(within(section).getByRole('button', { name: '分ける' })).toBeDisabled();
+    expect(splitButton).toBeDisabled();
+    // 名前を入れても、参照を1件も選んでいなければ押せない
+    await user.type(within(section).getByLabelText('新しい人物の名前'), '隣家の息子');
+    expect(splitButton).toBeEnabled();
+    await user.click(within(section).getByRole('checkbox', { name: /発言者/ }));
+    expect(splitButton).toBeDisabled();
   });
 
   it('やめると、参照の一覧を閉じ、ケースを変えない', async () => {

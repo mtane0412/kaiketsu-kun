@@ -115,6 +115,16 @@ describe('describePersonReference', () => {
     expect(described).toContainEqual({ group: '未了事項', subject: 'どちらの弟か確かめる', role: '対象の人物' });
     expect(described).toContainEqual({ group: '人物', subject: '小林健', role: 'メモでの言及' });
   });
+
+  it('見出しも本文も無い証言は、そのことを参照元として示す', () => {
+    const target = createCase();
+    const untitled = { ...createCase().claims[0]!, id: 'claim-empty', title: undefined, content: '' };
+    const withEmpty = { ...target, claims: [...target.claims, untitled] };
+    const reference = listPersonReferences(withEmpty, 'person-brother').find((item) => item.key === 'claim:claim-empty:speaker');
+    if (reference === undefined) throw new Error('見出しの無い証言の参照がありません');
+
+    expect(describePersonReference(withEmpty, reference)).toEqual({ group: '証言', subject: '（見出しと本文の無い証言）', role: '発言者' });
+  });
 });
 
 describe('splitPerson', () => {
@@ -171,6 +181,13 @@ describe('splitPerson', () => {
     expect(result.personLaneOrder).toEqual(['person-suspect', 'person-brother', 'person-third', 'person-paper']);
   });
 
+  it('人物の動きの列をまだ並べ替えていないケースでも、新しい人物を元の人物の列のすぐ後ろに置く', () => {
+    // 前提: 並び順を持たないケースでは、列は人物の登録順（弟・小林健・地方紙）に並ぶ
+    const result = splitPerson({ ...createCase(), personLaneOrder: [] }, 'person-brother', thirdSon, []);
+
+    expect(result.personLaneOrder).toEqual(['person-brother', 'person-third', 'person-suspect', 'person-paper']);
+  });
+
   it('すべての参照を移すと、元の人物のIDはその人物自身の項目にしか残らない', () => {
     const target = createCase();
     const allKeys = listPersonReferences(target, 'person-brother').map((reference) => reference.key);
@@ -187,6 +204,7 @@ describe('splitPerson', () => {
     expect(() => splitPerson(createCase(), 'person-brother', { ...thirdSon, id: 'person-suspect' }, [])).toThrow(
       '同じIDの人物が既にあります: person-suspect'
     );
+    expect(() => splitPerson(createCase(), 'person-brother', { ...thirdSon, name: '  ' }, [])).toThrow('新しい人物の名前を入力してください');
     expect(() => splitPerson(createCase(), 'person-brother', thirdSon, ['task:task-unknown'])).toThrow(
       'この人物を参照していない箇所です: task:task-unknown'
     );

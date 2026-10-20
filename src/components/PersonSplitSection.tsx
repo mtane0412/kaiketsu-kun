@@ -5,7 +5,8 @@
  * 新しい人物の名前を入れ、開いている人物を参照している箇所のうち、新しい人物へ移すものを選びます（src/domain/person-split.ts の splitPerson）。
  * - 参照は、証言の発言者・経由・本文での言及、資料の聴取者・原典の媒体・資料での呼び方、関係、仮説、未了事項、メモでの言及の単位で選べます。
  *   参照ごとに、参照元（証言の見出し・本文の冒頭、資料の名前など）と、参照のしかた（発言者など）を示します。
- * - 選ばなかった参照は、開いている人物に残ります。移す候補は自動では選びません。
+ * - 選ばなかった参照は、開いている人物に残ります。移す候補は自動では選びません。新しい人物の名前を入れ、参照を1件以上選ぶまで、分けられません
+ *   （参照を1件も移さない場合は、人物の登録と変わらないためです）。
  * - 新しい人物の種別（個人・組織など）は、開いている人物と同じにします。名前以外の項目は、分けた後に新しい人物の詳細で入力します。
  * - 取り消せない操作のため、確認の画面で改めて承認を求めます。分けたら、新しい人物の詳細へ移ります。
  */
@@ -13,7 +14,7 @@
 
 import { nanoid } from 'nanoid';
 import { useRouter } from 'next/navigation';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { describePersonReference, listPersonReferences } from '@/domain/person-split';
 import type { Id, PersonKind } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
@@ -85,15 +86,24 @@ function PersonSplitter({ personId, personName, personKind, tab, onCancel }: Per
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const references = listPersonReferences(currentCase, personId).map((reference) => ({
-    key: reference.key,
-    ...describePersonReference(currentCase, reference),
-  }));
+  // 一覧はケース全体を走査して作るため、名前の入力や選択の切り替えのたびに作り直さないよう、ケースと人物が変わったときだけ作る
+  const references = useMemo(
+    () =>
+      listPersonReferences(currentCase, personId).map((reference) => ({
+        key: reference.key,
+        ...describePersonReference(currentCase, reference),
+      })),
+    [currentCase, personId]
+  );
   // 参照元の種類（証言・資料など）ごとに、一覧の順のまままとめる
-  const groups = [...new Set(references.map((reference) => reference.group))].map((group) => ({
-    group,
-    references: references.filter((reference) => reference.group === group),
-  }));
+  const groups = useMemo(
+    () =>
+      [...new Set(references.map((reference) => reference.group))].map((group) => ({
+        group,
+        references: references.filter((reference) => reference.group === group),
+      })),
+    [references]
+  );
   const trimmedName = newName.trim();
 
   const toggle = (key: string) =>
@@ -106,6 +116,8 @@ function PersonSplitter({ personId, personName, personKind, tab, onCancel }: Per
 
   const handleConfirm = () => {
     setIsConfirming(false);
+    // 前回の失敗の理由を、今回の結果と取り違えないよう消す
+    setError(null);
     const newPersonId = nanoid();
     try {
       splitPerson(personId, { id: newPersonId, name: trimmedName, kind: personKind }, [...selectedKeys]);
@@ -166,7 +178,7 @@ function PersonSplitter({ personId, personName, personKind, tab, onCancel }: Per
 
       <FormError message={error} />
       <div className="flex gap-2">
-        <Button type="button" size="sm" disabled={trimmedName === ''} onClick={() => setIsConfirming(true)}>
+        <Button type="button" size="sm" disabled={trimmedName === '' || selectedKeys.size === 0} onClick={() => setIsConfirming(true)}>
           分ける
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
