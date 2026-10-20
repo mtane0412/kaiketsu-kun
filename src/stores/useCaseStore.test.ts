@@ -6,8 +6,8 @@ import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { listPersonReferences } from '@/domain/person-split';
 import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { openDB } from 'idb';
-import { DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
-import { flushPendingSaves, initializeCaseStore, useCaseStore } from './useCaseStore';
+import { CaseNotFoundError, DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
+import { describeSaveError, flushPendingSaves, initializeCaseStore, useCaseStore } from './useCaseStore';
 
 const newClaim: Claim = {
   id: 'claim-postman',
@@ -62,14 +62,51 @@ describe('openCase', () => {
     });
   });
 
-  it('別のケースを開くと、前のケースで保存に失敗した理由を消す（開いたケースには未保存の変更が無いため）', async () => {
-    useCaseStore.setState({ saveError: '変更をブラウザに保存できませんでした。' });
+  it('保存に失敗した後で別のケースを開いても、失敗を消さずに、どのケースの変更が失われたかを示す', async () => {
+    // 前提: 開いているケースの保存が失敗した直後に、別のケースを開く（失敗は、別のケースを読み出す前に起きる）
     const otherCase: Case = { ...sampleFictionalCase, id: 'case-other', name: '別のケース' };
     await saveCase(otherCase);
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    useCaseStore.getState().upsert('claims', newClaim);
 
     await useCaseStore.getState().openCase(otherCase.id);
+    put.mockRestore();
 
+    // 検証: 開いたケースは別のケースで、前のケースの変更は画面からも失われたことを、ケース名とともに示す
+    expect(getOpenCase().id).toBe('case-other');
+    const { saveError } = useCaseStore.getState();
+    expect(saveError).toMatchObject({ caseId: sampleFictionalCase.id, discarded: true });
+    expect(describeSaveError(saveError!)).toContain(`ケース「${sampleFictionalCase.name}」`);
+    expect(describeSaveError(saveError!)).toContain('失われています');
+  });
+
+  it('前のケースの変更が失われたことの表示は、閉じるまで残し、閉じると消す', async () => {
+    useCaseStore.setState({
+      saveError: { caseId: 'case-previous', caseName: '前のケース', reason: 'QuotaExceededError', discarded: true },
+    });
+
+    // 前提: 開いているケースの保存が成功しても、失われた変更は戻らないため、表示は残す
+    useCaseStore.getState().renameCase('改名したケース');
+    await flushPendingSaves();
+    expect(useCaseStore.getState().saveError).not.toBeNull();
+
+    useCaseStore.getState().dismissSaveError();
     expect(useCaseStore.getState().saveError).toBeNull();
+  });
+
+  it('LocalStorage から移せなかったケースがあっても、別のケースを開くときに、開けなかったことを示さない', async () => {
+    // 前提: ケース case-unmigrated は、検証に通らないため LocalStorage から移せず、LocalStorage に残っている
+    localStorage.setItem('testimony-board-case:case-unmigrated', '{"id":"case-unmigrated"}');
+    useCaseStore.getState().closeCase();
+
+    // ケースの画面は、開くたびに移行の準備を行ってから、ケースを開く
+    await initializeCaseStore();
+
+    // 検証: 移せなかったことは一覧の画面で示すための項目に入れ、ケースを開けなかったこと（loadError）にはしない
+    expect(useCaseStore.getState().loadError).toBeNull();
+    expect(useCaseStore.getState().migrationError).toContain('case-unmigrated');
   });
 
   it('LocalStorage から移せなかったケースを開こうとすると、見つからないとは言わずに、移せなかった理由を示す', async () => {
@@ -152,6 +189,31 @@ describe('deleteCase', () => {
     await useCaseStore.getState().deleteCase(sampleFictionalCase.id);
 
     expect(useCaseStore.getState().currentCase).toBeNull();
+  });
+
+  it('開いているケースを削除している間は変更を受け付けず、削除したケースを保存し直さない', async () => {
+    const deleting = useCaseStore.getState().deleteCase(sampleFictionalCase.id);
+
+    // 検証: 削除が終わる前の変更は、エラーにする（受け付けると、削除の後に保存され、ケースが戻ってしまう）
+    expect(() => useCaseStore.getState().upsert('claims', newClaim)).toThrow('削除');
+    await deleting;
+    await flushPendingSaves();
+
+    await expect(loadCase(sampleFictionalCase.id)).rejects.toBeInstanceOf(CaseNotFoundError);
+    expect(await listCaseSummaries()).toEqual([]);
+  });
+
+  it('削除に失敗した場合は、開いているケースを再び変更できる', async () => {
+    // 前提: ブラウザの保存領域を書き換えられず、削除が失敗する
+    const deleteRequest = vi.spyOn(IDBObjectStore.prototype, 'delete').mockImplementation(() => {
+      throw new DOMException('The operation failed.', 'UnknownError');
+    });
+    await expect(useCaseStore.getState().deleteCase(sampleFictionalCase.id)).rejects.toThrow('failed');
+    deleteRequest.mockRestore();
+
+    useCaseStore.getState().upsert('claims', newClaim);
+
+    expect(getOpenCase().claims.map((claim) => claim.id)).toContain('claim-postman');
   });
 
   it('開いていないケースを消しても、開いているケースはそのままにする', async () => {
@@ -509,7 +571,9 @@ describe('ブラウザへの保存', () => {
     await flushPendingSaves();
 
     expect(getOpenCase().claims.map((claim) => claim.id)).toContain('claim-postman');
-    expect(useCaseStore.getState().saveError).toContain('JSON を書き出してください');
+    const { saveError } = useCaseStore.getState();
+    expect(saveError).toMatchObject({ caseId: sampleFictionalCase.id, discarded: false });
+    expect(describeSaveError(saveError!)).toContain('JSON を書き出してください');
 
     put.mockRestore();
     useCaseStore.getState().renameCase('改名したケース');

@@ -47,7 +47,7 @@ if (hasDom) {
     await flushPendingSaves();
     await closeCaseDatabase();
     resetCaseStoreInitialization();
-    useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null });
+    useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null, migrationError: null });
     globalThis.indexedDB = new IDBFactory();
   });
 }

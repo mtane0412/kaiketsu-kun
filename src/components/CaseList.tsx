@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Id } from '@/domain/types';
-import { initializeCaseStore, useCaseStore } from '@/stores/useCaseStore';
+import { describeSaveError, initializeCaseStore, useCaseStore } from '@/stores/useCaseStore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { FormError } from './forms/fields';
@@ -41,8 +41,12 @@ export function CaseList() {
   const importCase = useCaseStore((state) => state.importCase);
   const deleteCase = useCaseStore((state) => state.deleteCase);
   const closeCase = useCaseStore((state) => state.closeCase);
-  /** LocalStorage に保存していた頃のデータを移せなかった場合などの理由です。 */
+  /** ブラウザの保存領域を開けなかった場合などの理由です。 */
   const loadError = useCaseStore((state) => state.loadError);
+  /** LocalStorage に保存していた頃のデータを移せなかった理由です。 */
+  const migrationError = useCaseStore((state) => state.migrationError);
+  /** 前に開いていたケースの変更を保存できなかったことの記録です。一覧へ戻ると変更は失われるため、ここでも示します。 */
+  const saveError = useCaseStore((state) => state.saveError);
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +125,9 @@ export function CaseList() {
         </Button>
       </div>
 
-      <FormError message={error ?? loadError?.message ?? null} />
+      <FormError
+        message={error ?? loadError?.message ?? migrationError ?? (saveError === null ? null : describeSaveError(saveError))}
+      />
 
       <ul className="space-y-2">
         {summaries.map((summary) => (

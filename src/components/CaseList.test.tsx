@@ -13,7 +13,7 @@ import { CaseList } from './CaseList';
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
-  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null });
+  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null, migrationError: null });
   resetMockNavigation('/');
 });
 
@@ -103,6 +103,25 @@ describe('CaseList', () => {
 
     expect(await screen.findByRole('link', { name: /湖畔の別荘失踪事件（架空）/ })).toBeInTheDocument();
     expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
+  });
+
+  it('LocalStorage から移せなかったケースがある場合は、移せなかった理由を示す', async () => {
+    // 前提: ケース case-unmigrated は、検証に通らないため LocalStorage から移せない
+    localStorage.setItem(`${CASE_KEY_PREFIX}case-unmigrated`, '{"id":"case-unmigrated"}');
+
+    render(<CaseList />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('ケース case-unmigrated を新しい保存先へ移せませんでした');
+  });
+
+  it('前に開いていたケースの変更を保存できなかった場合は、一覧でもそのことを示す', async () => {
+    useCaseStore.setState({
+      saveError: { caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true },
+    });
+
+    render(<CaseList />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('ケース「山荘の火災」の変更をブラウザに保存できませんでした');
   });
 
   it('ケースを削除する前に確認し、承認された場合は一覧から取り除く', async () => {

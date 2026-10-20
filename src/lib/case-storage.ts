@@ -194,6 +194,54 @@ function transcriptsOf(target: Case): Map<Id, string> {
   return transcripts;
 }
 
+/** 読み書きのトランザクションのうち、inTransaction が使う部分です。 */
+type AbortableTransaction = { abort(): void; done: Promise<void> };
+
+/**
+ * トランザクションの中で body を実行し、body が出した要求とトランザクションの完了をすべて待ってから、body の結果を返します。
+ * body は、待たずに出しっぱなしにする要求も含めて、要求をすべて track に渡します。
+ *
+ * - track に渡した要求には、その場で失敗の受け手を付けます。body が別の要求を待っている間に失敗しても、処理されない失敗として報告されません。
+ * - body が例外を投げた場合は、トランザクションを中断して、それまでの書き込みを取り消してから、その例外を投げ直します
+ *   （中断しないと、例外より前に出した書き込みだけが反映されてしまうためです）。
+ * - body が成功しても、要求かトランザクションが失敗した場合は、最初の失敗を投げます。
+ */
+async function inTransaction<T>(
+  transaction: AbortableTransaction,
+  body: (track: <V>(request: Promise<V>) => Promise<V>) => Promise<T>
+): Promise<T> {
+  const settled: Promise<PromiseSettledResult<unknown>>[] = [];
+  const track = <V>(request: Promise<V>): Promise<V> => {
+    settled.push(
+      request.then(
+        (value): PromiseSettledResult<unknown> => ({ status: 'fulfilled', value }),
+        (reason: unknown): PromiseSettledResult<unknown> => ({ status: 'rejected', reason })
+      )
+    );
+    return request;
+  };
+  track(transaction.done);
+
+  let outcome: { succeeded: true; value: T } | { succeeded: false; error: unknown };
+  try {
+    outcome = { succeeded: true, value: await body(track) };
+  } catch (error) {
+    outcome = { succeeded: false, error };
+    try {
+      transaction.abort();
+    } catch (abortError) {
+      // ブラウザが既にトランザクションを中断している場合は、中断し直せない（InvalidStateError）。書き込みは取り消されているため、元の例外を伝える
+      if (!(abortError instanceof DOMException && abortError.name === 'InvalidStateError')) throw abortError;
+    }
+  }
+
+  const results = await Promise.all(settled);
+  if (!outcome.succeeded) throw outcome.error;
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure !== undefined) throw failure.reason;
+  return outcome.value;
+}
+
 /**
  * ケースを保存し、一覧の項目（名前・証言の件数・更新日時）を更新して、その項目を返します。
  * 資料の本文は本文のストアに分けて保存し、前回の保存から変わった本文だけを書き込みます。
@@ -210,26 +258,25 @@ export async function saveCase(target: Case, updatedAt: string = new Date().toIS
   const transaction = database.transaction(['cases', 'transcripts', 'summaries', 'revisions'], 'readwrite');
   const transcriptStore = transaction.objectStore('transcripts');
   const revisionStore = transaction.objectStore('revisions');
-  const writes: Promise<unknown>[] = [
-    transaction.objectStore('cases').put(withoutTranscripts(target), target.id),
-    transaction.objectStore('summaries').put(summary),
-  ];
-  const storedRevision = await revisionStore.get(target.id);
-  const written = writtenTranscripts.get(target.id);
-  if (written === undefined || written.revision !== storedRevision) {
-    // 前回の内容が分からない（このタブで保存・読み出しをしていない、または別のタブが保存した）ため、本文をすべて書き直す
-    writes.push(transcriptStore.delete(transcriptRangeOf(target.id)));
-    for (const [interviewId, text] of transcripts) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
-  } else {
-    for (const [interviewId, text] of transcripts) {
-      if (written.transcripts.get(interviewId) !== text) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
+  await inTransaction(transaction, async (track) => {
+    const storedRevision = await track(revisionStore.get(target.id));
+    track(transaction.objectStore('cases').put(withoutTranscripts(target), target.id));
+    track(transaction.objectStore('summaries').put(summary));
+    const written = writtenTranscripts.get(target.id);
+    if (written === undefined || written.revision !== storedRevision) {
+      // 前回の内容が分からない（このタブで保存・読み出しをしていない、または別のタブが保存した）ため、本文をすべて書き直す
+      track(transcriptStore.delete(transcriptRangeOf(target.id)));
+      for (const [interviewId, text] of transcripts) track(transcriptStore.put({ caseId: target.id, interviewId, text }));
+    } else {
+      for (const [interviewId, text] of transcripts) {
+        if (written.transcripts.get(interviewId) !== text) track(transcriptStore.put({ caseId: target.id, interviewId, text }));
+      }
+      for (const interviewId of written.transcripts.keys()) {
+        if (!transcripts.has(interviewId)) track(transcriptStore.delete([target.id, interviewId]));
+      }
     }
-    for (const interviewId of written.transcripts.keys()) {
-      if (!transcripts.has(interviewId)) writes.push(transcriptStore.delete([target.id, interviewId]));
-    }
-  }
-  writes.push(revisionStore.put(revision, target.id));
-  await Promise.all([...writes, transaction.done]);
+    track(revisionStore.put(revision, target.id));
+  });
   writtenTranscripts.set(target.id, { revision, transcripts });
   return summary;
 }
@@ -312,6 +359,37 @@ function readLocalStorageUpdatedAt(): Map<Id, string> {
   return updatedAt;
 }
 
+/** 値が、配列ではないオブジェクトかどうかを返します。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** オブジェクトの、値が undefined ではない項目の名前です。JSON に書き出すと undefined の項目は消えるため、無い項目と同じに扱います。 */
+function definedKeysOf(value: Record<string, unknown>): string[] {
+  return Object.keys(value).filter((key) => value[key] !== undefined);
+}
+
+/**
+ * 2つの値が、JSON として同じ内容かどうかを返します。オブジェクトの項目の並びは比べません。
+ * 移行の照合に使います。読み出すときに資料の本文を資料の末尾に付け直すため、項目の並びは元の内容と変わることがあるためです。
+ * 注意: 配列は要素の並びも比べます（証言の並び・時系列の並び順などは、並びに意味があるためです）。
+ */
+function isSameData(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => isSameData(item, right[index]))
+    );
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const leftKeys = definedKeysOf(left);
+    return leftKeys.length === definedKeysOf(right).length && leftKeys.every((key) => isSameData(left[key], right[key]));
+  }
+  return Object.is(left, right);
+}
+
 /**
  * LocalStorage のケース1件を IndexedDB へ移し、移せたことを読み出して確かめてから、LocalStorage から消します。
  * 読み出した内容が元の内容と一致しない場合は、移した側を消してから例外を投げます（LocalStorage の側は残します）。
@@ -334,7 +412,7 @@ async function migrateLocalStorageCase(caseId: Id, stored: string, updatedAt: st
   }
   await saveCase(migrated, updatedAt);
   const reloaded = await loadCase(caseId);
-  if (JSON.stringify(reloaded) !== JSON.stringify(migrated)) {
+  if (!isSameData(reloaded, migrated)) {
     await deleteCase(caseId);
     throw new Error('移した内容を読み出して確かめたところ、元の内容と一致しませんでした');
   }

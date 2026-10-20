@@ -2,6 +2,7 @@
  * ケースを開く枠（CaseGate）のテスト
  */
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { openDB } from 'idb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
@@ -27,7 +28,7 @@ function renderInFrame(caseId: string) {
 }
 
 beforeEach(() => {
-  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null });
+  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null, migrationError: null });
 });
 
 describe('CaseGate', () => {
@@ -44,10 +45,35 @@ describe('CaseGate', () => {
     renderInFrame(sampleFictionalCase.id);
     await screen.findByText('ケース名: 湖畔の別荘失踪事件（架空）');
 
-    act(() => useCaseStore.setState({ saveError: '変更をブラウザに保存できませんでした。' }));
+    act(() =>
+      useCaseStore.setState({
+        saveError: { caseId: sampleFictionalCase.id, caseName: sampleFictionalCase.name, reason: 'QuotaExceededError', discarded: false },
+      })
+    );
 
     expect(screen.getByRole('alert')).toHaveTextContent('変更をブラウザに保存できませんでした。');
+    expect(screen.getByRole('alert')).toHaveTextContent('JSON を書き出してください');
     expect(screen.getByText('ケース名: 湖畔の別荘失踪事件（架空）')).toBeInTheDocument();
+    // 前提: 変更が画面に残っている間は、書き出すまで示し続けるため、閉じるボタンを出さない
+    expect(screen.queryByRole('button', { name: '保存できなかったことの表示を閉じる' })).not.toBeInTheDocument();
+  });
+
+  it('前に開いていたケースの変更が失われた場合は、そのケースの名前を示し、閉じるボタンで表示を消せる', async () => {
+    const user = userEvent.setup();
+    await saveCase(sampleFictionalCase);
+    renderInFrame(sampleFictionalCase.id);
+    await screen.findByText('ケース名: 湖畔の別荘失踪事件（架空）');
+
+    act(() =>
+      useCaseStore.setState({
+        saveError: { caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true },
+      })
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('ケース「山荘の火災」の変更をブラウザに保存できませんでした');
+    await user.click(screen.getByRole('button', { name: '保存できなかったことの表示を閉じる' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('保存されていないケースのIDでは、見つからないことと、一覧への導線を示す', async () => {
