@@ -6,6 +6,8 @@
  *
  * 付け替えの規則:
  * - 発言者・経由・言及・未了事項の人物など、人物の一覧は、付け替えた後に同じ人物が2回並ばないよう1つにまとめます。
+ *   発言者になった人物は、出典の経由から除きます（自分自身を経由して伝えた形にしないためです）。
+ *   経由を除いて資料・経由・引用のどれも無くなった出典は、取り除きます。
  * - 本文とメモのメンションは、IDだけを付け替え、表記（「男」など）は残します。表記は資料での書き方だからです。
  * - まとめる人物の名前と別名は、まとめ先の人物の別名に足します。本文に残した表記を、資料での表記として示すためです
  *   （src/domain/person-names.ts の isSourceNameOf）。識別子も引き継ぎ、メモはまとめ先のメモの後ろに足します。
@@ -88,13 +90,21 @@ export function mergePersons(target: Case, fromId: Id, intoId: Id): Case {
         return current.note === undefined ? current : { ...current, note: replaceInContent(current.note, fromId, intoId) };
       }),
     places: target.places.map((place) => (place.note === undefined ? place : { ...place, note: replaceInContent(place.note, fromId, intoId) })),
-    claims: target.claims.map((claim) => ({
-      ...claim,
-      speaker: claim.speaker.kind === 'person' ? { kind: 'person', personIds: replaceInList(claim.speaker.personIds, fromId, intoId) } : claim.speaker,
-      sources: claim.sources.map((source) => ({ ...source, viaPersonIds: replaceInList(source.viaPersonIds, fromId, intoId) })),
-      mentionedPersonIds: replaceInList(claim.mentionedPersonIds, fromId, intoId),
-      content: replaceInContent(claim.content, fromId, intoId),
-    })),
+    claims: target.claims.map((claim) => {
+      const speakerIds = claim.speaker.kind === 'person' ? replaceInList(claim.speaker.personIds, fromId, intoId) : [];
+      const sources = claim.sources
+        // 同じ人物になった発言者を、自分自身の経由として残さない
+        .map((source) => ({ ...source, viaPersonIds: replaceInList(source.viaPersonIds, fromId, intoId).filter((id) => !speakerIds.includes(id)) }))
+        // 経由を除いて資料・経由・引用のどれも無くなった出典は、伝わった経路を何も表さないため取り除く
+        .filter((source) => source.interviewId !== undefined || source.viaPersonIds.length > 0 || source.quote !== undefined);
+      return {
+        ...claim,
+        speaker: claim.speaker.kind === 'person' ? { kind: 'person' as const, personIds: speakerIds } : claim.speaker,
+        sources,
+        mentionedPersonIds: replaceInList(claim.mentionedPersonIds, fromId, intoId),
+        content: replaceInContent(claim.content, fromId, intoId),
+      };
+    }),
     interviews: target.interviews.map((interview) => {
       const next = { ...interview };
       if (interview.interviewerPersonId !== undefined) next.interviewerPersonId = replaceId(interview.interviewerPersonId, fromId, intoId);

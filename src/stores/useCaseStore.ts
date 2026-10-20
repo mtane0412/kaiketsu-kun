@@ -345,7 +345,7 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
     mergePersons: (fromId, intoId) =>
       updateCurrentCase((current) => {
         const merged = mergePersons(current, fromId, intoId);
-        // まとめた結果が規則に反する場合（付け替えで経由に発言者が並ぶ場合など）は、保存せずに理由を示す
+        // まとめた結果が、ケースの規則に反する場合は、保存せずに理由を示す（domain の mergePersons が守らない規則の取りこぼしに備える）
         const violations = findCaseViolations(merged);
         if (violations.length > 0) throw new Error(`人物をまとめられません\n${violations.join('\n')}`);
         return merged;

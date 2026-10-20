@@ -92,9 +92,9 @@ describe('mergePersons', () => {
 
     expect(merged.persons.map((person) => person.id)).not.toContain('person-man');
     const [claim] = merged.claims;
-    // 発言者・経由に同じ人物が2回並ばないよう、1つにまとめる
+    // 発言者・経由に同じ人物が2回並ばないよう、1つにまとめる。発言者になった人物は、自分自身の経由として残さない
     expect(claim?.speaker).toEqual({ kind: 'person', personIds: ['person-suspect'] });
-    expect(claim?.sources).toEqual([{ interviewId: 'interview-blog', viaPersonIds: ['person-suspect', 'person-blog'] }]);
+    expect(claim?.sources).toEqual([{ interviewId: 'interview-blog', viaPersonIds: ['person-blog'] }]);
     expect(claim?.mentionedPersonIds).toEqual(['person-suspect']);
     // 本文の表記「男」は、資料での表記として残す
     expect(claim?.content).toBe('@[男](person:person-suspect) が車を止めた');
@@ -105,6 +105,25 @@ describe('mergePersons', () => {
     expect(merged.relationships[0]).toMatchObject({ fromPersonId: 'person-suspect', toPersonId: 'person-victim' });
     expect(merged.tasks[0]?.personIds).toEqual(['person-suspect']);
     expect(merged.personLaneOrder).toEqual(['person-suspect']);
+  });
+
+  it('経由が発言者だけだった資料なしの出典は、経由を除くと何も残らないため、出典ごと取り除く', () => {
+    // 前提: 「被疑者が男から聞いた」という、資料にひもづかない経由だけの出典。男と被疑者が同じ人物だと分かった
+    const base = caseWithDuplicate();
+    const target: Case = {
+      ...base,
+      claims: [
+        {
+          id: 'claim-2',
+          speaker: { kind: 'person', personIds: ['person-suspect'] },
+          sources: [{ viaPersonIds: ['person-man'] }],
+          content: '車を止めた',
+          mentionedPersonIds: [],
+        },
+      ],
+    };
+
+    expect(mergePersons(target, 'person-man', 'person-suspect').claims[0]?.sources).toEqual([]);
   });
 
   it('仮説の対象に2人とも含まれていた場合は、観点ごとの証言を1人の対象にまとめる', () => {
