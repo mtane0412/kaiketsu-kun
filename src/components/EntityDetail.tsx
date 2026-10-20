@@ -8,7 +8,7 @@
  * メモのメンションでつながった関連するエンティティ（findRelatedEntities）へのリンクを並べます。
  * 人物の詳細には、これらに加えて、識別子（電話番号・車両ナンバーなど）の値が一致する人物を並べる節
  * （SharedIdentifierSection。識別子を持つ人物だけ）と、人物どうしの関係を登録・編集する節（RelationshipSection）と、
- * その人物の聴取ごとに証言を並べる「供述の変遷」の節（InterviewSection）と、同じ人物を別の人物にまとめる節（PersonMergeSection）を並べます。
+ * その人物の聴取ごとに証言を並べる「供述の変遷」の節（InterviewSection）と、同じ人物を別の人物にまとめる節（PersonMergeSection）と、1人の人物を2人に分ける節（PersonSplitSection）を並べます。
  * 関係と聴取は場所には無いため、これらの節は人物の詳細にだけ渡します（extraSection）。
  * 人物・場所のどちらにも、その対象をひもづけた未了事項の節（TaskLinkSection）を並べます。
  * 未了事項にひもづいた人物・場所を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
@@ -39,6 +39,7 @@ import { EntityAvatar } from './EntityAvatar';
 import { PersonForm, PlaceForm } from './forms/BasicForms';
 import { InterviewSection } from './InterviewSection';
 import { PersonMergeSection } from './PersonMergeSection';
+import { PersonSplitSection } from './PersonSplitSection';
 import { RelationshipSection } from './RelationshipSection';
 import { TaskLinkSection } from './TaskLinkSection';
 import { FormError } from './forms/fields';
@@ -274,6 +275,7 @@ export function PersonDetail({ personId }: { personId: Id }) {
           <RelationshipSection personId={personId} personName={detail.person.name} tab={tab} />
           <InterviewSection personId={personId} tab={tab} />
           <PersonMergeSection personId={personId} personName={detail.person.name} tab={tab} />
+          <PersonSplitSection personId={personId} personName={detail.person.name} personKind={detail.person.kind} tab={tab} />
         </>
       }
     />

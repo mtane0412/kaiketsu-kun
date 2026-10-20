@@ -39,7 +39,7 @@ export type SpeakerPersonOption = { id: Id; label: string; personKind: PersonKin
 
 /**
  * 保存済みの証言の発言者と、1つ目の出典の経由を、入力中の形に変換します。省略時は、どちらも未選択（ユーザーの推測）です。
- * 2つ目以降の出典の経由は、証言のフォームの「ほかの出典」で扱います（src/components/forms/ClaimForm.tsx）。
+ * 2つ目以降の出典の経由は、証言のフォームの出典ごとの欄で扱います（src/components/forms/OtherClaimSourcesField.tsx）。
  */
 export function speakerToDraft(claim: Pick<Claim, 'speaker' | 'sources'> | undefined): SpeakerDraft {
   return {
@@ -63,8 +63,11 @@ type PersonChecklistProps = {
   onCreatePerson: (name: string) => SpeakerPersonOption;
 };
 
-/** 人物を複数選ぶ欄です。選んだ順を保ち、未登録の人物を名前だけで新規作成できます。 */
-function PersonChecklist({ legend, description, selectedIds, onChange, persons, onCreatePerson }: PersonChecklistProps) {
+/**
+ * 人物を複数選ぶ欄です。選んだ順を保ち、未登録の人物を名前だけで新規作成できます。
+ * 証言のフォームの2つ目以降の出典の「経由」の欄でも使います（src/components/forms/OtherClaimSourcesField.tsx）。
+ */
+export function PersonChecklist({ legend, description, selectedIds, onChange, persons, onCreatePerson }: PersonChecklistProps) {
   const [newPersonName, setNewPersonName] = useState('');
   const newPersonInputId = useId();
 
