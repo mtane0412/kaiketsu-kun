@@ -1,11 +1,12 @@
 /**
  * ケースストア（ケースの切り替え・追加・更新・削除・ブラウザ保存）のテスト
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim, Interview, Person } from '@/domain/types';
-import { CASE_KEY_PREFIX, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
-import { useCaseStore } from './useCaseStore';
+import { openDB } from 'idb';
+import { DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
+import { flushPendingSaves, initializeCaseStore, useCaseStore } from './useCaseStore';
 
 const newClaim: Claim = {
   id: 'claim-postman',
@@ -22,10 +23,15 @@ function getOpenCase(): Case {
   return currentCase;
 }
 
-beforeEach(() => {
-  localStorage.clear();
-  saveCase(sampleFictionalCase);
-  useCaseStore.getState().openCase(sampleFictionalCase.id);
+/** 積んである保存が終わるのを待ってから、保存済みのケースを読み出します。 */
+async function loadSavedCase(caseId: string): Promise<Case> {
+  await flushPendingSaves();
+  return loadCase(caseId);
+}
+
+beforeEach(async () => {
+  await saveCase(sampleFictionalCase);
+  await useCaseStore.getState().openCase(sampleFictionalCase.id);
 });
 
 describe('openCase', () => {
@@ -34,97 +40,138 @@ describe('openCase', () => {
     expect(useCaseStore.getState().loadError).toBeNull();
   });
 
-  it('保存されていないIDを開こうとすると、ケースを開かずに理由を示す', () => {
-    useCaseStore.getState().openCase('case-unknown');
+  it('保存されていないIDを開こうとすると、ケースを開かずに、見つからないことを示す', async () => {
+    await useCaseStore.getState().openCase('case-unknown');
 
     expect(useCaseStore.getState().currentCase).toBeNull();
-    expect(useCaseStore.getState().loadError).toContain('ケースが見つかりません');
+    expect(useCaseStore.getState().loadError).toEqual({ kind: 'missing', message: expect.stringContaining('ケースが見つかりません') });
   });
 
-  it('保存データが検証に失敗した場合は、ケースを開かずに理由を示す', () => {
-    localStorage.setItem(`${CASE_KEY_PREFIX}case-broken`, '{"id":"case-broken"}');
+  it('保存データが検証に失敗した場合は、ケースを開かずに、形式が正しくないことを示す', async () => {
+    const database = await openDB(DATABASE_NAME);
+    await database.put('cases', { id: 'case-broken' }, 'case-broken');
+    database.close();
 
-    useCaseStore.getState().openCase('case-broken');
+    await useCaseStore.getState().openCase('case-broken');
 
     expect(useCaseStore.getState().currentCase).toBeNull();
-    expect(useCaseStore.getState().loadError).toContain('ケースデータの形式が正しくありません');
+    expect(useCaseStore.getState().loadError).toEqual({
+      kind: 'invalid',
+      message: expect.stringContaining('ケースデータの形式が正しくありません'),
+    });
+  });
+
+  it('別のケースを開くと、前のケースで保存に失敗した理由を消す（開いたケースには未保存の変更が無いため）', async () => {
+    useCaseStore.setState({ saveError: '変更をブラウザに保存できませんでした。' });
+    const otherCase: Case = { ...sampleFictionalCase, id: 'case-other', name: '別のケース' };
+    await saveCase(otherCase);
+
+    await useCaseStore.getState().openCase(otherCase.id);
+
+    expect(useCaseStore.getState().saveError).toBeNull();
+  });
+
+  it('LocalStorage から移せなかったケースを開こうとすると、見つからないとは言わずに、移せなかった理由を示す', async () => {
+    // 前提: ケース case-unmigrated は、検証に通らないため LocalStorage から移せず、LocalStorage に残っている
+    localStorage.setItem('testimony-board-case:case-unmigrated', '{"id":"case-unmigrated"}');
+    await initializeCaseStore();
+
+    await useCaseStore.getState().openCase('case-unmigrated');
+
+    expect(useCaseStore.getState().loadError).toEqual({
+      kind: 'migration',
+      message: expect.stringContaining('case-unmigrated'),
+    });
+  });
+
+  it('読み出しの途中で別のケースを開いた場合は、後から開いたケースだけを反映する', async () => {
+    const otherCase: Case = { ...sampleFictionalCase, id: 'case-other', name: '別のケース' };
+    await saveCase(otherCase);
+
+    const openingFirst = useCaseStore.getState().openCase(sampleFictionalCase.id);
+    const openingSecond = useCaseStore.getState().openCase(otherCase.id);
+    await Promise.all([openingFirst, openingSecond]);
+
+    expect(getOpenCase().id).toBe('case-other');
   });
 });
 
 describe('createCase', () => {
-  it('空のケースを作って保存し、そのIDを返す', () => {
-    const newCaseId = useCaseStore.getState().createCase('湖畔の別荘の事件');
+  it('空のケースを作って保存し、そのIDを返す', async () => {
+    const newCaseId = await useCaseStore.getState().createCase('湖畔の別荘の事件');
 
-    expect(loadCase(newCaseId).name).toBe('湖畔の別荘の事件');
-    expect(listCaseSummaries().map((summary) => summary.id)).toContain(newCaseId);
+    expect((await loadCase(newCaseId)).name).toBe('湖畔の別荘の事件');
+    expect((await listCaseSummaries()).map((summary) => summary.id)).toContain(newCaseId);
   });
 
-  it('作っただけでは、開いているケースを切り替えない', () => {
-    useCaseStore.getState().createCase('湖畔の別荘の事件');
+  it('作っただけでは、開いているケースを切り替えない', async () => {
+    await useCaseStore.getState().createCase('湖畔の別荘の事件');
 
     expect(getOpenCase().id).toBe(sampleFictionalCase.id);
   });
 });
 
 describe('importCase', () => {
-  it('読み込んだケースを、新しいケースとして保存する', () => {
+  it('読み込んだケースを、新しいケースとして保存する', async () => {
     const loadedCase: Case = { ...sampleFictionalCase, id: 'case-imported', name: '受け取ったケース' };
 
-    const caseId = useCaseStore.getState().importCase(loadedCase);
+    const caseId = await useCaseStore.getState().importCase(loadedCase);
 
     expect(caseId).toBe('case-imported');
-    expect(loadCase('case-imported').name).toBe('受け取ったケース');
+    expect((await loadCase('case-imported')).name).toBe('受け取ったケース');
   });
 
-  it('保存済みのケースとIDが重なる場合は、新しいIDを振って追加し、元のケースを上書きしない', () => {
+  it('保存済みのケースとIDが重なる場合は、新しいIDを振って追加し、元のケースを上書きしない', async () => {
     const sameIdCase: Case = { ...sampleFictionalCase, name: '別の人から受け取ったケース' };
 
-    const caseId = useCaseStore.getState().importCase(sameIdCase);
+    const caseId = await useCaseStore.getState().importCase(sameIdCase);
 
     expect(caseId).not.toBe(sampleFictionalCase.id);
-    expect(loadCase(sampleFictionalCase.id).name).toBe(sampleFictionalCase.name);
-    expect(loadCase(caseId).name).toBe('別の人から受け取ったケース');
+    expect((await loadCase(sampleFictionalCase.id)).name).toBe(sampleFictionalCase.name);
+    expect((await loadCase(caseId)).name).toBe('別の人から受け取ったケース');
   });
 
-  it('検証に失敗するデータは受け付けず、ケースを追加しない', () => {
-    expect(() => useCaseStore.getState().importCase({ name: '項目が足りないケース' })).toThrow(
+  it('検証に失敗するデータは受け付けず、ケースを追加しない', async () => {
+    await expect(useCaseStore.getState().importCase({ name: '項目が足りないケース' })).rejects.toThrow(
       'ケースデータの形式が正しくありません'
     );
-    expect(listCaseSummaries()).toHaveLength(1);
+    expect(await listCaseSummaries()).toHaveLength(1);
   });
 });
 
 describe('deleteCase', () => {
-  it('ケースを保存から消し、一覧からも取り除く', () => {
-    useCaseStore.getState().deleteCase(sampleFictionalCase.id);
+  it('ケースを保存から消し、一覧からも取り除く', async () => {
+    await useCaseStore.getState().deleteCase(sampleFictionalCase.id);
 
-    expect(listCaseSummaries()).toEqual([]);
+    expect(await listCaseSummaries()).toEqual([]);
+    expect(useCaseStore.getState().summaries).toEqual([]);
   });
 
-  it('開いているケースを消した場合は、開いているケースを空にする', () => {
-    useCaseStore.getState().deleteCase(sampleFictionalCase.id);
+  it('開いているケースを消した場合は、開いているケースを空にする', async () => {
+    await useCaseStore.getState().deleteCase(sampleFictionalCase.id);
 
     expect(useCaseStore.getState().currentCase).toBeNull();
   });
 
-  it('開いていないケースを消しても、開いているケースはそのままにする', () => {
-    const otherCaseId = useCaseStore.getState().createCase('別のケース');
+  it('開いていないケースを消しても、開いているケースはそのままにする', async () => {
+    const otherCaseId = await useCaseStore.getState().createCase('別のケース');
 
-    useCaseStore.getState().deleteCase(otherCaseId);
+    await useCaseStore.getState().deleteCase(otherCaseId);
 
     expect(getOpenCase().id).toBe(sampleFictionalCase.id);
   });
 });
 
 describe('ケースの一覧', () => {
-  it('ケースを作ると、一覧に加える', () => {
-    useCaseStore.getState().createCase('湖畔の別荘の事件');
+  it('ケースを作ると、一覧に加える', async () => {
+    await useCaseStore.getState().createCase('湖畔の別荘の事件');
 
     expect(useCaseStore.getState().summaries.map((summary) => summary.name)).toContain('湖畔の別荘の事件');
   });
 
-  it('ケース名を変えると、一覧の名前も変える', () => {
+  it('ケース名を変えると、保存を終えた後に、一覧の名前も変える', async () => {
     useCaseStore.getState().renameCase('改名したケース');
+    await flushPendingSaves();
 
     expect(useCaseStore.getState().summaries.map((summary) => summary.name)).toContain('改名したケース');
   });
@@ -385,18 +432,37 @@ describe('remove（メモのメンション）', () => {
 });
 
 describe('ブラウザへの保存', () => {
-  it('ケースを変更すると、そのケースのキーへ保存する', () => {
+  it('ケースを変更すると、そのケースへ保存する', async () => {
     useCaseStore.getState().upsert('claims', newClaim);
 
-    expect(loadCase(sampleFictionalCase.id).claims.map((claim) => claim.id)).toContain('claim-postman');
+    expect((await loadSavedCase(sampleFictionalCase.id)).claims.map((claim) => claim.id)).toContain('claim-postman');
   });
 
-  it('開いていないケースは書き換えない', () => {
-    const otherCaseId = useCaseStore.getState().createCase('別のケース');
+  it('保存に失敗した場合は、変更を画面に残したまま、理由と対処を示す。次の保存が成功すれば消す', async () => {
+    // 前提: ブラウザの保存領域が一杯になるなどで、IndexedDB への書き込みが失敗する
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+
+    useCaseStore.getState().upsert('claims', newClaim);
+    await flushPendingSaves();
+
+    expect(getOpenCase().claims.map((claim) => claim.id)).toContain('claim-postman');
+    expect(useCaseStore.getState().saveError).toContain('JSON を書き出してください');
+
+    put.mockRestore();
+    useCaseStore.getState().renameCase('改名したケース');
+    await flushPendingSaves();
+    expect(useCaseStore.getState().saveError).toBeNull();
+    expect((await loadCase(sampleFictionalCase.id)).claims.map((claim) => claim.id)).toContain('claim-postman');
+  });
+
+  it('開いていないケースは書き換えない', async () => {
+    const otherCaseId = await useCaseStore.getState().createCase('別のケース');
 
     useCaseStore.getState().upsert('claims', newClaim);
 
-    expect(loadCase(otherCaseId).claims).toEqual([]);
+    expect((await loadSavedCase(otherCaseId)).claims).toEqual([]);
   });
 });
 
@@ -450,14 +516,14 @@ describe('時系列ボードの並び順', () => {
     ]);
   });
 
-  it('upsertMany に並び順の移動を渡すと、要素の保存と移動を1回で反映する', () => {
+  it('upsertMany に並び順の移動を渡すと、要素の保存と移動を1回で反映する', async () => {
     // 前提: サンプルの並びは、管理人 → 防犯カメラ → 隣家の住人 → 架空日報 → ユーザーの推測（日時なし）
     useCaseStore.getState().upsertMany([{ key: 'claims', entity: newClaim }], {
       key: 'claim:claim-postman',
       toIndex: 3,
     });
 
-    expect(loadCase(sampleFictionalCase.id).timelineOrder).toEqual([
+    expect((await loadSavedCase(sampleFictionalCase.id)).timelineOrder).toEqual([
       'claim:claim-caretaker',
       'claim:claim-police-camera',
       'claim:claim-neighbor',
@@ -467,14 +533,14 @@ describe('時系列ボードの並び順', () => {
     ]);
   });
 
-  it('upsertMany に渡した移動が日時と矛盾する場合は、拒否せずに、最も近い矛盾しない位置に置いて保存する', () => {
+  it('upsertMany に渡した移動が日時と矛盾する場合は、拒否せずに、最も近い矛盾しない位置に置いて保存する', async () => {
     // 前提: サンプルの証言は8月12日、捜索の推測は8月15日について述べている。先頭（位置0）は8月12日の証言より前になる
     useCaseStore.getState().upsertMany([{ key: 'claims', entity: searchGuess }], {
       key: 'claim:claim-police-search',
       toIndex: 0,
     });
 
-    const caseData = loadCase(sampleFictionalCase.id);
+    const caseData = await loadSavedCase(sampleFictionalCase.id);
     expect(caseData.claims.map((claim) => claim.id)).toContain('claim-police-search');
     // 検証: 8月12日の証言（最後は隣家の住人）がすべて前に来る位置のうち、指定した先頭に最も近い位置に置く
     expect(caseData.timelineOrder).toEqual([

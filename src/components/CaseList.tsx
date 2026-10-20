@@ -3,11 +3,11 @@
  *
  * ブラウザに保存されているケースを並べ、開くケースを選びます（トップページ）。
  * ケースをまたぐ操作（新しいケース・JSONの読み込み・架空のサンプルの読み込み・ケースの削除）は、この画面が担います。
- * ケースを1件だけ保存していた頃のデータがある場合は、一覧を読む前に1件目のケースとして移行します。
+ * LocalStorage に保存していた頃のデータがある場合は、一覧を読む前に新しい保存先（IndexedDB）へ移します。
  *
- * 1件だけ保存していた頃のデータを移行できなかった場合は、その理由もこの画面で伝えます（移行は起動のたびに試みるため、一覧が入口になります）。
+ * 移行できなかった場合は、その理由もこの画面で伝えます（移行は起動のたびに試みるため、一覧が入口になります）。
  *
- * 注意: LocalStorage はブラウザにしか無いため、一覧の読み込みはマウント後（useEffect）に行います。
+ * 注意: IndexedDB はブラウザにしか無いため、一覧の読み込みはマウント後（useEffect）に行います。
  * 読み込みが終わるまではケースが0件に見えるため、「ケースがありません」という案内は、読み込みが終わってから表示します。
  */
 'use client';
@@ -41,7 +41,7 @@ export function CaseList() {
   const importCase = useCaseStore((state) => state.importCase);
   const deleteCase = useCaseStore((state) => state.deleteCase);
   const closeCase = useCaseStore((state) => state.closeCase);
-  /** 1件だけ保存していた頃のデータを移行できなかった場合の理由です。 */
+  /** LocalStorage に保存していた頃のデータを移せなかった場合などの理由です。 */
   const loadError = useCaseStore((state) => state.loadError);
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
@@ -50,22 +50,25 @@ export function CaseList() {
   useEffect(() => {
     // 一覧ではケースを開かないため、前に開いていたケースを閉じる
     closeCase();
-    initializeCaseStore();
-    setIsLoaded(true);
+    void initializeCaseStore().then(() => setIsLoaded(true));
   }, [closeCase]);
 
   /** 作った・読み込んだケースのボードへ移ります。 */
   const openBoard = (caseId: Id) => router.push(boardHref(caseId, 'timeline'));
 
-  const handleCreate = () => {
-    setError(null);
-    openBoard(createCase());
+  /** ケースを作る・読み込む操作を行い、成功したらそのボードへ移ります。失敗した場合は理由を示します。 */
+  const addCaseAndOpen = async (add: () => Promise<Id>, failureLabel: string) => {
+    try {
+      openBoard(await add());
+      setError(null);
+    } catch (caught) {
+      setError(`${failureLabel}\n${caught instanceof Error ? caught.message : String(caught)}`);
+    }
   };
 
-  const handleLoadSample = () => {
-    setError(null);
-    openBoard(importCase(sampleFictionalCase));
-  };
+  const handleCreate = () => addCaseAndOpen(() => createCase(), 'ケースを作れませんでした');
+
+  const handleLoadSample = () => addCaseAndOpen(() => importCase(sampleFictionalCase), 'サンプルを読み込めませんでした');
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -73,15 +76,17 @@ export function CaseList() {
     event.target.value = '';
     if (!file) return;
 
-    try {
-      openBoard(importCase(JSON.parse(await file.text())));
-      setError(null);
-    } catch (caught) {
-      setError(`「${file.name}」を読み込めませんでした\n${caught instanceof Error ? caught.message : String(caught)}`);
-    }
+    await addCaseAndOpen(async () => importCase(JSON.parse(await file.text())), `「${file.name}」を読み込めませんでした`);
   };
 
-  const handleDelete = (caseId: Id) => deleteCase(caseId);
+  const handleDelete = async (caseId: Id) => {
+    try {
+      await deleteCase(caseId);
+      setError(null);
+    } catch (caught) {
+      setError(`ケースを削除できませんでした\n${caught instanceof Error ? caught.message : String(caught)}`);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -116,7 +121,7 @@ export function CaseList() {
         </Button>
       </div>
 
-      <FormError message={error ?? loadError} />
+      <FormError message={error ?? loadError?.message ?? null} />
 
       <ul className="space-y-2">
         {summaries.map((summary) => (

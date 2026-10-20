@@ -27,9 +27,9 @@ function renderSidebar() {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -103,7 +103,7 @@ describe('CaseSidebar', () => {
 
     it('資料の一覧を日時の早い順に並べ、それぞれの詳細ページへのリンクにし、見出しの横のボタンから登録のページへ進める', async () => {
       // 前提: 書籍の取材（2018年）と、管理人と隣家の住人がそろって応じた記者会見（1998年）を登録している
-      openTestCase({
+      await openTestCase({
         ...sampleFictionalCase,
         interviews: [
           { id: 'interview-book', title: '管理人', interviewerPersonId: 'person-book', at: '2018-05' },
@@ -174,18 +174,18 @@ describe('CaseSidebar', () => {
 
     describe('登録が多い一覧', () => {
       /** サンプルのケースに人物を足し、人物が15件あるケースを開きます。 */
-      function openCaseWith15Persons() {
+      async function openCaseWith15Persons() {
         const extraPersons = Array.from({ length: 8 }, (_, index) => ({
           id: `person-villager-${index + 1}`,
           name: `村人${index + 1}`,
           kind: 'individual' as const,
         }));
-        openTestCase({ ...sampleFictionalCase, persons: [...sampleFictionalCase.persons, ...extraPersons] });
+        await openTestCase({ ...sampleFictionalCase, persons: [...sampleFictionalCase.persons, ...extraPersons] });
       }
 
       it('最初は先頭の10件だけを並べ、残りの件数を示すボタンで、すべてを表示できる', async () => {
         const user = userEvent.setup();
-        openCaseWith15Persons();
+        await openCaseWith15Persons();
         renderSidebar();
 
         const personList = await screen.findByRole('list', { name: '人物の一覧' });
@@ -199,7 +199,7 @@ describe('CaseSidebar', () => {
       });
 
       it('開いている項目が11件目以降にある場合は、最初からすべてを並べる（現在地を見失わないため）', async () => {
-        openCaseWith15Persons();
+        await openCaseWith15Persons();
         resetMockNavigation('/cases/case-lakeside/persons/person-villager-8');
         renderSidebar();
 
@@ -223,8 +223,8 @@ describe('CaseSidebar', () => {
     it('ケース名のメニューから、保存済みの他のケースとケースの一覧へ移れる', async () => {
       const user = userEvent.setup();
       // 前提: 切り替え先として、もう1件のケースを保存しておく
-      openTestCase({ ...sampleFictionalCase, id: 'case-old-well', name: '古井戸の目撃証言（架空）' });
-      openTestCase(sampleFictionalCase);
+      await openTestCase({ ...sampleFictionalCase, id: 'case-old-well', name: '古井戸の目撃証言（架空）' });
+      await openTestCase(sampleFictionalCase);
       renderSidebar();
 
       await user.click(await screen.findByRole('button', { name: /湖畔の別荘失踪事件（架空）/ }));

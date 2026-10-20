@@ -13,11 +13,11 @@ import { NewTaskDetail, TaskDetail } from './TaskDetail';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: 「管理人に、19時に見回りをした理由を再度聞く」は未着手で、期限は1998-08-18、
   // 管理人の証言・管理人・湖畔の別荘をひもづけている
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/tasks/task-caretaker?tab=tasks');
 });
 

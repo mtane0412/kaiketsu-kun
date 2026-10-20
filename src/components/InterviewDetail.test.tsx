@@ -37,9 +37,9 @@ const caseWithInterviews: Case = {
   ),
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(caseWithInterviews);
+  await openTestCase(caseWithInterviews);
   resetMockNavigation('/cases/case-lakeside/interviews/interview-book?tab=graph');
 });
 
@@ -72,9 +72,9 @@ describe('InterviewDetail', () => {
     expect(screen.getByRole('region', { name: '1998年8月14日の資料の本文' })).toHaveTextContent('あの夜は別荘が真っ暗でした');
   });
 
-  it('長い本文でも省略せず、「全文を表示」を置かない（資料の詳細は本文を読むための画面のため）', () => {
+  it('長い本文でも省略せず、「全文を表示」を置かない（資料の詳細は本文を読むための画面のため）', async () => {
     const longTranscript = Array.from({ length: 20 }, (_, index) => `記者の記事の${index + 1}段落目です。`).join('\n');
-    openTestCase({
+    await openTestCase({
       ...openedCase(),
       interviews: openedCase().interviews.map((interview) =>
         interview.id === 'interview-press' ? { ...interview, transcript: longTranscript } : interview
@@ -92,9 +92,9 @@ describe('InterviewDetail', () => {
     expect(screen.getByText(/「編集」から記事の本文や動画の文字起こしを貼り付けると/)).toBeInTheDocument();
   });
 
-  it('YouTube の動画の資料では、動画を埋め込みプレーヤーで表示する', () => {
+  it('YouTube の動画の資料では、動画を埋め込みプレーヤーで表示する', async () => {
     const videoInterview: Interview = { id: 'interview-video', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: '管理人の会見動画' };
-    openTestCase({ ...caseWithInterviews, interviews: [...caseWithInterviews.interviews, videoInterview] });
+    await openTestCase({ ...caseWithInterviews, interviews: [...caseWithInterviews.interviews, videoInterview] });
     render(<InterviewDetail interviewId="interview-video" />);
 
     expect(screen.getByTitle('日時不明の資料の動画')).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
@@ -108,8 +108,8 @@ describe('InterviewDetail', () => {
       transcript: '0:00\nこんばんは、管理人です\n0:05\nあの夜は別荘が真っ暗でした',
     };
 
-    beforeEach(() => {
-      openTestCase({
+    beforeEach(async () => {
+      await openTestCase({
         ...caseWithInterviews,
         interviews: [...caseWithInterviews.interviews, videoInterview],
         claims: caseWithInterviews.claims.map((claim) =>
