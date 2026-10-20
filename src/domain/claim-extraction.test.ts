@@ -6,6 +6,7 @@ import {
   buildClaimCandidates,
   ambiguousNamesOf,
   candidateToClaimDraft,
+  candidateToAddedSource,
   chooseAmbiguousPerson,
   ExtractionResultSchema,
   MAX_EXISTING_CLAIMS_FOR_EXTRACTION,
@@ -443,6 +444,68 @@ describe('candidateToClaimDraft', () => {
 
     expect(candidateToClaimDraft(target, 'interview-article', titled!, sequentialIds()).title).toBe('黒い車の目撃');
     expect(candidateToClaimDraft(target, 'interview-article', untitled!, sequentialIds()).title).toBeUndefined();
+  });
+});
+
+describe('candidateToAddedSource', () => {
+  /** テストで予測できるよう、新規作成するエンティティのIDを順番に振ります。 */
+  function sequentialIds() {
+    let count = 0;
+    return () => `new-${++count}`;
+  }
+
+  /** 県警が発言者の、登録済みの証言です。 */
+  const policeClaim: Claim = {
+    id: 'claim-police',
+    speaker: { kind: 'person', personIds: ['person-police'] },
+    sources: [],
+    content: '男性は21時ごろに死亡した',
+    mentionedPersonIds: [],
+  };
+
+  it('発言者の分からない候補（記者の地の文）を既存の証言に書き足すと、媒体を経由に残す', () => {
+    // 前提: 湖畔新聞の地の文として抽出された候補を、県警の既存の証言と同じだとユーザーが判断した
+    const target = createCase({ claims: [policeClaim] });
+    const [candidate] = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: null, quote: '所有者の男性が倒れているのが見つかった' }),
+    ]).candidates;
+
+    const result = candidateToAddedSource(target, 'interview-article', candidate!, policeClaim, sequentialIds());
+
+    // 検証: 県警の発言は湖畔新聞を通じて伝わったため、経由に湖畔新聞が入る
+    expect(result.source).toEqual({
+      interviewId: 'interview-article',
+      viaPersonIds: ['person-newspaper'],
+      quote: { text: '所有者の男性が倒れているのが見つかった' },
+    });
+    expect(result.newEntities).toEqual([]);
+  });
+
+  it('経由から既存の証言の発言者を除き、未登録の経由の人物だけを新規作成する', () => {
+    // 前提: 候補は「県警の発表を、捜査関係者（未登録）を通じて新聞が報じた」形
+    const target = createCase({ claims: [policeClaim] });
+    const [candidate] = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: '県警', viaNames: ['捜査関係者', '県警'], quote: '県警によると' }),
+    ]).candidates;
+
+    const result = candidateToAddedSource(target, 'interview-article', candidate!, policeClaim, sequentialIds());
+
+    // 検証: 発言者の県警は経由に入らず、捜査関係者 → 湖畔新聞の順になる
+    expect(result.source.viaPersonIds).toEqual(['new-1', 'person-newspaper']);
+    expect(result.newEntities).toEqual([{ kind: 'person', id: 'new-1', name: '捜査関係者' }]);
+  });
+
+  it('候補の発言者が既存の証言の発言者と違う場合は、候補の発言者を経由の先頭に残す', () => {
+    // 前提: この資料では「山田花子が（県警の発表を）話した」形で載っていた候補を、県警の既存の証言と同じだとユーザーが判断した
+    const target = createCase({ claims: [policeClaim] });
+    const [candidate] = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: '山田 花子', quote: '庭に黒い車が止まっていた' }),
+    ]).candidates;
+
+    const result = candidateToAddedSource(target, 'interview-article', candidate!, policeClaim, sequentialIds());
+
+    // 検証: 山田花子が伝えた手がかりを失わないよう、山田花子 → 湖畔新聞 の順の経由にする
+    expect(result.source.viaPersonIds).toEqual(['person-hanako', 'person-newspaper']);
   });
 });
 

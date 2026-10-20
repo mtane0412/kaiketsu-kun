@@ -5,6 +5,7 @@
  * 1. 送る前の確認: 送る本文（選んだ範囲か、本文の全文）と送り先（OpenRouter 経由の外部の LLM）を示し、API キーとモデルを入力してもらいます。
  *    ケースには調書などの機微な資料が含まれうるため、押すまで本文を送りません。
  *    送る本文が上限の文字数（MAX_EXTRACTION_TEXT_LENGTH）を超える場合は、送らずに範囲を選ぶよう示します。
+ *    本文のほかに送るもの（人物・場所の名前と、既存の証言の要約の件数）も示します。名前が上限（件数・文字数）を超える場合は、送らない件数を示します（selectExtractionNames）。
  * 2. 抽出: 抽出 API（src/lib/claim-extraction-api.ts）を呼びます。失敗した場合は理由を示し、ケースを変えません。
  * 3. 候補の一覧: LLM の出力を原文とケースに照らし合わせ（src/domain/claim-extraction.ts の buildClaimCandidates）、
  *    引用が本文にある候補だけを示し、捨てた件数を示します。人物・場所の名前には、登録済みか新規かを添えます。
@@ -31,11 +32,12 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { buildTimeline, claimLabelOf, describeClaimAttribution } from '@/domain/case-views';
 import {
   ambiguousNamesOf,
   buildClaimCandidates,
+  candidateToAddedSource,
   candidateToClaimDraft,
   chooseAmbiguousPerson,
   selectExistingClaimsForExtraction,
@@ -52,7 +54,7 @@ import { normalizeName } from '@/domain/person-names';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import type { CrossCheckKind, Id } from '@/domain/types';
-import { MAX_EXTRACTION_TEXT_LENGTH, MAX_SOURCE_NAME_LENGTH, requestClaimExtraction } from '@/lib/claim-extraction-api';
+import { MAX_EXTRACTION_TEXT_LENGTH, MAX_SOURCE_NAME_LENGTH, requestClaimExtraction, selectExtractionNames } from '@/lib/claim-extraction-api';
 import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
 import { useCaseStore, useCurrentCase, type UpsertEntry } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
@@ -167,6 +169,23 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   // LLM に本文がどの資料のものかを伝える。上限を超える長い名前（長いURLなど）は、上限の文字数で切り詰めて送る
   const sourceName = formatInterviewLabel(currentCase, interview).slice(0, MAX_SOURCE_NAME_LENGTH);
   const tooLong = source.text.length > MAX_EXTRACTION_TEXT_LENGTH;
+  // 本文と一緒に送る既存の証言の要約と名前です。送る前の確認で件数を示し、送るときも同じものを渡す。
+  // ケース全体と本文を走査するため、API キーの入力などの再描画のたびには計算し直さない
+  const outgoing = useMemo(
+    () => ({
+      existingClaims: selectExistingClaimsForExtraction(currentCase, interviewId, source.text),
+      // 名前は上限の件数まで送る。この資料での呼び方と本文に出てくる名前を優先する
+      personNames: selectExtractionNames(
+        source.text,
+        (interview.personNames ?? []).map((personName) => personName.name),
+        currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])])
+      ),
+      placeNames: selectExtractionNames(source.text, [], currentCase.places.map((place) => place.name)),
+    }),
+    [currentCase, interviewId, interview.personNames, source.text]
+  );
+  const { existingClaims, personNames, placeNames } = outgoing;
+  const omittedNameCount = personNames.omittedCount + placeNames.omittedCount;
 
   const handleSend = async (event: FormEvent) => {
     event.preventDefault();
@@ -189,12 +208,9 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
         text: source.text,
         sourceName,
         // この資料での呼び方も人物の名前として伝え、LLM が資料の表記のまま名前を出せるようにする
-        personNames: [
-          ...currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
-          ...(interview.personNames ?? []).map((personName) => personName.name),
-        ],
-        placeNames: currentCase.places.map((place) => place.name),
-        existingClaims: selectExistingClaimsForExtraction(currentCase, interviewId, source.text),
+        personNames: personNames.names,
+        placeNames: placeNames.names,
+        existingClaims,
         ...trimmed,
       });
       setPhase({ kind: 'done', extracted, settledKeys: new Set() });
@@ -220,21 +236,16 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   };
 
   /**
-   * 候補を新しい証言にせず、既存の証言 claimId の出典に、この資料・経由・引用を書き足します。
-   * 経由は、候補を入力欄の初期値に直したときの経由（資料の媒体を含みます）から、既存の証言の発言者を除いたものです。
+   * 候補を新しい証言にせず、既存の証言 claimId の出典に、この資料・経由・引用を書き足します（経由の決め方は candidateToAddedSource）。
    * 経由に未登録の人物がいる場合は、その人物もあわせて新規作成します。
    */
   const addSourceTo = (candidate: ClaimCandidate, claimId: Id) => {
     const existing = currentCase.claims.find((claim) => claim.id === claimId);
     if (existing === undefined) throw new Error(`証言が見つかりません: ${claimId}`);
-    const { speaker, newEntities } = candidateToClaimDraft(currentCase, interviewId, candidate, nanoid);
-    const existingSpeakerIds = existing.speaker.kind === 'person' ? existing.speaker.personIds : [];
-    const viaPersonIds = speaker.viaPersonIds.filter((personId) => !existingSpeakerIds.includes(personId));
-    const viaEntries = newEntities
-      .filter((entity) => viaPersonIds.includes(entity.id))
-      .map((entity) => createEntry(entity.kind, entity.id, entity.name));
     try {
-      const updated = addClaimSource(existing, { interviewId, viaPersonIds, quote: candidate.quote });
+      const { source, newEntities } = candidateToAddedSource(currentCase, interviewId, candidate, existing, nanoid);
+      const viaEntries = newEntities.map((entity) => createEntry(entity.kind, entity.id, entity.name));
+      const updated = addClaimSource(existing, source);
       upsertMany([...viaEntries, { key: 'claims', entity: updated }]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -274,8 +285,15 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
         <form onSubmit={handleSend} className="space-y-3">
           <p className="text-xs leading-relaxed">
             {SCOPE_LABELS[source.scope]}（{source.text.length}文字）を、OpenRouter を経由して外部の LLM に送り、証言の候補を受け取ります。
+            登録済みの人物・場所の名前と、関係しそうな既存の証言の要約（{existingClaims.length}件）も送ります。
             ケースに調書などの機微な資料が含まれる場合は、送ってよいかを確かめてください。候補は、1件ずつ確かめてから保存します。
           </p>
+          {omittedNameCount > 0 && (
+            <p className="text-xs">
+              登録済みの名前のうち、上限（件数・文字数）を超えるため、{omittedNameCount}件の名前は送りません。
+              件数が上限を超える場合は、この資料での呼び方と本文に出てくる名前を優先します。送らなかった名前も、候補を受け取った後の照らし合わせには使います。
+            </p>
+          )}
           {tooLong && (
             <p role="alert" className="text-xs text-destructive">
               送る本文が長すぎます（上限は{MAX_EXTRACTION_TEXT_LENGTH}文字です）。本文の範囲を選んでから抽出してください。

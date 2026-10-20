@@ -32,7 +32,7 @@ import { interviewIdsOf, sourceForInterview, viaPersonIdsOf } from './claim-sour
 import { dateMentionOf, resolveContent, type ClaimDraft, type DraftMention, type MentionKind } from './mention';
 import { findPersonsByName, normalizeName, type PersonNameMatch } from './person-names';
 import { findQuoteRange, quoteSecondsAt, type TextRange } from './transcript';
-import type { Case, Claim, ClaimQuote, Id, Interview, TimeRef } from './types';
+import type { Case, Claim, ClaimQuote, ClaimSource, Id, Interview, TimeRef } from './types';
 
 /**
  * LLM に出させる証言の候補1件の形式です。人物と場所は、IDではなく名前で受け取ります。
@@ -284,31 +284,9 @@ export function candidateToClaimDraft(
   candidate: ClaimCandidate,
   createId: () => Id
 ): CandidateClaimDraft {
-  const interview = interviewWithTranscript(target, interviewId);
-  // 決められない名前を黙ってどちらかの人物にしないよう、ユーザーが選ぶ前の候補は入力欄の初期値にしない
-  const ambiguous = ambiguousNamesOf(candidate);
-  if (ambiguous.length > 0) {
-    throw new Error(`人物を選んでいない名前があります: ${ambiguous.map((resolved) => resolved.name).join('、')}`);
-  }
-  // 発言を伝えた媒体の並び（転載の資料では、原典の媒体が先、転載した媒体が後）
-  const mediaIds = [...new Set([interview.origin?.publisherPersonId, interview.interviewerPersonId].filter((id) => id !== undefined))];
-  const newEntities: NewEntity[] = [];
-  const idOf = (kind: MentionKind, resolved: ResolvedName): Id => {
-    if (resolved.status === 'registered') return resolved.id;
-    const existing = newEntities.find((entity) => entity.kind === kind && normalizeName(entity.name) === normalizeName(resolved.name));
-    if (existing) return existing.id;
-    const created = { kind, id: createId(), name: resolved.name };
-    newEntities.push(created);
-    return created.id;
-  };
+  const { speakerId, transmitterIds, idOf, newEntities } = resolveCandidatePersons(target, interviewId, candidate, createId);
+  const viaPersonIds = transmitterIds.filter((id) => id !== speakerId);
   const mentionOf = (kind: MentionKind, resolved: ResolvedName): DraftMention => ({ kind, id: idOf(kind, resolved), label: resolved.name });
-
-  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : mediaIds[0];
-  // 媒体は候補の経由での位置にかかわらず経由の最後に、原典の媒体 → 転載した媒体の順で並べる（伝わった順を逆に記録しないため）
-  const viaPersonIds = [
-    ...[...new Set(candidate.via.map((name) => idOf('person', name)))].filter((id) => !mediaIds.includes(id)),
-    ...mediaIds,
-  ].filter((id) => id !== speakerId);
 
   const entityMentions = [
     ...(candidate.place ? [mentionOf('place', candidate.place)] : []),
@@ -329,6 +307,65 @@ export function candidateToClaimDraft(
   return result;
 }
 
+/**
+ * 候補を、既存の証言 existing に書き足す出典（この資料・経由・引用）と、あわせて新規作成する人物に直します。
+ *
+ * - 経由は、候補の経由と資料の媒体を伝わった順に並べたものから、既存の証言の発言者を除いたものです（媒体の並べ方は candidateToClaimDraft と同じです）。
+ * - 発言者の分からない候補（記者の地の文など）でも、媒体は経由に残します。新しい証言にする場合と違い、発言者は既存の証言の発言者で、
+ *   媒体はその発言を伝えた側になるためです。
+ * - 候補の発言者が既存の証言の発言者でない場合は、候補の発言者を経由の先頭に置きます。ユーザーが同じ発言だと判断した以上、
+ *   この資料では候補の発言者が既存の証言の発言者の発言を伝えた形になるためです（この資料での伝わり方の手がかりを黙って捨てないためです）。
+ * - 新規作成するのは、経由に残った未登録の人物だけです（本文の言及や場所は、既存の証言の本文を書き換えないため作りません）。
+ * - 決められない名前が残っている候補はエラーにします（candidateToClaimDraft と同じです）。
+ */
+export function candidateToAddedSource(
+  target: Case,
+  interviewId: Id,
+  candidate: ClaimCandidate,
+  existing: Claim,
+  createId: () => Id
+): { source: ClaimSource; newEntities: NewEntity[] } {
+  const { speakerId, transmitterIds, newEntities } = resolveCandidatePersons(target, interviewId, candidate, createId);
+  const existingSpeakerIds = existing.speaker.kind === 'person' ? existing.speaker.personIds : [];
+  // 発言者の分からない候補では speakerId は媒体で、媒体は transmitterIds に含まれているため、先頭には足さない
+  const relayIds = candidate.speaker === undefined || speakerId === undefined ? transmitterIds : [speakerId, ...transmitterIds];
+  const viaPersonIds = [...new Set(relayIds)].filter((id) => !existingSpeakerIds.includes(id));
+  return {
+    source: { interviewId, viaPersonIds, quote: candidate.quote },
+    newEntities: newEntities.filter((entity) => viaPersonIds.includes(entity.id)),
+  };
+}
+
+/**
+ * 候補の発言者と、発言を伝えた人物の並び（候補の経由 → 原典の媒体 → 転載した媒体）を、人物のIDに直します。
+ * 発言者の分からない候補は、原典の媒体（無ければ聴取者）を発言者の候補にします。
+ * 一致しない名前は、同じ種類・同じ名前（正規化後）ごとに1件だけ、createId で振ったIDで newEntities に足します。
+ */
+function resolveCandidatePersons(target: Case, interviewId: Id, candidate: ClaimCandidate, createId: () => Id) {
+  const interview = interviewWithTranscript(target, interviewId);
+  // 決められない名前を黙ってどちらかの人物にしないよう、ユーザーが選ぶ前の候補は入力欄の初期値にしない
+  const ambiguous = ambiguousNamesOf(candidate);
+  if (ambiguous.length > 0) {
+    throw new Error(`人物を選んでいない名前があります: ${ambiguous.map((resolved) => resolved.name).join('、')}`);
+  }
+  // 発言を伝えた媒体の並び（転載の資料では、原典の媒体が先、転載した媒体が後）
+  const mediaIds = [...new Set([interview.origin?.publisherPersonId, interview.interviewerPersonId].filter((id) => id !== undefined))];
+  const newEntities: NewEntity[] = [];
+  const idOf = (kind: MentionKind, resolved: ResolvedName): Id => {
+    if (resolved.status === 'registered') return resolved.id;
+    const existing = newEntities.find((entity) => entity.kind === kind && normalizeName(entity.name) === normalizeName(resolved.name));
+    if (existing) return existing.id;
+    const created = { kind, id: createId(), name: resolved.name };
+    newEntities.push(created);
+    return created.id;
+  };
+
+  const speakerId = candidate.speaker ? idOf('person', candidate.speaker) : mediaIds[0];
+  // 媒体は候補の経由での位置にかかわらず最後に、原典の媒体 → 転載した媒体の順で並べる（伝わった順を逆に記録しないため）
+  const transmitterIds = [...[...new Set(candidate.via.map((name) => idOf('person', name)))].filter((id) => !mediaIds.includes(id)), ...mediaIds];
+  return { speakerId, transmitterIds, idOf, newEntities };
+}
+
 /** 抽出のときに LLM に渡す既存の証言の、上限の件数です（プロンプトが長くなりすぎないようにするため）。 */
 export const MAX_EXISTING_CLAIMS_FOR_EXTRACTION = 30;
 
@@ -343,7 +380,7 @@ export type ExistingClaimForExtraction = {
 };
 
 /** 名前を本文から探すために、空白を除いて小文字にします（「山田 花子」と本文の「山田花子」を同じとみなすため）。 */
-function compactForSearch(text: string): string {
+export function compactForSearch(text: string): string {
   return text.replace(/\s+/g, '').toLowerCase();
 }
 

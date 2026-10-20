@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { parseCase } from './case-schema';
 import { sampleFictionalCase } from './sample-fictional-case';
 
+/** 撤回・訂正の照合が大量にあるケースを読み込むときの、上限の時間（ミリ秒）です。 */
+const MAX_PARSE_MILLISECONDS_FOR_MANY_REVISIONS = 1500;
+
 /** JSONの書き出し・読み込みを経たデータを再現します。 */
 function toJsonData(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
@@ -964,6 +967,29 @@ describe('parseCase（照合）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(
       /同じ2件の証言の間で、撤回・訂正を両方向に登録することはできません: cross-check-backward/
     );
+  });
+
+  it('撤回・訂正の照合が数万件あっても、照合の数の2乗に比例する時間をかけずに読み込む', () => {
+    // 前提: 千件規模の証言のケースで、撤回・訂正の照合が大量にある（証言 i が証言 i+1 を撤回・訂正している）
+    const claimCount = 40_000;
+    const [templateClaim] = sampleFictionalCase.claims;
+    const claims = Array.from({ length: claimCount }, (_, index) => ({ ...templateClaim!, id: `claim-revision-${index}` }));
+    const crossChecks = Array.from({ length: claimCount - 1 }, (_, index) => ({
+      id: `cross-check-revision-${index}`,
+      claimIds: [`claim-revision-${index}`, `claim-revision-${index + 1}`],
+      kind: 'revises',
+    }));
+    const caseData = toJsonData({
+      ...sampleFictionalCase,
+      claims: [...sampleFictionalCase.claims, ...claims],
+      crossChecks: [...sampleFictionalCase.crossChecks, ...crossChecks],
+      timelineOrder: [...sampleFictionalCase.timelineOrder, ...claims.map((claim) => claim.id)],
+    });
+
+    const startedAt = performance.now();
+    parseCase(caseData);
+    // 検証: 2乗に比例する検査（約8億回の比較）では5秒ほどかかるため、余裕を持たせた上限で確かめる
+    expect(performance.now() - startedAt).toBeLessThan(MAX_PARSE_MILLISECONDS_FOR_MANY_REVISIONS);
   });
 
   it('照合の種類が決められた値でない場合は拒否する', () => {
