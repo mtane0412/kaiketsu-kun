@@ -52,6 +52,7 @@ function createCase(): Case {
       },
     ],
     crossChecks: [],
+    disputes: [],
     hypotheses: [
       {
         id: 'hypothesis-1',
@@ -63,7 +64,7 @@ function createCase(): Case {
         proponentPersonId: 'person-brother',
       },
     ],
-    tasks: [{ id: 'task-1', content: 'どちらの弟か確かめる', status: 'todo', claimIds: [], personIds: ['person-brother'], placeIds: [] }],
+    tasks: [{ id: 'task-1', content: 'どちらの弟か確かめる', status: 'todo', claimIds: [], personIds: ['person-brother'], placeIds: [], disputeIds: [] }],
     timelineOrder: [],
     personLaneOrder: ['person-suspect', 'person-brother', 'person-paper'],
   };
