@@ -63,6 +63,13 @@ describe('TimelineView', () => {
     expect(within(timeline).getAllByRole('button', { name: /の前に書き足す$/ })).toHaveLength(2);
   });
 
+  it('絞り込みの条件に合う証言が1件も無い場合は、その旨を示す', () => {
+    render(<TimelineView target={sampleFictionalCase} shownClaimIds={new Set()} />);
+
+    expect(screen.getByText('絞り込みの条件に合う証言はありません。')).toBeInTheDocument();
+    expect(screen.queryByText('まだ何も書かれていません。「ボードに書き足す」から書き始めてください。')).not.toBeInTheDocument();
+  });
+
   it('照合を持つ証言のカードに、照合の件数を種類別に小さく示す', () => {
     // 前提: 隣家の住人の証言は、裏付ける照合1件と食い違う照合1件を持ち、ユーザーの推測は照合を持たない
     render(<TimelineView target={sampleFictionalCase} />);

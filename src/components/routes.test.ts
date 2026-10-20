@@ -9,7 +9,6 @@ import {
   casesHref,
   claimHref,
   disputeHref,
-  hasBoardFilterParams,
   hypothesisHref,
   interviewHref,
   mentionHref,
@@ -134,12 +133,6 @@ describe('boardFilterQuery', () => {
   });
 });
 
-describe('hasBoardFilterParams', () => {
-  it('絞り込みのクエリを1つでも持つかどうかを判定する', () => {
-    expect(hasBoardFilterParams(new URLSearchParams('tab=graph&person=p1'))).toBe(true);
-    expect(hasBoardFilterParams(new URLSearchParams('tab=graph'))).toBe(false);
-  });
-});
 
 describe('claimHref', () => {
   it('証言の詳細ページのURLに、戻り先のタブを引き継ぐ', () => {

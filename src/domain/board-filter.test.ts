@@ -102,6 +102,8 @@ describe('applyBoardFilter', () => {
     expect(result.target).toBe(caseData);
     expect(result.shownCount).toBe(4);
     expect(result.totalCount).toBe(4);
+    // 絞り込んでいない場合は、表示する証言を限らないことを undefined で表す
+    expect(result.shownClaimIds).toBeUndefined();
   });
 
   it('日時の範囲と一部でも重なる証言を残す', () => {
@@ -157,7 +159,14 @@ describe('applyBoardFilter', () => {
   it('残した証言のIDの集合を返す', () => {
     const result = applyBoardFilter(caseData, { ...EMPTY_BOARD_FILTER, personId: 'caretaker' });
 
-    expect([...result.shownClaimIds]).toEqual(['claim-neighbor', 'claim-caretaker']);
+    expect([...(result.shownClaimIds ?? [])]).toEqual(['claim-neighbor', 'claim-caretaker']);
+  });
+
+  it('ケースに無い人物の指定は外して絞り込み、外した後の条件を返す', () => {
+    const result = applyBoardFilter(caseData, { ...EMPTY_BOARD_FILTER, personId: 'deleted-person' });
+
+    expect(result.filter).toEqual(EMPTY_BOARD_FILTER);
+    expect(result.shownCount).toBe(4);
   });
 });
 

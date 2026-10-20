@@ -39,7 +39,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { applyBoardFilter, isBoardFilterActive, resolveBoardFilter } from '@/domain/board-filter';
+import { applyBoardFilter, isBoardFilterActive } from '@/domain/board-filter';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { BOARD_SEARCH_INPUT_ID, CaseSidebar } from './CaseSidebar';
@@ -144,11 +144,9 @@ export function CaseBoard({ children }: CaseBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   useBoardScrollRestoration(boardRef, detailKind === undefined, activeTab);
 
-  const [rawFilter, setFilter] = useBoardFilter(currentCase.id, activeTab, detailKind === undefined);
-  const filter = useMemo(() => resolveBoardFilter(currentCase, rawFilter), [currentCase, rawFilter]);
-  const filterResult = useMemo(() => applyBoardFilter(currentCase, filter), [currentCase, filter]);
-  const isFiltered = isBoardFilterActive(filter);
-  const filteredCase = filterResult.target;
+  const [requestedFilter, setFilter] = useBoardFilter(currentCase.id, activeTab, detailKind === undefined);
+  const filterResult = useMemo(() => applyBoardFilter(currentCase, requestedFilter), [currentCase, requestedFilter]);
+  const { filter, target: filteredCase } = filterResult;
 
   return (
     <SidebarProvider>
@@ -188,9 +186,9 @@ export function CaseBoard({ children }: CaseBoardProps) {
               <BoardFilterPanel target={currentCase} filter={filter} result={filterResult} onChange={setFilter} />
             )}
             {activeTab === 'timeline' && (
-              <TimelineView target={currentCase} shownClaimIds={isFiltered ? filterResult.shownClaimIds : undefined} />
+              <TimelineView target={currentCase} shownClaimIds={filterResult.shownClaimIds} />
             )}
-            {activeTab === 'graph' && <GraphView target={filteredCase} dropPersonsWithoutClaims={isFiltered} />}
+            {activeTab === 'graph' && <GraphView target={filteredCase} dropPersonsWithoutClaims={isBoardFilterActive(filter)} />}
             {activeTab === 'speaker' && <SpeakerView target={filteredCase} />}
             {activeTab === 'lanes' && <PersonLaneView target={filteredCase} axisRange={filter.when} />}
             {activeTab === 'map' && <MapView target={filteredCase} />}

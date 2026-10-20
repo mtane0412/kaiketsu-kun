@@ -34,6 +34,7 @@ import { BOARD_PERSON_ROLE_LABELS } from '@/domain/labels';
 import { formatTimeRef } from '@/domain/time-ref';
 import type { Case, Id, TimeRef } from '@/domain/types';
 import { INPUT_CLASS, LABEL_CLASS } from '../forms/fields';
+import { boardFilterQuery } from '../routes';
 
 /** 選択欄で「指定しない」を表す値です。IDとぶつからないよう空文字列にします。 */
 const UNSELECTED = '';
@@ -123,10 +124,17 @@ function FilterForm({ target, filter, id, onSubmit }: FilterFormProps) {
       return;
     }
     setWhenInvalid(false);
-    const next: BoardFilter = { ...EMPTY_BOARD_FILTER, includeUndated, personRole };
-    if (when !== undefined) next.when = when;
+    const next: BoardFilter = { ...EMPTY_BOARD_FILTER };
+    if (when !== undefined) {
+      next.when = when;
+      next.includeUndated = includeUndated;
+    }
     const selectedPersonId = idOrUndefined(personId);
-    if (selectedPersonId !== undefined) next.personId = selectedPersonId;
+    // 関わり方は人物を選んだときだけ条件にする。人物を外した後に、前に選んだ関わり方が残らないようにするため
+    if (selectedPersonId !== undefined) {
+      next.personId = selectedPersonId;
+      next.personRole = personRole;
+    }
     const selectedInterviewId = idOrUndefined(interviewId);
     if (selectedInterviewId !== undefined) next.interviewId = selectedInterviewId;
     const selectedDisputeId = idOrUndefined(disputeId);
@@ -274,8 +282,9 @@ export function BoardFilterPanel({ target, filter, result, onChange }: BoardFilt
       {isActive && <p className="mt-1 text-xs text-muted-foreground">条件: {describeFilter(target, filter)}</p>}
       {isOpen && (
         <FilterForm
-          // 条件が変わったら（解除・URLの変更を含む）、入力欄を新しい条件にそろえる
-          key={JSON.stringify(filter)}
+          // 条件が変わったら（解除・URLの変更を含む）、入力欄を新しい条件にそろえる。
+          // 同じ条件なら同じ文字列になるクエリ（boardFilterQuery）で見分け、意味の変わらない違いで作り直さないようにする
+          key={boardFilterQuery(filter)}
           id={formId}
           target={target}
           filter={filter}

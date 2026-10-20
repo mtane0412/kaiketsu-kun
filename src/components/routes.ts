@@ -124,11 +124,6 @@ export function parseBoardFilter(params: Pick<URLSearchParams, 'get'>): BoardFil
   return filter;
 }
 
-/** URLのクエリが、絞り込みの条件を1つでも持つかどうかを判定します。 */
-export function hasBoardFilterParams(params: Pick<URLSearchParams, 'has'>): boolean {
-  return Object.values(BOARD_FILTER_PARAMS).some((name) => params.has(name));
-}
-
 /**
  * 絞り込みの条件だけを、URLのクエリの文字列（先頭の「?」を含まない）にします。条件が無い場合は空文字列です。
  * 同じ条件からは同じ文字列ができるため、条件どうしが等しいかの比較にも使えます。

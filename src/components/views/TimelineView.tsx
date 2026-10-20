@@ -59,8 +59,11 @@ const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから�
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
   | { type: 'free' }
-  /** 時系列の index 番目の項目の前です。 */
-  | { type: 'before'; index: number };
+  /**
+   * キーが key の項目の前です。位置（index）ではなく項目で持つのは、絞り込みの条件が変わって表示する項目が入れ替わっても、
+   * 入力欄が別の項目の前へ移らないようにするためです。
+   */
+  | { type: 'before'; key: TimelineKey };
 
 type TimelineViewProps = {
   target: Case;
@@ -231,10 +234,10 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
    */
   const renderSlot = (item: TimelineItem, index: number) => (
     <li key={`slot:${item.key}`} className={draggingKey === null ? undefined : 'invisible'}>
-      {composer?.type === 'before' && composer.index === index ? (
+      {composer?.type === 'before' && composer.key === item.key ? (
         <BoardComposer defaults={{ insertIndex: index }} onClose={closeComposer} />
       ) : (
-        <SlotAddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', index })} />
+        <SlotAddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', key: item.key })} />
       )}
     </li>
   );
@@ -245,6 +248,9 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
     <div className="space-y-6">
       {isEmpty && (
         <p className="text-sm text-muted-foreground">まだ何も書かれていません。「ボードに書き足す」から書き始めてください。</p>
+      )}
+      {!isEmpty && shownEntries.length === 0 && (
+        <p className="text-sm text-muted-foreground">絞り込みの条件に合う証言はありません。</p>
       )}
 
       {shownEntries.length > 0 && (

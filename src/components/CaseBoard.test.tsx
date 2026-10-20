@@ -483,6 +483,30 @@ describe('CaseBoard の絞り込み', () => {
     expect(screen.getByRole('region', { name: '管理人' })).toBeInTheDocument();
   });
 
+  it('絞り込みに使えないクエリ（関わり方だけなど）しか無いURLは、絞り込んでいないものとして扱う', async () => {
+    resetMockNavigation('/cases/case-lakeside?role=speaker');
+    await renderBoard();
+
+    expect(await screen.findByRole('status', { name: '絞り込みの結果' })).toHaveTextContent('すべての証言（5件）を表示しています');
+  });
+
+  it('人物を選ばずに絞り込むと、関わり方の選択は条件に残さない', async () => {
+    const user = userEvent.setup();
+    await renderBoard();
+    await openFilter(user);
+
+    // 前提: 人物を選んで関わり方を「発言者」にした後、人物を「指定しない」に戻す
+    await user.selectOptions(screen.getByLabelText('人物'), '管理人');
+    await user.selectOptions(screen.getByLabelText('関わり方'), '発言者');
+    await user.selectOptions(screen.getByLabelText('人物'), '指定しない');
+    await user.selectOptions(screen.getByLabelText('論点'), '12日夜、持ち主は別荘にいたか');
+    await user.click(screen.getByRole('button', { name: '絞り込む' }));
+
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside?dispute=dispute-villa-presence');
+    // 検証: 入力欄を開き直すと、関わり方は既定の「いずれか」に戻っている
+    expect(screen.getByLabelText('関わり方')).toHaveValue('any');
+  });
+
   it('証言を並べない表示（仮説）では、絞り込みの欄を出さない', async () => {
     resetMockNavigation('/cases/case-lakeside?tab=hypotheses');
     await renderBoard();

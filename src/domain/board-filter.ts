@@ -46,10 +46,12 @@ export const EMPTY_BOARD_FILTER: BoardFilter = { includeUndated: false, personRo
 
 /** 絞り込みの結果です。 */
 export type BoardFilterResult = {
+  /** 実際に使った条件です。ケースに無い人物・資料・論点の指定を外したもの（resolveBoardFilter）です。 */
+  filter: BoardFilter;
   /** 証言を、条件を満たすものだけに減らしたケースです。絞り込んでいない場合は、渡したケースそのものです。 */
   target: Case;
-  /** 残した証言のIDです。 */
-  shownClaimIds: ReadonlySet<Id>;
+  /** 残した証言のIDです。絞り込んでいない場合は undefined です（すべての証言を表示することを表します）。 */
+  shownClaimIds: ReadonlySet<Id> | undefined;
   /** 残した証言の件数です。 */
   shownCount: number;
   /** 絞り込む前の証言の件数です。 */
@@ -101,7 +103,8 @@ function involvesPerson(claim: Claim, personId: Id, role: BoardPersonRole): bool
 }
 
 /**
- * 証言を条件で絞り込みます。条件は resolveBoardFilter で、ケースに無い指定を外してから使います。
+ * 証言を条件で絞り込みます。条件は、この関数の中で resolveBoardFilter を通し、ケースに無い指定を外してから使います。
+ * 外した後の条件は、結果の filter で返します。画面の選択欄を、実際の絞り込みとそろえるためです。
  * 証言の並び（Case.claims の順）は変えません。時系列ボードの並び順（Case.timelineOrder）も、そのまま残します。
  */
 export function applyBoardFilter(target: Case, filter: BoardFilter): BoardFilterResult {
@@ -109,8 +112,9 @@ export function applyBoardFilter(target: Case, filter: BoardFilter): BoardFilter
   const resolved = resolveBoardFilter(target, filter);
   if (!isBoardFilterActive(resolved)) {
     return {
+      filter: resolved,
       target,
-      shownClaimIds: new Set(target.claims.map((claim) => claim.id)),
+      shownClaimIds: undefined,
       shownCount: totalCount,
       totalCount,
       undatedExcludedCount: 0,
@@ -142,6 +146,7 @@ export function applyBoardFilter(target: Case, filter: BoardFilter): BoardFilter
   });
 
   return {
+    filter: resolved,
     target: { ...target, claims },
     shownClaimIds: new Set(claims.map((claim) => claim.id)),
     shownCount: claims.length,
