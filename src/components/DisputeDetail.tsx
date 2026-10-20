@@ -14,6 +14,7 @@
  * 保存・「やめる」で閉じたときは、フォーカスを「編集」に戻します。
  *
  * 表は列が多いため、狭い画面では表だけを横にスクロールして読みます。キーボードでもスクロールできるよう、表の枠にフォーカスを置けるようにします。
+ * 表の枠は relative にします。列の見出しの読み上げ専用の文字（sr-only）は絶対配置のため、枠を基準にしないと枠の外に置かれ、ページ全体が横にはみ出すためです。
  *
  * 論点の登録（NewDisputeDetail）は、名前・両立できる読み方・解決したかどうかを入力し、保存すると、証言を束ね続けられるよう詳細へ移ります。
  * 証言の詳細の「この証言から論点を作る」や、照合の「論点を作る」から開いた場合は、その証言（URLの ?claim=）を束ねた状態で登録します。
@@ -312,12 +313,12 @@ export function DisputeDetail({ disputeId }: { disputeId: Id }) {
         )}
         {rows.length > 0 && (
           // 狭い画面では表だけを横にスクロールする。キーボードでもスクロールできるよう、枠にフォーカスを置けるようにする
-          <div role="region" aria-label={TABLE_LABEL} tabIndex={0} className="overflow-x-auto rounded-lg border bg-card">
+          <div role="region" aria-label={TABLE_LABEL} tabIndex={0} className="relative overflow-x-auto rounded-lg border bg-card">
             <table aria-label={TABLE_LABEL} className="w-full min-w-[56rem] text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   {TABLE_HEADERS.map((header) => (
-                    <th key={header} scope="col" className="px-2 py-2 text-left font-semibold">
+                    <th key={header} scope="col" className="px-2 py-2 text-left font-semibold whitespace-nowrap">
                       {header === '操作' ? <span className="sr-only">{header}</span> : header}
                     </th>
                   ))}
