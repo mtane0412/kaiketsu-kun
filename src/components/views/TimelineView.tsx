@@ -11,6 +11,11 @@
  * - 項目の前: 日時は付けず、並び順のその位置に並べます。
  * - 「ボードに書き足す」: 並び順の末尾に並べます。
  *
+ * ボードの絞り込み（src/domain/board-filter.ts）で一部の証言だけを表示する場合は、shownClaimIds に表示する証言のIDを受け取り、
+ * それ以外の証言のカードと差し込み口を描きません。並び順の位置（書き足す位置・動かした先）は、絞り込む前の並びで数えます。
+ * 隠れた証言を飛ばした位置に書き足したり動かしたりして、並び順が崩れないようにするためです。
+ * 注意: 絞り込み中に書き足した証言は、条件を満たさなければボードに表示されません（件数は絞り込みの欄に示します）。
+ *
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 読み手が記録した照合（CrossCheck）がある証言は、カードに照合の件数を小さく示します。
  * 証言の編集・削除・日時の入力は、証言のカードから開く詳細ページ（ClaimDetail）で行います。ボード上では編集しません。
@@ -37,7 +42,7 @@ import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-vi
 import { countCrossChecksByClaim } from '@/domain/cross-checks';
 import { formatTimeRef } from '@/domain/time-ref';
 import { allowedIndexRange, type TimelineKey } from '@/domain/timeline-order';
-import type { Case } from '@/domain/types';
+import type { Case, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
@@ -54,11 +59,16 @@ const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから�
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
   | { type: 'free' }
-  /** 時系列の index 番目の項目の前です。 */
-  | { type: 'before'; index: number };
+  /**
+   * キーが key の項目の前です。位置（index）ではなく項目で持つのは、絞り込みの条件が変わって表示する項目が入れ替わっても、
+   * 入力欄が別の項目の前へ移らないようにするためです。
+   */
+  | { type: 'before'; key: TimelineKey };
 
 type TimelineViewProps = {
   target: Case;
+  /** 表示する証言のIDです。省略した場合は、すべての証言を表示します。 */
+  shownClaimIds?: ReadonlySet<Id>;
 };
 
 /** ボードの項目の名前を返します。ボタンの名前と読み上げに使います。 */
@@ -143,8 +153,16 @@ function SlotAddButton({ label, onClick }: { label: string; onClick: () => void 
   );
 }
 
-export function TimelineView({ target }: TimelineViewProps) {
+export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
   const timeline = useMemo(() => buildTimeline(target), [target]);
+  /** 表示する項目と、絞り込む前の並びでの位置（index）の組です。 */
+  const shownEntries = useMemo(
+    () =>
+      timeline.items.flatMap((item, index) =>
+        shownClaimIds === undefined || shownClaimIds.has(item.view.claim.id) ? [{ item, index }] : []
+      ),
+    [timeline, shownClaimIds]
+  );
   const crossCheckCounts = useMemo(() => countCrossChecksByClaim(target), [target]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -160,7 +178,9 @@ export function TimelineView({ target }: TimelineViewProps) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  /** 絞り込む前の並びのキーです。動かした先の位置を、絞り込む前の並びで数えるために使います。 */
   const keys = timeline.items.map((item) => item.key);
+  const shownKeys = shownEntries.map(({ item }) => item.key);
   /** ドラッグ中の項目を置ける位置の範囲です。範囲の外の項目は薄く表示します。 */
   const allowedRange = useMemo(
     () => (draggingKey === null ? null : allowedIndexRange(target, draggingKey)),
@@ -214,10 +234,10 @@ export function TimelineView({ target }: TimelineViewProps) {
    */
   const renderSlot = (item: TimelineItem, index: number) => (
     <li key={`slot:${item.key}`} className={draggingKey === null ? undefined : 'invisible'}>
-      {composer?.type === 'before' && composer.index === index ? (
+      {composer?.type === 'before' && composer.key === item.key ? (
         <BoardComposer defaults={{ insertIndex: index }} onClose={closeComposer} />
       ) : (
-        <SlotAddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', index })} />
+        <SlotAddButton label={`「${labelOf(item)}」の前に書き足す`} onClick={() => setComposer({ type: 'before', key: item.key })} />
       )}
     </li>
   );
@@ -229,8 +249,11 @@ export function TimelineView({ target }: TimelineViewProps) {
       {isEmpty && (
         <p className="text-sm text-muted-foreground">まだ何も書かれていません。「ボードに書き足す」から書き始めてください。</p>
       )}
+      {!isEmpty && shownEntries.length === 0 && (
+        <p className="text-sm text-muted-foreground">絞り込みの条件に合う証言はありません。</p>
+      )}
 
-      {timeline.items.length > 0 && (
+      {shownEntries.length > 0 && (
         <DndContext
           id={dndId}
           sensors={sensors}
@@ -243,9 +266,9 @@ export function TimelineView({ target }: TimelineViewProps) {
           onDragEnd={handleDragEnd}
           onDragCancel={() => setDraggingKey(null)}
         >
-          <SortableContext items={keys} strategy={verticalListSortingStrategy}>
+          <SortableContext items={shownKeys} strategy={verticalListSortingStrategy}>
             <ol aria-label="時系列" className="space-y-2 border-l-2 pl-2">
-              {timeline.items.flatMap((item, index) => [
+              {shownEntries.flatMap(({ item, index }) => [
                 renderSlot(item, index),
                 <SortableItem
                   key={item.key}

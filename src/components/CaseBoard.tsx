@@ -26,21 +26,30 @@
  * 論点の詳細は、束ねた証言を6列の表で見比べるため、他の詳細より幅の上限を広げます。
  * useSearchParams・usePathname を使うため、ページでは Suspense の中に置いてください。
  *
+ * 証言を並べる表示（時系列・グラフ・証言者別・人物の動き・地図）の上には、絞り込みの欄（BoardFilterPanel）を置き、
+ * 日時の範囲・人物・資料・論点で、表示する証言を絞り込めるようにします（src/domain/board-filter.ts）。
+ * 条件はURLに持たせ、表示を切り替えても、詳細を開いてから戻っても保ちます（useBoardFilter）。
+ * 時系列には絞り込む前のケースを渡し、表示する証言のIDだけを伝えます。書き足す位置や動かした先を、絞り込む前の並びで数えるためです。
+ * それ以外の表示には、証言を減らしたケースを渡します。グラフでは、残った証言に関わらない人物も描きません。
+ *
  * キーボードだけで操作できるよう、ページの先頭に「本文へ移動」のリンク（サイドバーを飛ばしてメインの領域へ移るリンク）を置き、
  * Esc で詳細を閉じる・「/」と ⌘K で検索窓へ移るショートカットを受け付けます（useBoardShortcuts）。
  */
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { applyBoardFilter, isBoardFilterActive } from '@/domain/board-filter';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { BOARD_SEARCH_INPUT_ID, CaseSidebar } from './CaseSidebar';
+import { useBoardFilter } from './useBoardFilter';
 import { useBoardScrollRestoration } from './useBoardScrollRestoration';
 import { useBoardShortcuts } from './useBoardShortcuts';
 import { useCaseId } from './useCaseId';
 import { boardHref, parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind, type TabKey } from './routes';
 import { DisputeListView } from './views/DisputeListView';
+import { BoardFilterPanel } from './views/BoardFilterPanel';
 import { GraphView } from './views/GraphView';
 import { HypothesisListView } from './views/HypothesisListView';
 import { MapView } from './views/MapView';
@@ -66,6 +75,9 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
   newInterview: '資料の登録',
   newDispute: '論点の登録',
 };
+
+/** 絞り込みの欄を置く表示です。証言を並べる表示だけで絞り込みます。 */
+const FILTERABLE_TABS: ReadonlySet<TabKey> = new Set<TabKey>(['timeline', 'graph', 'speaker', 'lanes', 'map']);
 
 /** 「本文へ移動」のリンクの移り先となる、メインの領域のIDです。 */
 const BOARD_MAIN_ID = 'board-main';
@@ -132,6 +144,10 @@ export function CaseBoard({ children }: CaseBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   useBoardScrollRestoration(boardRef, detailKind === undefined, activeTab);
 
+  const [requestedFilter, setFilter] = useBoardFilter(currentCase.id, activeTab, detailKind === undefined);
+  const filterResult = useMemo(() => applyBoardFilter(currentCase, requestedFilter), [currentCase, requestedFilter]);
+  const { filter, target: filteredCase } = filterResult;
+
   return (
     <SidebarProvider>
       <a
@@ -166,11 +182,16 @@ export function CaseBoard({ children }: CaseBoardProps) {
             className={`mx-auto min-w-0 ${activeTab === 'lanes' ? 'max-w-none' : 'max-w-4xl'}`}
             hidden={detailKind !== undefined}
           >
-            {activeTab === 'timeline' && <TimelineView target={currentCase} />}
-            {activeTab === 'graph' && <GraphView target={currentCase} />}
-            {activeTab === 'speaker' && <SpeakerView target={currentCase} />}
-            {activeTab === 'lanes' && <PersonLaneView target={currentCase} />}
-            {activeTab === 'map' && <MapView target={currentCase} />}
+            {FILTERABLE_TABS.has(activeTab) && (
+              <BoardFilterPanel target={currentCase} filter={filter} result={filterResult} onChange={setFilter} />
+            )}
+            {activeTab === 'timeline' && (
+              <TimelineView target={currentCase} shownClaimIds={filterResult.shownClaimIds} />
+            )}
+            {activeTab === 'graph' && <GraphView target={filteredCase} dropPersonsWithoutClaims={isBoardFilterActive(filter)} />}
+            {activeTab === 'speaker' && <SpeakerView target={filteredCase} />}
+            {activeTab === 'lanes' && <PersonLaneView target={filteredCase} axisRange={filter.when} />}
+            {activeTab === 'map' && <MapView target={filteredCase} />}
             {activeTab === 'hypotheses' && <HypothesisListView target={currentCase} />}
             {activeTab === 'disputes' && <DisputeListView target={currentCase} />}
             {activeTab === 'tasks' && <TaskListView target={currentCase} />}
