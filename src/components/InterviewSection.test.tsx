@@ -490,7 +490,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     // 検証: 送らない名前の件数（登録済みの人物の名前と別名の数 - 上限）を示す
     const registeredNameCount = base.persons.reduce((count, person) => count + 1 + (person.aliases?.length ?? 0), 0);
     const omitted = registeredNameCount + residents.length - MAX_EXTRACTION_NAMES;
-    expect(extraction).toHaveTextContent(`登録済みの名前が多いため、本文に出てくる名前を優先し、${omitted}件の名前は送りません`);
+    expect(extraction).toHaveTextContent(`上限（件数・文字数）を超えるため、${omitted}件の名前は送りません`);
 
     await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
     await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));

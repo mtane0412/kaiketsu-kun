@@ -5,7 +5,7 @@
  * 1. 送る前の確認: 送る本文（選んだ範囲か、本文の全文）と送り先（OpenRouter 経由の外部の LLM）を示し、API キーとモデルを入力してもらいます。
  *    ケースには調書などの機微な資料が含まれうるため、押すまで本文を送りません。
  *    送る本文が上限の文字数（MAX_EXTRACTION_TEXT_LENGTH）を超える場合は、送らずに範囲を選ぶよう示します。
- *    本文のほかに送るもの（人物・場所の名前と、既存の証言の要約の件数）も示します。名前が上限の件数を超える場合は、送らない件数を示します（selectExtractionNames）。
+ *    本文のほかに送るもの（人物・場所の名前と、既存の証言の要約の件数）も示します。名前が上限（件数・文字数）を超える場合は、送らない件数を示します（selectExtractionNames）。
  * 2. 抽出: 抽出 API（src/lib/claim-extraction-api.ts）を呼びます。失敗した場合は理由を示し、ケースを変えません。
  * 3. 候補の一覧: LLM の出力を原文とケースに照らし合わせ（src/domain/claim-extraction.ts の buildClaimCandidates）、
  *    引用が本文にある候補だけを示し、捨てた件数を示します。人物・場所の名前には、登録済みか新規かを添えます。
@@ -32,7 +32,7 @@
 'use client';
 
 import { nanoid } from 'nanoid';
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { buildTimeline, claimLabelOf, describeClaimAttribution } from '@/domain/case-views';
 import {
   ambiguousNamesOf,
@@ -169,15 +169,22 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   // LLM に本文がどの資料のものかを伝える。上限を超える長い名前（長いURLなど）は、上限の文字数で切り詰めて送る
   const sourceName = formatInterviewLabel(currentCase, interview).slice(0, MAX_SOURCE_NAME_LENGTH);
   const tooLong = source.text.length > MAX_EXTRACTION_TEXT_LENGTH;
-  // 本文と一緒に送る既存の証言の要約です。送る前の確認で件数を示し、送るときも同じものを渡す
-  const existingClaims = selectExistingClaimsForExtraction(currentCase, interviewId, source.text);
-  // 名前は上限の件数まで送る。この資料での呼び方と本文に出てくる名前を優先し、送らない件数は送る前に示す
-  const personNames = selectExtractionNames(
-    source.text,
-    (interview.personNames ?? []).map((personName) => personName.name),
-    currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])])
+  // 本文と一緒に送る既存の証言の要約と名前です。送る前の確認で件数を示し、送るときも同じものを渡す。
+  // ケース全体と本文を走査するため、API キーの入力などの再描画のたびには計算し直さない
+  const outgoing = useMemo(
+    () => ({
+      existingClaims: selectExistingClaimsForExtraction(currentCase, interviewId, source.text),
+      // 名前は上限の件数まで送る。この資料での呼び方と本文に出てくる名前を優先する
+      personNames: selectExtractionNames(
+        source.text,
+        (interview.personNames ?? []).map((personName) => personName.name),
+        currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])])
+      ),
+      placeNames: selectExtractionNames(source.text, [], currentCase.places.map((place) => place.name)),
+    }),
+    [currentCase, interviewId, interview.personNames, source.text]
   );
-  const placeNames = selectExtractionNames(source.text, [], currentCase.places.map((place) => place.name));
+  const { existingClaims, personNames, placeNames } = outgoing;
   const omittedNameCount = personNames.omittedCount + placeNames.omittedCount;
 
   const handleSend = async (event: FormEvent) => {
@@ -235,9 +242,9 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   const addSourceTo = (candidate: ClaimCandidate, claimId: Id) => {
     const existing = currentCase.claims.find((claim) => claim.id === claimId);
     if (existing === undefined) throw new Error(`証言が見つかりません: ${claimId}`);
-    const { source, newEntities } = candidateToAddedSource(currentCase, interviewId, candidate, existing, nanoid);
-    const viaEntries = newEntities.map((entity) => createEntry(entity.kind, entity.id, entity.name));
     try {
+      const { source, newEntities } = candidateToAddedSource(currentCase, interviewId, candidate, existing, nanoid);
+      const viaEntries = newEntities.map((entity) => createEntry(entity.kind, entity.id, entity.name));
       const updated = addClaimSource(existing, source);
       upsertMany([...viaEntries, { key: 'claims', entity: updated }]);
     } catch (caught) {
@@ -283,8 +290,8 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
           </p>
           {omittedNameCount > 0 && (
             <p className="text-xs">
-              登録済みの名前が多いため、本文に出てくる名前を優先し、{omittedNameCount}件の名前は送りません。
-              送らなかった名前も、候補を受け取った後の照らし合わせには使います。
+              登録済みの名前のうち、上限（件数・文字数）を超えるため、{omittedNameCount}件の名前は送りません。
+              件数が上限を超える場合は、この資料での呼び方と本文に出てくる名前を優先します。送らなかった名前も、候補を受け取った後の照らし合わせには使います。
             </p>
           )}
           {tooLong && (

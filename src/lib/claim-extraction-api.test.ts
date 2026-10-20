@@ -113,6 +113,18 @@ describe('selectExtractionNames', () => {
     expect(result.omittedCount).toBe(2);
   });
 
+  it('空文字・空白だけの名前は、本文に出てくる名前として優先せず、送らない', () => {
+    // 前提: 上限ちょうどの名前のほかに、空白だけの別名と、本文に出てくる「山田 花子」がある
+    const others = [...unrelatedNames(MAX_EXTRACTION_NAMES - 1), ' ', '山田 花子'];
+
+    const result = selectExtractionNames('山田花子さんは話した。', [], others);
+
+    // 検証: 本文に出てくる「山田 花子」が先頭に来て、空白だけの名前は送らない
+    expect(result.names[0]).toBe('山田 花子');
+    expect(result.names).not.toContain(' ');
+    expect(result.names).toHaveLength(MAX_EXTRACTION_NAMES);
+  });
+
   it('上限の文字数を超える長い名前は送らず、送らない件数に数える', () => {
     const result = selectExtractionNames('本文', [], ['県警', 'あ'.repeat(201)]);
 

@@ -313,6 +313,8 @@ export function candidateToClaimDraft(
  * - 経由は、候補の経由と資料の媒体を伝わった順に並べたものから、既存の証言の発言者を除いたものです（媒体の並べ方は candidateToClaimDraft と同じです）。
  * - 発言者の分からない候補（記者の地の文など）でも、媒体は経由に残します。新しい証言にする場合と違い、発言者は既存の証言の発言者で、
  *   媒体はその発言を伝えた側になるためです。
+ * - 候補の発言者が既存の証言の発言者でない場合は、候補の発言者を経由の先頭に置きます。ユーザーが同じ発言だと判断した以上、
+ *   この資料では候補の発言者が既存の証言の発言者の発言を伝えた形になるためです（この資料での伝わり方の手がかりを黙って捨てないためです）。
  * - 新規作成するのは、経由に残った未登録の人物だけです（本文の言及や場所は、既存の証言の本文を書き換えないため作りません）。
  * - 決められない名前が残っている候補はエラーにします（candidateToClaimDraft と同じです）。
  */
@@ -325,9 +327,9 @@ export function candidateToAddedSource(
 ): { source: ClaimSource; newEntities: NewEntity[] } {
   const { speakerId, transmitterIds, newEntities } = resolveCandidatePersons(target, interviewId, candidate, createId);
   const existingSpeakerIds = existing.speaker.kind === 'person' ? existing.speaker.personIds : [];
-  // 候補の発言者が分かる場合は、その発言者も経由に入れない（ユーザーが既存の証言と同じ発言だと判断したため）
-  const candidateSpeakerIds = candidate.speaker === undefined || speakerId === undefined ? [] : [speakerId];
-  const viaPersonIds = transmitterIds.filter((id) => !existingSpeakerIds.includes(id) && !candidateSpeakerIds.includes(id));
+  // 発言者の分からない候補では speakerId は媒体で、媒体は transmitterIds に含まれているため、先頭には足さない
+  const relayIds = candidate.speaker === undefined || speakerId === undefined ? transmitterIds : [speakerId, ...transmitterIds];
+  const viaPersonIds = [...new Set(relayIds)].filter((id) => !existingSpeakerIds.includes(id));
   return {
     source: { interviewId, viaPersonIds, quote: candidate.quote },
     newEntities: newEntities.filter((entity) => viaPersonIds.includes(entity.id)),
@@ -378,7 +380,7 @@ export type ExistingClaimForExtraction = {
 };
 
 /** 名前を本文から探すために、空白を除いて小文字にします（「山田 花子」と本文の「山田花子」を同じとみなすため）。 */
-function compactForSearch(text: string): string {
+export function compactForSearch(text: string): string {
   return text.replace(/\s+/g, '').toLowerCase();
 }
 

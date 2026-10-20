@@ -494,6 +494,19 @@ describe('candidateToAddedSource', () => {
     expect(result.source.viaPersonIds).toEqual(['new-1', 'person-newspaper']);
     expect(result.newEntities).toEqual([{ kind: 'person', id: 'new-1', name: '捜査関係者' }]);
   });
+
+  it('候補の発言者が既存の証言の発言者と違う場合は、候補の発言者を経由の先頭に残す', () => {
+    // 前提: この資料では「山田花子が（県警の発表を）話した」形で載っていた候補を、県警の既存の証言と同じだとユーザーが判断した
+    const target = createCase({ claims: [policeClaim] });
+    const [candidate] = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: '山田 花子', quote: '庭に黒い車が止まっていた' }),
+    ]).candidates;
+
+    const result = candidateToAddedSource(target, 'interview-article', candidate!, policeClaim, sequentialIds());
+
+    // 検証: 山田花子が伝えた手がかりを失わないよう、山田花子 → 湖畔新聞 の順の経由にする
+    expect(result.source.viaPersonIds).toEqual(['person-hanako', 'person-newspaper']);
+  });
 });
 
 describe('selectExistingClaimsForExtraction', () => {
