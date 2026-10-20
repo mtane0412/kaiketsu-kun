@@ -2,11 +2,14 @@
  * 画面のURLを組み立てる関数のテスト
  */
 import { describe, expect, it } from 'vitest';
+import { EMPTY_BOARD_FILTER } from '@/domain/board-filter';
 import {
+  boardFilterQuery,
   boardHref,
   casesHref,
   claimHref,
   disputeHref,
+  hasBoardFilterParams,
   hypothesisHref,
   interviewHref,
   mentionHref,
@@ -16,6 +19,7 @@ import {
   newPersonHref,
   newPlaceHref,
   newTaskHref,
+  parseBoardFilter,
   parseDisputeClaimIds,
   parseTaskLink,
   parseDetailKind,
@@ -63,6 +67,77 @@ describe('boardHref', () => {
 
   it('ケースのIDに含まれる記号は、URLとして安全な形に変換する', () => {
     expect(boardHref('a/b', 'timeline')).toBe('/cases/a%2Fb');
+  });
+
+  it('絞り込みの条件を渡すと、指定した条件だけをクエリに持たせる', () => {
+    const href = boardHref(caseId, 'graph', {
+      ...EMPTY_BOARD_FILTER,
+      when: '1998-08-12T19:00/20:00',
+      personId: 'person-neighbor',
+      personRole: 'speaker',
+    });
+
+    expect(href).toBe('/cases/case-villa?tab=graph&when=1998-08-12T19%3A00%2F20%3A00&person=person-neighbor&role=speaker');
+  });
+
+  it('絞り込みの条件の既定値（関わり方「いずれか」・日時の無い証言を除く）は、クエリに持たせない', () => {
+    expect(boardHref(caseId, 'timeline', { ...EMPTY_BOARD_FILTER, interviewId: 'interview-1' })).toBe(
+      '/cases/case-villa?interview=interview-1'
+    );
+    expect(boardHref(caseId, 'timeline', EMPTY_BOARD_FILTER)).toBe('/cases/case-villa');
+  });
+
+  it('日時の無い証言を含める指定は、日時の範囲とあわせてクエリに持たせる', () => {
+    expect(boardHref(caseId, 'timeline', { ...EMPTY_BOARD_FILTER, when: '1998-08', includeUndated: true, disputeId: 'dispute-1' })).toBe(
+      '/cases/case-villa?when=1998-08&undated=1&dispute=dispute-1'
+    );
+  });
+});
+
+describe('parseBoardFilter', () => {
+  it('URLのクエリから、絞り込みの条件を読み取る', () => {
+    const params = new URLSearchParams('when=1998-08-12&undated=1&person=p1&role=via&interview=i1&dispute=d1');
+
+    expect(parseBoardFilter(params)).toEqual({
+      when: '1998-08-12',
+      includeUndated: true,
+      personId: 'p1',
+      personRole: 'via',
+      interviewId: 'i1',
+      disputeId: 'd1',
+    });
+  });
+
+  it('クエリが無い場合は、何も絞り込まない条件にする', () => {
+    expect(parseBoardFilter(new URLSearchParams('tab=graph'))).toEqual(EMPTY_BOARD_FILTER);
+  });
+
+  it('日時として解釈できない値と、知らない関わり方は、指定していないものとして扱う', () => {
+    // 前提: URLはユーザーが自由に書き換えられるため、例外にはしない
+    const params = new URLSearchParams('when=きのう&person=p1&role=unknown');
+
+    expect(parseBoardFilter(params)).toEqual({ ...EMPTY_BOARD_FILTER, personId: 'p1' });
+  });
+
+  it('boardHref で組み立てたURLを読むと、元の条件に戻る', () => {
+    const filter = { ...EMPTY_BOARD_FILTER, when: '1998-08-12T19:00/20:00', includeUndated: true, personId: 'p1', personRole: 'mentioned' as const };
+    const query = boardHref(caseId, 'lanes', filter).split('?')[1];
+
+    expect(parseBoardFilter(new URLSearchParams(query))).toEqual(filter);
+  });
+});
+
+describe('boardFilterQuery', () => {
+  it('絞り込みの条件だけを、クエリの文字列にする', () => {
+    expect(boardFilterQuery({ ...EMPTY_BOARD_FILTER, personId: 'p1', disputeId: 'd1' })).toBe('person=p1&dispute=d1');
+    expect(boardFilterQuery(EMPTY_BOARD_FILTER)).toBe('');
+  });
+});
+
+describe('hasBoardFilterParams', () => {
+  it('絞り込みのクエリを1つでも持つかどうかを判定する', () => {
+    expect(hasBoardFilterParams(new URLSearchParams('tab=graph&person=p1'))).toBe(true);
+    expect(hasBoardFilterParams(new URLSearchParams('tab=graph'))).toBe(false);
   });
 });
 

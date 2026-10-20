@@ -2,7 +2,7 @@
  * ケースデータからグラフビューのノードとエッジを導出するロジックのテスト
  */
 import { describe, expect, it } from 'vitest';
-import { buildCaseGraph, USER_GRAPH_NODE_ID } from './case-graph';
+import { buildCaseGraph, dropPersonsWithoutClaims, USER_GRAPH_NODE_ID } from './case-graph';
 import { sampleFictionalCase } from './sample-fictional-case';
 import type { Case } from './types';
 
@@ -265,5 +265,37 @@ describe('buildCaseGraph（人物どうしの関係）', () => {
     const relationshipEdge = graph.edges.filter((edge) => edge.kind === 'relates');
 
     expect(new Set(relationshipEdge.map((edge) => edge.id)).size).toBe(relationshipEdge.length);
+  });
+});
+
+describe('dropPersonsWithoutClaims', () => {
+  it('証言につながらない人物のノードと、その人物に張られた関係の線を除く', () => {
+    // 前提: 隣家の住人の目撃だけを残したケース。発言者は隣家の住人、経由は架空日報、言及は別荘の持ち主。
+    // 関係「雇用主」「金銭トラブル？」は、別荘の持ち主と管理人の間に張られている
+    const onlyNeighborClaim: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.filter((claim) => claim.id === 'claim-neighbor'),
+    };
+
+    const graph = dropPersonsWithoutClaims(buildCaseGraph(onlyNeighborClaim));
+
+    expect(graph.nodes.filter((node) => node.kind === 'person').map((node) => node.label)).toEqual([
+      '別荘の持ち主',
+      '隣家の住人',
+      '架空日報 朝刊',
+    ]);
+    // 管理人を除いたため、管理人との関係の線も残らない
+    expect(graph.edges.filter((edge) => edge.kind === 'relates')).toEqual([]);
+    expect(graph.nodes.filter((node) => node.kind === 'claim').map((node) => node.entityId)).toEqual(['claim-neighbor']);
+  });
+
+  it('証言につながる人物どうしの関係の線は残す', () => {
+    // 前提: 別荘の持ち主に言及する証言と、管理人が述べる証言を残す
+    const graph = dropPersonsWithoutClaims(buildCaseGraph(sampleFictionalCase));
+
+    expect(listEdgeKeys(graph, 'relates')).toEqual([
+      'person:person-owner→person:person-caretaker',
+      'person:person-caretaker→person:person-owner',
+    ]);
   });
 });

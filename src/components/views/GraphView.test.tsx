@@ -49,6 +49,18 @@ describe('GraphView', () => {
     expect(caretakerClaim).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/claims/claim-caretaker?tab=graph`);
   });
 
+  it('証言につながらない人物を除く指定をすると、残った証言に関わる人物だけを描く', () => {
+    // 前提: ボードの絞り込みで、管理人の証言だけが残った。管理人の証言は、管理人が述べ、別荘の持ち主に言及する
+    const onlyCaretakerClaim: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.filter((claim) => claim.id === 'claim-caretaker'),
+    };
+    render(<GraphView target={onlyCaretakerClaim} dropPersonsWithoutClaims />);
+
+    expect(screen.getByRole('link', { name: '人物: 管理人' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '人物: 隣家の住人' })).not.toBeInTheDocument();
+  });
+
   it('ユーザーの推測のノードは、開く先の詳細が無いためリンクにしない', () => {
     render(<GraphView target={sampleFictionalCase} />);
 

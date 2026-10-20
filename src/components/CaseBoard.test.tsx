@@ -3,7 +3,7 @@
  *
  * ケースを開く処理は CaseGate が担うため、実際の画面と同じく CaseGate の中に描画します。
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -369,5 +369,125 @@ describe('CaseBoard のキーボード操作', () => {
 
     expect(field).toHaveValue('1/2');
     expect(field).toHaveFocus();
+  });
+});
+
+describe('CaseBoard の絞り込み', () => {
+  /** 時系列のボードに並んだ証言の本文を、上から順に返します。 */
+  function timelineBodies(): (string | null)[] {
+    const timeline = screen.getByRole('list', { name: '時系列' });
+    return within(timeline)
+      .getAllByText(/見回りをしたとき|車が別荘の方向へ走る|明かりがついていて|連絡が取れなくなっている|金銭の問題があった可能性/)
+      .map((element) => element.textContent);
+  }
+
+  /** 「絞り込み」の欄を開きます。 */
+  async function openFilter(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: '絞り込みの条件を開く' }));
+  }
+
+  it('URLに人物の条件があると、その人物が関わる証言だけを時系列に並べ、件数を示す', async () => {
+    // 前提: 管理人は、管理人の見回りの証言の発言者で、ユーザーの推測に言及されている
+    resetMockNavigation('/cases/case-lakeside?person=person-caretaker');
+    await renderBoard();
+
+    await screen.findByRole('list', { name: '時系列' });
+    expect(timelineBodies()).toEqual([expect.stringContaining('見回りをしたとき'), expect.stringContaining('金銭の問題があった可能性')]);
+    expect(screen.getByRole('status', { name: '絞り込みの結果' })).toHaveTextContent('5件中2件の証言を表示しています');
+  });
+
+  it('論点を選んで絞り込むと、条件をURLに持たせ、論点が束ねた証言だけを並べる', async () => {
+    const user = userEvent.setup();
+    await renderBoard();
+    await openFilter(user);
+
+    await user.selectOptions(screen.getByLabelText('論点'), '12日夜、持ち主は別荘にいたか');
+    await user.click(screen.getByRole('button', { name: '絞り込む' }));
+
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside?dispute=dispute-villa-presence');
+    expect(timelineBodies()).toEqual([
+      expect.stringContaining('見回りをしたとき'),
+      expect.stringContaining('車が別荘の方向へ走る'),
+      expect.stringContaining('明かりがついていて'),
+    ]);
+  });
+
+  it('日時の範囲で絞り込むと、範囲と重なる証言だけを並べ、日時の無い証言を除いた件数を示す', async () => {
+    // 前提: 20時〜22時と重なるのは、防犯カメラ（20:10）と隣家の住人（21:00）。架空日報とユーザーの推測は日時を持たない
+    const user = userEvent.setup();
+    await renderBoard();
+    await openFilter(user);
+
+    await user.type(screen.getByLabelText('日時の範囲'), '1998年8月12日20時〜22時');
+    await user.click(screen.getByRole('button', { name: '絞り込む' }));
+
+    expect(timelineBodies()).toEqual([expect.stringContaining('車が別荘の方向へ走る'), expect.stringContaining('明かりがついていて')]);
+    expect(screen.getByRole('status', { name: '絞り込みの結果' })).toHaveTextContent('日時の無い証言2件は除いています');
+  });
+
+  it('絞り込み中の日時の範囲を、入力し直せる画面の表記で入力欄に示す', async () => {
+    resetMockNavigation('/cases/case-lakeside?when=1998-08');
+    const user = userEvent.setup();
+    await renderBoard();
+    await openFilter(user);
+
+    expect(screen.getByLabelText('日時の範囲')).toHaveValue('1998年8月');
+  });
+
+  it('日時として解釈できない範囲では絞り込まず、理由を示す', async () => {
+    const user = userEvent.setup();
+    await renderBoard();
+    await openFilter(user);
+
+    await user.type(screen.getByLabelText('日時の範囲'), '夕飯の後');
+    await user.click(screen.getByRole('button', { name: '絞り込む' }));
+
+    expect(screen.getByLabelText('日時の範囲')).toHaveAttribute('aria-invalid', 'true');
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('「解除」を押すと、すべての証言を並べ、URLから条件を外す', async () => {
+    resetMockNavigation('/cases/case-lakeside?person=person-caretaker');
+    const user = userEvent.setup();
+    await renderBoard();
+
+    await user.click(await screen.findByRole('button', { name: '絞り込みを解除' }));
+
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside');
+    expect(timelineBodies()).toHaveLength(5);
+  });
+
+  it('詳細を開いてからボードに戻っても、絞り込みの条件を保ち、URLにも戻す', async () => {
+    resetMockNavigation('/cases/case-lakeside?person=person-caretaker');
+    await renderBoard();
+    await screen.findByRole('list', { name: '時系列' });
+
+    // 詳細のURLは絞り込みの条件を持たず、「ボードに戻る」もタブだけのURLへ戻る
+    act(() => mockRouter.push('/cases/case-lakeside/claims/claim-caretaker'));
+    act(() => mockRouter.push('/cases/case-lakeside'));
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside?person=person-caretaker'));
+    expect(timelineBodies()).toHaveLength(2);
+  });
+
+  it('表示を切り替えても、同じ条件で絞り込む', async () => {
+    resetMockNavigation('/cases/case-lakeside?person=person-caretaker');
+    const user = userEvent.setup();
+    await renderBoard();
+
+    await switchView(user, '証言者別');
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside?tab=speaker&person=person-caretaker'));
+    // 検証: 管理人の証言とユーザーの推測だけが残り、隣家の住人のグループは無い
+    expect(screen.queryByRole('region', { name: '隣家の住人' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '管理人' })).toBeInTheDocument();
+  });
+
+  it('証言を並べない表示（仮説）では、絞り込みの欄を出さない', async () => {
+    resetMockNavigation('/cases/case-lakeside?tab=hypotheses');
+    await renderBoard();
+
+    await screen.findByRole('heading', { name: '仮説' });
+    expect(screen.queryByRole('button', { name: '絞り込みの条件を開く' })).not.toBeInTheDocument();
   });
 });
