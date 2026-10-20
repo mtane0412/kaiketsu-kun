@@ -14,9 +14,11 @@
  * - 仮説の対象に2人とも含まれていた場合は、観点ごとの証言をまとめ先の対象にまとめます。第三者の説の主唱者も付け替えます。
  * - 2人の間に関係がある場合は、自分自身との関係になってしまうため、まとめずにエラーにします（関係を先に削除してもらいます）。
  *
- * 人物を分ける操作（1人の人物への参照の一部を、新しい人物に移す）は、ここでは扱いません。
+ * 人物を分ける操作（1人の人物への参照の一部を、新しい人物に移す）は src/domain/person-split.ts にあります。
+ * 人物を参照する項目を足した場合は、両方の操作と、person-split.ts の listPersonReferences を合わせて直してください
+ * （person-split.test.ts が、どちらかで付け替え漏れがあると失敗します）。
  */
-import { formatMention, parseContent } from './mention';
+import { replacePersonMentions } from './mention';
 import { normalizeName } from './person-names';
 import type { Case, Id, Person } from './types';
 
@@ -28,17 +30,6 @@ function replaceInList(ids: Id[], fromId: Id, intoId: Id): Id[] {
 /** IDが from なら into に付け替えます。 */
 function replaceId<T extends Id | undefined>(id: T, fromId: Id, intoId: Id): T | Id {
   return id === fromId ? intoId : id;
-}
-
-/** 本文・メモの人物のメンションのうち、from を指すものを into に付け替えます。表記はそのまま残します。 */
-function replaceInContent(content: string, fromId: Id, intoId: Id): string {
-  return parseContent(content)
-    .map((segment) => {
-      if (segment.type !== 'mention') return segment.text;
-      const { kind, id, label } = segment;
-      return formatMention({ kind, id: kind === 'person' && id === fromId ? intoId : id, label });
-    })
-    .join('');
 }
 
 /** まとめる人物の名前・別名・識別子・メモを、まとめ先の人物に引き継ぎます。 */
@@ -87,9 +78,9 @@ export function mergePersons(target: Case, fromId: Id, intoId: Id): Case {
       .filter((person) => person.id !== fromId)
       .map((person) => {
         const current = person.id === intoId ? mergedInto : person;
-        return current.note === undefined ? current : { ...current, note: replaceInContent(current.note, fromId, intoId) };
+        return current.note === undefined ? current : { ...current, note: replacePersonMentions(current.note, fromId, intoId) };
       }),
-    places: target.places.map((place) => (place.note === undefined ? place : { ...place, note: replaceInContent(place.note, fromId, intoId) })),
+    places: target.places.map((place) => (place.note === undefined ? place : { ...place, note: replacePersonMentions(place.note, fromId, intoId) })),
     claims: target.claims.map((claim) => {
       const speakerIds = claim.speaker.kind === 'person' ? replaceInList(claim.speaker.personIds, fromId, intoId) : [];
       const sources = claim.sources
@@ -102,7 +93,7 @@ export function mergePersons(target: Case, fromId: Id, intoId: Id): Case {
         speaker: claim.speaker.kind === 'person' ? { kind: 'person' as const, personIds: speakerIds } : claim.speaker,
         sources,
         mentionedPersonIds: replaceInList(claim.mentionedPersonIds, fromId, intoId),
-        content: replaceInContent(claim.content, fromId, intoId),
+        content: replacePersonMentions(claim.content, fromId, intoId),
       };
     }),
     interviews: target.interviews.map((interview) => {

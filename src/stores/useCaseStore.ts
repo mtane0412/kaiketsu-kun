@@ -26,9 +26,10 @@ import { detachClaimFromHypotheses } from '@/domain/hypotheses';
 import type { MentionKind } from '@/domain/mention';
 import { movePersonLane } from '@/domain/person-lane-order';
 import { mergePersons } from '@/domain/person-merge';
+import { splitPerson } from '@/domain/person-split';
 import { detachFromTasks, type TaskLinkKind } from '@/domain/tasks';
 import { moveTimelineItem, placeTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
-import type { Case, Id } from '@/domain/types';
+import type { Case, Id, Person } from '@/domain/types';
 import {
   CaseNotFoundError,
   createEmptyCase,
@@ -138,6 +139,12 @@ type CaseStore = {
    * まとめられない場合（同じ人物・存在しない人物・2人の間に関係がある場合など）は例外を投げ、ケースを変更しません。
    */
   mergePersons: (fromId: Id, intoId: Id) => void;
+  /**
+   * 人物 fromId を参照している箇所のうち、moveKeys で選んだ参照だけを新しい人物 newPerson に移します（src/domain/person-split.ts）。
+   * 新しい人物はケースに足し、選ばなかった参照は fromId の人物に残します。
+   * 分けられない場合（存在しない人物・既にあるIDの新しい人物・参照していない箇所を選んだ場合など）は例外を投げ、ケースを変更しません。
+   */
+  splitPerson: (fromId: Id, newPerson: Person, moveKeys: string[]) => void;
 };
 
 /** ケースを開いていない状態で、ケースを変更しようとしたときのメッセージです。 */
@@ -349,6 +356,15 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
         const violations = findCaseViolations(merged);
         if (violations.length > 0) throw new Error(`人物をまとめられません\n${violations.join('\n')}`);
         return merged;
+      }),
+
+    splitPerson: (fromId, newPerson, moveKeys) =>
+      updateCurrentCase((current) => {
+        const split = splitPerson(current, fromId, newPerson, moveKeys);
+        // 分けた結果が、ケースの規則に反する場合は、保存せずに理由を示す（domain の splitPerson が守らない規則の取りこぼしに備える）
+        const violations = findCaseViolations(split);
+        if (violations.length > 0) throw new Error(`人物を分けられません\n${violations.join('\n')}`);
+        return split;
       }),
 
     movePersonLane: (personId, overPersonId) =>
