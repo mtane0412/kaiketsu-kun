@@ -13,7 +13,7 @@ import { CaseList } from './CaseList';
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
 beforeEach(() => {
-  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null, migrationError: null });
+  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveErrors: [], migrationError: null });
   resetMockNavigation('/');
 });
 
@@ -114,14 +114,22 @@ describe('CaseList', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('ケース case-unmigrated を新しい保存先へ移せませんでした');
   });
 
-  it('前に開いていたケースの変更を保存できなかった場合は、一覧でもそのことを示す', async () => {
+  it('前に開いていたケースの変更を保存できなかった場合は、移せなかったケースの理由とは別に示し、閉じるボタンで消せる', async () => {
+    const user = userEvent.setup();
+    // 前提: 移せなかったケースがあり、さらに前に開いていたケースの変更が失われている
+    localStorage.setItem(`${CASE_KEY_PREFIX}case-unmigrated`, '{"id":"case-unmigrated"}');
     useCaseStore.setState({
-      saveError: { caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true },
+      saveErrors: [{ caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true }],
     });
 
     render(<CaseList />);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('ケース「山荘の火災」の変更をブラウザに保存できませんでした');
+    // 検証: どちらの知らせも、もう一方に隠されずに表示される
+    expect(await screen.findByText(/ケース case-unmigrated を新しい保存先へ移せませんでした/)).toBeInTheDocument();
+    expect(screen.getByText(/ケース「山荘の火災」の変更をブラウザに保存できませんでした/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'ケース「山荘の火災」を保存できなかったことの表示を閉じる' }));
+
+    expect(screen.queryByText(/ケース「山荘の火災」の変更をブラウザに保存できませんでした/)).not.toBeInTheDocument();
   });
 
   it('ケースを削除する前に確認し、承認された場合は一覧から取り除く', async () => {

@@ -24,6 +24,7 @@ import { nanoid } from 'nanoid';
 import { parseCase } from '@/domain/case-schema';
 import { withoutTranscripts } from '@/domain/transcript-separation';
 import type { Case, Id } from '@/domain/types';
+import { inTransaction } from './idb-transaction';
 
 /** ケースを保存する IndexedDB のデータベース名です。 */
 export const DATABASE_NAME = 'kaiketsu-kun';
@@ -192,54 +193,6 @@ function transcriptsOf(target: Case): Map<Id, string> {
     if (interview.transcript !== undefined) transcripts.set(interview.id, interview.transcript);
   }
   return transcripts;
-}
-
-/** 読み書きのトランザクションのうち、inTransaction が使う部分です。 */
-type AbortableTransaction = { abort(): void; done: Promise<void> };
-
-/**
- * トランザクションの中で body を実行し、body が出した要求とトランザクションの完了をすべて待ってから、body の結果を返します。
- * body は、待たずに出しっぱなしにする要求も含めて、要求をすべて track に渡します。
- *
- * - track に渡した要求には、その場で失敗の受け手を付けます。body が別の要求を待っている間に失敗しても、処理されない失敗として報告されません。
- * - body が例外を投げた場合は、トランザクションを中断して、それまでの書き込みを取り消してから、その例外を投げ直します
- *   （中断しないと、例外より前に出した書き込みだけが反映されてしまうためです）。
- * - body が成功しても、要求かトランザクションが失敗した場合は、最初の失敗を投げます。
- */
-async function inTransaction<T>(
-  transaction: AbortableTransaction,
-  body: (track: <V>(request: Promise<V>) => Promise<V>) => Promise<T>
-): Promise<T> {
-  const settled: Promise<PromiseSettledResult<unknown>>[] = [];
-  const track = <V>(request: Promise<V>): Promise<V> => {
-    settled.push(
-      request.then(
-        (value): PromiseSettledResult<unknown> => ({ status: 'fulfilled', value }),
-        (reason: unknown): PromiseSettledResult<unknown> => ({ status: 'rejected', reason })
-      )
-    );
-    return request;
-  };
-  track(transaction.done);
-
-  let outcome: { succeeded: true; value: T } | { succeeded: false; error: unknown };
-  try {
-    outcome = { succeeded: true, value: await body(track) };
-  } catch (error) {
-    outcome = { succeeded: false, error };
-    try {
-      transaction.abort();
-    } catch (abortError) {
-      // ブラウザが既にトランザクションを中断している場合は、中断し直せない（InvalidStateError）。書き込みは取り消されているため、元の例外を伝える
-      if (!(abortError instanceof DOMException && abortError.name === 'InvalidStateError')) throw abortError;
-    }
-  }
-
-  const results = await Promise.all(settled);
-  if (!outcome.succeeded) throw outcome.error;
-  const failure = results.find((result) => result.status === 'rejected');
-  if (failure !== undefined) throw failure.reason;
-  return outcome.value;
 }
 
 /**

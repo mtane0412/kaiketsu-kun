@@ -28,7 +28,7 @@ function renderInFrame(caseId: string) {
 }
 
 beforeEach(() => {
-  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveError: null, migrationError: null });
+  useCaseStore.setState({ currentCase: null, summaries: [], loadError: null, saveErrors: [], migrationError: null });
 });
 
 describe('CaseGate', () => {
@@ -47,7 +47,7 @@ describe('CaseGate', () => {
 
     act(() =>
       useCaseStore.setState({
-        saveError: { caseId: sampleFictionalCase.id, caseName: sampleFictionalCase.name, reason: 'QuotaExceededError', discarded: false },
+        saveErrors: [{ caseId: sampleFictionalCase.id, caseName: sampleFictionalCase.name, reason: 'QuotaExceededError', discarded: false }],
       })
     );
 
@@ -55,7 +55,7 @@ describe('CaseGate', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('JSON を書き出してください');
     expect(screen.getByText('ケース名: 湖畔の別荘失踪事件（架空）')).toBeInTheDocument();
     // 前提: 変更が画面に残っている間は、書き出すまで示し続けるため、閉じるボタンを出さない
-    expect(screen.queryByRole('button', { name: '保存できなかったことの表示を閉じる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /表示を閉じる/ })).not.toBeInTheDocument();
   });
 
   it('前に開いていたケースの変更が失われた場合は、そのケースの名前を示し、閉じるボタンで表示を消せる', async () => {
@@ -66,12 +66,12 @@ describe('CaseGate', () => {
 
     act(() =>
       useCaseStore.setState({
-        saveError: { caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true },
+        saveErrors: [{ caseId: 'case-previous', caseName: '山荘の火災', reason: 'QuotaExceededError', discarded: true }],
       })
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('ケース「山荘の火災」の変更をブラウザに保存できませんでした');
-    await user.click(screen.getByRole('button', { name: '保存できなかったことの表示を閉じる' }));
+    await user.click(screen.getByRole('button', { name: 'ケース「山荘の火災」を保存できなかったことの表示を閉じる' }));
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
