@@ -7,9 +7,10 @@
  *
  * 「注目する時間帯」（犯行の推定時刻など）を入力すると、その時間帯を全列に重ねて塗り、
  * 各列の見出しに、その時間帯と重なる証言があるか（「証言あり」）、無いか（「空白」）を示します。
- * 「表示する範囲」を入力すると、時刻軸をその範囲に絞ります。入力しない場合は、注目する時間帯の前後、
+ * ボードの絞り込みで日時の範囲を指定した場合（axisRange）は、時刻軸をその範囲に絞ります。指定しない場合は、注目する時間帯の前後、
  * または、すべての帯を含む範囲を表示します（resolveAxisRange）。
- * どちらも、本文の「@」と同じ日時の表記（「〜」でつないだ区間を含む。src/domain/date-input.ts）で書きます。
+ * 以前は時刻軸の中に「表示する範囲」の入力欄を置いていましたが、ボードの絞り込みの日時の範囲と役割が重なるため、そちらに一本化しました。
+ * 注目する時間帯は、本文の「@」と同じ日時の表記（「〜」でつないだ区間を含む。src/domain/date-input.ts）で書きます。
  * 入力はケースに保存しません。表示の都合であり、犯行の推定時刻そのものも、誰かの証言として記録するものだからです。
  *
  * 精度の粗い証言（年・月・日までの日時や、日付で書いた期間）は、その期間全体の長い帯になります。
@@ -36,7 +37,7 @@ import {
   type PersonTimeBand,
 } from '@/domain/person-time-axis';
 import { formatTimeRef, intervalsOverlap, toInterval, type Interval } from '@/domain/time-ref';
-import type { Case, PersonKind } from '@/domain/types';
+import type { Case, PersonKind, TimeRef } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
 import { INPUT_CLASS } from '../forms/fields';
 import { claimHref } from '../routes';
@@ -116,16 +117,16 @@ type PersonTimeAxisViewProps = {
   target: Case;
   /** 列にする人物の種別です。 */
   shownKinds: ReadonlySet<PersonKind>;
+  /** 表示する範囲です。ボードの絞り込みの日時の範囲を渡します。 */
+  axisRange?: TimeRef;
 };
 
-export function PersonTimeAxisView({ target, shownKinds }: PersonTimeAxisViewProps) {
+export function PersonTimeAxisView({ target, shownKinds, axisRange }: PersonTimeAxisViewProps) {
   const caseId = useCaseId();
   const [focusText, setFocusText] = useState('');
-  const [rangeText, setRangeText] = useState('');
   const axis = useMemo(() => buildPersonTimeAxis(target, shownKinds), [target, shownKinds]);
   const focus = parseWindow(focusText);
-  const explicitRange = parseWindow(rangeText);
-  const range = resolveAxisRange(axis.extent, focus.interval, explicitRange.interval);
+  const range = resolveAxisRange(axis.extent, focus.interval, axisRange === undefined ? null : toInterval(axisRange));
   const ticks = range ? buildTimeTicks(range) : [];
   // 最小の高さで描いた短い帯どうしが重ならないよう、最小の高さが表示する範囲の中で占める長さを考えて、横に並べる位置を決め直す
   const minVisibleMs = range ? ((range.end - range.start) * MIN_BAND_HEIGHT_PX) / AXIS_HEIGHT_PX : 0;
@@ -149,7 +150,6 @@ export function PersonTimeAxisView({ target, shownKinds }: PersonTimeAxisViewPro
     <div className="space-y-3">
       <div className="flex flex-wrap items-start gap-4">
         <TimeWindowField label="注目する時間帯" value={focusText} invalid={focus.invalid} onChange={setFocusText} />
-        <TimeWindowField label="表示する範囲" value={rangeText} invalid={explicitRange.invalid} onChange={setRangeText} />
       </div>
       <div className="text-xs text-muted-foreground">
         <p>帯は、証言が述べる日時の幅です。斜線の時間帯は、その人物の所在を述べる証言がありません。</p>

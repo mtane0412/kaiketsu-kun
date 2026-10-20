@@ -42,7 +42,7 @@
 import { cn } from 'cn';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { buildCaseGraph } from '@/domain/case-graph';
+import { buildCaseGraph, dropPersonsWithoutClaims } from '@/domain/case-graph';
 import { parseDateInput } from '@/domain/date-input';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
@@ -287,13 +287,21 @@ function NodeShape({ node, clipPathId }: { node: PositionedGraphNode; clipPathId
 
 type GraphViewProps = {
   target: Case;
+  /**
+   * true の場合は、証言につながらない人物のノードを描きません（src/domain/case-graph.ts の dropPersonsWithoutClaims）。
+   * ボードの絞り込みで証言を減らしたときに、残った証言に関わらない人物が孤立して並ばないようにするために使います。
+   */
+  dropPersonsWithoutClaims?: boolean;
 };
 
-export function GraphView({ target }: GraphViewProps) {
+export function GraphView({ target, dropPersonsWithoutClaims: shouldDropPersons = false }: GraphViewProps) {
   const caseId = useCaseId();
   const idPrefix = useId();
   const svgRef = useRef<SVGSVGElement>(null);
-  const layout = useMemo(() => layoutGraph(buildCaseGraph(target)), [target]);
+  const layout = useMemo(() => {
+    const graph = buildCaseGraph(target);
+    return layoutGraph(shouldDropPersons ? dropPersonsWithoutClaims(graph) : graph);
+  }, [target, shouldDropPersons]);
 
   const [filter, setFilter] = useState<GraphFilter>(DEFAULT_FILTER);
   /** 関係の線を絞り込む時点の、入力中の文字列です。空欄の間は絞り込みません。 */
