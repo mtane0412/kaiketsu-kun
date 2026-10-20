@@ -17,6 +17,8 @@
  * 資料（聴取）の相手を持っていた頃のデータは、相手を取り除き、タイトルの無い資料は相手の名前をタイトルにします。
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
+ * 主唱者・唱えた時期・立場の変化を持たない頃の仮説は、読み手自身の仮説として受け付けます。
+ * 時期の順に並んでいない立場の変化は、時期の順に並べ直して受け付けます（sortStanceChanges）。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
  * 論点（disputes）を持たない頃のデータは、論点を空として補います。未了事項の論点のひもづけ（disputeIds）を持たない頃のデータは、ひもづけを空として補います。
  * 関係の期間（since・until）を持たない頃のデータは、期間を持たない（すべての時点で成り立つ）関係として受け付けます。
@@ -31,6 +33,7 @@ import { INTERVIEW_GRADES } from './interview-grade';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
+import { sortStanceChanges } from './hypotheses';
 import { settleTimelineItems } from './timeline-order';
 import { interviewIdsOf } from './claim-sources';
 import type { Case, ClaimSource, Id, Interview, Person, Speaker } from './types';
@@ -245,7 +248,7 @@ const caseSchema = z.object({
       z.object({
         id: idSchema,
         claimIds: z.tuple([idSchema, idSchema]),
-        kind: z.enum(['supports', 'contradicts', 'sameSubject']),
+        kind: z.enum(['supports', 'contradicts', 'sameSubject', 'revises']),
         reason: z.string().optional(),
       })
     )
@@ -271,6 +274,20 @@ const caseSchema = z.object({
             }),
           })
         ),
+        // 主唱者・唱えた時期・立場の変化を持たない頃に保存した仮説も読み込めるよう、省略を許す（読み手自身の仮説として扱う）
+        proponentPersonId: idSchema.optional(),
+        proposedAt: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+        stanceChanges: z
+          .array(
+            z.object({
+              id: idSchema,
+              kind: z.enum(['withdrawn', 'revised', 'reaffirmed']),
+              at: z.string().refine(isValidTimeRef, `日時は ${TIME_REF_FORMAT_EXAMPLES} のいずれかの形式で指定してください`).optional(),
+              basisClaimIds: z.array(idSchema),
+              note: z.string().optional(),
+            })
+          )
+          .optional(),
       })
     )
     .optional(),
@@ -410,6 +427,16 @@ export function findCaseViolations(target: Case): string[] {
     if (crossCheck.claimIds[0] === crossCheck.claimIds[1]) {
       violations.push(`同じ証言どうしは照合できません: ${crossCheck.id}`);
     }
+    // 撤回・訂正は向きを持つため、逆向きの撤回・訂正が先に登録されていれば矛盾として拒否する
+    const [revisingId, revisedId] = crossCheck.claimIds;
+    const hasReverseRevision =
+      crossCheck.kind === 'revises' &&
+      target.crossChecks
+        .slice(0, target.crossChecks.indexOf(crossCheck))
+        .some((other) => other.kind === 'revises' && other.claimIds[0] === revisedId && other.claimIds[1] === revisingId);
+    if (hasReverseRevision) {
+      violations.push(`同じ2件の証言の間で、撤回・訂正を両方向に登録することはできません: ${crossCheck.id}`);
+    }
   }
   for (const hypothesis of target.hypotheses) {
     hypothesis.supportingClaimIds.forEach((id) => check(claimIds, id, '証言'));
@@ -435,6 +462,24 @@ export function findCaseViolations(target: Case): string[] {
     const targetPersonIds = hypothesis.targets.map((hypothesisTarget) => hypothesisTarget.personId);
     if (new Set(targetPersonIds).size !== targetPersonIds.length) {
       violations.push(`同じ人物を仮説の対象に2回以上含めることはできません: ${hypothesis.id}`);
+    }
+    if (hypothesis.proponentPersonId !== undefined) check(personIds, hypothesis.proponentPersonId, '人物');
+    // 唱えた時期と立場の変化は、主唱者の行動を記録するもののため、読み手自身の仮説には持たせない
+    if (hypothesis.proponentPersonId === undefined && hypothesis.proposedAt !== undefined) {
+      violations.push(`主唱者の無い仮説に、唱えた時期は指定できません: ${hypothesis.id}`);
+    }
+    const stanceChanges = hypothesis.stanceChanges ?? [];
+    if (hypothesis.proponentPersonId === undefined && stanceChanges.length > 0) {
+      violations.push(`主唱者の無い仮説に、主唱者の立場の変化は指定できません: ${hypothesis.id}`);
+    }
+    if (new Set(stanceChanges.map((change) => change.id)).size !== stanceChanges.length) {
+      violations.push(`立場の変化のIDが重複しています: ${hypothesis.id}`);
+    }
+    for (const stanceChange of stanceChanges) {
+      stanceChange.basisClaimIds.forEach((id) => check(claimIds, id, '証言'));
+      if (new Set(stanceChange.basisClaimIds).size !== stanceChange.basisClaimIds.length) {
+        violations.push(`立場の変化に同じ証言を2回以上ひもづけることはできません: ${hypothesis.id}`);
+      }
     }
   }
   for (const task of target.tasks) {
@@ -627,7 +672,10 @@ export function parseCase(data: unknown): Case {
     personLaneOrder,
     interviews: migrateLegacyInterviewSubjects(interviews, persons),
     crossChecks,
-    hypotheses,
+    // 立場の変化は、最後の要素を最新の立場として扱うため、時期の順に並べ直して受け付ける
+    hypotheses: hypotheses.map((hypothesis) =>
+      hypothesis.stanceChanges === undefined ? hypothesis : { ...hypothesis, stanceChanges: sortStanceChanges(hypothesis.stanceChanges) }
+    ),
     tasks,
     disputes,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),

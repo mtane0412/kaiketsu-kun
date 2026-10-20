@@ -2,10 +2,11 @@
  * 証言の詳細に並べる「照合」
  *
  * 開いている証言を含む照合（CrossCheck）の一覧と、登録・編集・削除をまとめます。
- * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている）を記録した一次データです。
+ * 照合は、読み手が証言同士を見比べて見つけた判断（裏付ける・食い違う・同じ事柄を述べている・撤回・訂正している）を記録した一次データです。
  * 自動では判定しません。どちらの証言が正しいかも判定しません。
  *
  * 各行には、照合の種類・相手の証言へのリンク・相手の証言が載っている資料（ある場合）・理由（ある場合）を並べます。
+ * 撤回・訂正の照合は向きを持つため、種類の代わりに、開いている証言が撤回・訂正した側かされた側かを示します（crossCheckLabelFor）。
  * 資料は、媒体・日付（転載なら原典の発行日）・資料の格の短い表示で示します（証言の表示 ClaimView の interviewSources）。
  * 同じ媒体が日によって違う内容を報じる場合に、どの資料どうしの照合かを、相手の証言を開かずに見比べられるようにするためです。相手の証言へのリンクで「証言 → 照合 → 相手の証言」とたどれます。
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
@@ -24,8 +25,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
-import { buildClaimCrossChecks, type ClaimCrossCheckView } from '@/domain/cross-checks';
-import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
+import { buildClaimCrossChecks, crossCheckLabelFor, type ClaimCrossCheckView } from '@/domain/cross-checks';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -44,9 +44,10 @@ const SECTION_LABEL = '照合';
  * 編集・削除のボタンの、読み上げ用の名前を組み立てます。
  * 1件の証言が複数の照合を持ち、同じ相手との間にも種類の異なる照合を登録できるため、
  * ボタンの名前には相手の証言の名前と照合の種類を含めて、どの照合への操作かを区別できるようにします。
+ * 撤回・訂正の照合では、種類の代わりに、開いている証言が撤回・訂正した側かされた側かを含めます（crossCheckLabelFor）。
  */
-function actionLabelOf(view: ClaimCrossCheckView, action: string): string {
-  return `「${claimLabelOf(view.other)}」との照合（${CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}）を${action}`;
+function actionLabelOf(view: ClaimCrossCheckView, claimId: Id, action: string): string {
+  return `「${claimLabelOf(view.other)}」との照合（${crossCheckLabelFor(view.crossCheck, claimId)}）を${action}`;
 }
 
 /** 入力フォームの状態です。編集の場合は、対象の照合のIDを持ちます。 */
@@ -58,6 +59,10 @@ type CrossCheckSectionProps = {
   tab: TabKey;
 };
 
+/**
+ * 開いている証言の照合の一覧と、登録・編集・削除・反応の記録の操作を描画します。
+ * 撤回・訂正の照合は、開いている証言がどちらの側かを示します。
+ */
 export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
   const currentCase = useCurrentCase();
   const caseId = useCaseId();
@@ -94,7 +99,7 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
             const sourceLabels = view.other.interviewSources.map((source) => source.label);
             return (
               <li key={view.crossCheck.id} className="space-y-2 rounded-lg border bg-card p-3">
-                <p className="text-xs font-semibold">{CROSS_CHECK_KIND_LABELS[view.crossCheck.kind]}</p>
+                <p className="text-xs font-semibold">{crossCheckLabelFor(view.crossCheck, claimId)}</p>
                 <ClaimLink view={view.other} tab={tab} />
                 {sourceLabels.length > 0 && <p className="text-xs text-muted-foreground">資料: {sourceLabels.join(' / ')}</p>}
                 {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
@@ -102,7 +107,7 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
                 <div className="flex items-center justify-end gap-2">
                   <Link
                     href={newDisputeHref(caseId, tab, view.crossCheck.claimIds)}
-                    aria-label={actionLabelOf(view, 'もとに論点を作る')}
+                    aria-label={actionLabelOf(view, claimId, 'もとに論点を作る')}
                     className={`mr-auto ${buttonVariants({ variant: 'ghost', size: 'sm' })}`}
                   >
                     論点を作る
@@ -111,14 +116,14 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label={actionLabelOf(view, '編集')}
+                    aria-label={actionLabelOf(view, claimId, '編集')}
                     onClick={() => setForm({ kind: 'edit', crossCheckId: view.crossCheck.id })}
                   >
                     編集
                   </Button>
                   <DeleteConfirmButton
                     iconOnly
-                    label={actionLabelOf(view, '削除')}
+                    label={actionLabelOf(view, claimId, '削除')}
                     title="この照合を削除しますか？"
                     description="この照合をケースから削除します。この操作は取り消せません。照合した証言は削除しません。"
                     onConfirm={() => handleDelete(view.crossCheck.id)}

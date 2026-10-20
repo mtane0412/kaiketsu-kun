@@ -337,6 +337,66 @@ describe('ClaimDetail', () => {
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言を束ねた論点1件から、この証言を外します。');
   });
 
+  it('第三者の説の、主唱者の立場の変化の根拠にした証言では、立場として「主唱者の撤回の根拠」などと示す', async () => {
+    // 前提: 架空の書籍が唱えた説を、新聞の記事の証言を根拠に撤回したケース
+    await openTestCase({
+      ...sampleFictionalCase,
+      hypotheses: [
+        {
+          id: 'hypothesis-book-theory',
+          title: '持ち主は自分で姿を消した',
+          status: 'open',
+          supportingClaimIds: [],
+          opposingClaimIds: [],
+          targets: [],
+          proponentPersonId: 'person-book',
+          stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-report'] }],
+        },
+      ],
+    });
+    render(<ClaimDetail claimId="claim-report" />);
+
+    const hypothesis = screen.getByRole('region', { name: 'この証言を使っている仮説' });
+    expect(within(hypothesis).getByRole('listitem')).toHaveTextContent('主唱者の撤回の根拠');
+  });
+
+  it('立場の変化の根拠にした証言の削除の確認では、仮説からひもづけを外すことを伝える', async () => {
+    // 前提: 新聞の記事の証言は、架空の書籍の説の撤回の根拠にだけひもづいている
+    await openTestCase({
+      ...sampleFictionalCase,
+      hypotheses: [
+        {
+          id: 'hypothesis-book-theory',
+          title: '持ち主は自分で姿を消した',
+          status: 'open',
+          supportingClaimIds: [],
+          opposingClaimIds: [],
+          targets: [],
+          proponentPersonId: 'person-book',
+          stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-report'] }],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-report" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた仮説1件から、ひもづけを外します。');
+  });
+
+  it('撤回・訂正の照合は、開いている証言が撤回・訂正された側であることを示す', async () => {
+    // 前提: 防犯カメラの証言が、新聞の記事の証言を訂正したケース
+    await openTestCase({
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-revision', claimIds: ['claim-police-camera', 'claim-report'], kind: 'revises' }],
+    });
+    render(<ClaimDetail claimId="claim-report" />);
+
+    const crossCheck = screen.getByRole('region', { name: '照合' });
+    expect(within(crossCheck).getByRole('listitem')).toHaveTextContent('この証言を撤回・訂正した証言');
+  });
+
   it('どの仮説にも使われていない証言では、仮説の欄を表示しない', () => {
     render(<ClaimDetail claimId="claim-report" />);
 

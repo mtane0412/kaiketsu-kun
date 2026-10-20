@@ -5,6 +5,7 @@
  * 否定されていない仮説は、有力・検討中の順に並べます。否定された仮説は削除せずに残し、
  * 別の一覧に、否定の理由とともに控えめな見た目で並べます（導出は src/domain/hypotheses.ts の buildHypothesisList）。
  * 各仮説は、見出しを仮説の詳細ページへのリンクにし、状態・支える証言と反する証言の件数・対象の人物を添えます。
+ * 第三者の説（主唱者を持つ仮説）には、主唱者と唱えた時期、主唱者の最新の立場の変化（撤回など）を添え、読み手自身の仮説と区別します。
  *
  * 注意: 仮説の登録・編集は、仮説の詳細ページ（HypothesisDetail）で行います。
  */
@@ -14,7 +15,8 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { buildHypothesisList, type HypothesisListItem } from '@/domain/hypotheses';
-import { HYPOTHESIS_STATUS_LABELS } from '@/domain/labels';
+import { HYPOTHESIS_STANCE_CHANGE_KIND_LABELS, HYPOTHESIS_STATUS_LABELS } from '@/domain/labels';
+import { formatTimeRef } from '@/domain/time-ref';
 import type { Case } from '@/domain/types';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -31,7 +33,7 @@ type HypothesisListViewProps = {
 /** 仮説1件の行です。 */
 function HypothesisItem({ item }: { item: HypothesisListItem }) {
   const caseId = useCaseId();
-  const { hypothesis, targetPersons } = item;
+  const { hypothesis, targetPersons, proponent, latestStanceChange } = item;
   const isRejected = hypothesis.status === 'rejected';
 
   return (
@@ -47,6 +49,18 @@ function HypothesisItem({ item }: { item: HypothesisListItem }) {
           {hypothesis.title}
         </Link>
       </div>
+      {proponent && (
+        <p className="text-xs">
+          主唱者: {proponent.name}
+          {hypothesis.proposedAt && `（${formatTimeRef(hypothesis.proposedAt)}）`}
+          {latestStanceChange && (
+            <span className="ml-2 font-semibold">
+              主唱者が{HYPOTHESIS_STANCE_CHANGE_KIND_LABELS[latestStanceChange.kind]}
+              {latestStanceChange.at && `（${formatTimeRef(latestStanceChange.at)}）`}
+            </span>
+          )}
+        </p>
+      )}
       {hypothesis.description && <p className="whitespace-pre-line text-sm">{hypothesis.description}</p>}
       {isRejected && hypothesis.rejectionReason && (
         <p className="whitespace-pre-line text-sm">

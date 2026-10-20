@@ -51,6 +51,34 @@ describe('HypothesisListView', () => {
     );
   });
 
+  it('第三者の説には、主唱者と唱えた時期、主唱者の最新の立場の変化を添え、読み手自身の仮説と区別する', () => {
+    // 前提: 架空の書籍が2018年に唱え、2020年5月に撤回した説を加えたケース
+    const caseWithTheory = {
+      ...sampleFictionalCase,
+      hypotheses: [
+        ...sampleFictionalCase.hypotheses,
+        {
+          id: 'hypothesis-book-theory',
+          title: '持ち主は自分で姿を消した',
+          status: 'open' as const,
+          supportingClaimIds: [],
+          opposingClaimIds: [],
+          targets: [],
+          proponentPersonId: 'person-book',
+          proposedAt: '2018',
+          stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn' as const, at: '2020-05', basisClaimIds: [] }],
+        },
+      ],
+    };
+    render(<HypothesisListView target={caseWithTheory} />);
+
+    const [readerHypothesis, bookTheory] = within(screen.getByRole('list', { name: '仮説の一覧' })).getAllByRole('listitem');
+    expect(bookTheory).toHaveTextContent('主唱者: 湖畔の夏 20年目の証言（架空の書籍）（2018年）');
+    expect(bookTheory).toHaveTextContent('主唱者が撤回（2020年5月）');
+    // 検証: 読み手自身の仮説には、主唱者を示さない
+    expect(readerHypothesis).not.toHaveTextContent('主唱者');
+  });
+
   it('仮説が1件も無い場合は、登録を促す案内を表示する', () => {
     render(<HypothesisListView target={{ ...sampleFictionalCase, hypotheses: [] }} />);
 

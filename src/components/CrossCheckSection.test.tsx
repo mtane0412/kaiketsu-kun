@@ -174,6 +174,43 @@ describe('CrossCheckSection', () => {
     );
   });
 
+  it('撤回・訂正の照合は、どちらがどちらを撤回・訂正したかを選んで保存し、撤回・訂正した証言を1件目に置く', async () => {
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '照合を追加' }));
+    const registerRegion = screen.getByRole('region', { name: '照合の登録' });
+    await user.selectOptions(within(registerRegion).getByLabelText('相手の証言'), 'claim-report');
+    // 検証: 向きの欄は、撤回・訂正を選んだときだけ表示する
+    expect(within(registerRegion).queryByRole('group', { name: '撤回・訂正の向き' })).not.toBeInTheDocument();
+    await user.click(within(registerRegion).getByRole('radio', { name: '撤回・訂正している' }));
+    const direction = within(registerRegion).getByRole('group', { name: '撤回・訂正の向き' });
+    await user.click(within(direction).getByRole('radio', { name: '相手の証言が、この証言を撤回・訂正している' }));
+    await user.click(within(registerRegion).getByRole('button', { name: '照合を保存' }));
+
+    const addedCrossCheck = openedCase().crossChecks.find((crossCheck) => crossCheck.kind === 'revises');
+    expect(addedCrossCheck?.claimIds).toEqual(['claim-report', 'claim-neighbor']);
+  });
+
+  it('撤回・訂正の照合を編集するときは、登録済みの向きを初期値にし、向きを入れ替えて保存できる', async () => {
+    // 前提: 隣家の住人の証言が、新聞の記事の証言を訂正したと登録されている
+    await openTestCase({
+      ...sampleFictionalCase,
+      crossChecks: [{ id: 'cross-check-revision', claimIds: ['claim-neighbor', 'claim-report'], kind: 'revises' }],
+    });
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    // 検証: 操作のボタンの名前にも、開いている証言がどちらの側かを含める
+    await user.click(screen.getByRole('button', { name: /との照合（この証言が撤回・訂正した証言）を編集/ }));
+    const direction = within(screen.getByRole('region', { name: '照合の編集' })).getByRole('group', { name: '撤回・訂正の向き' });
+    expect(within(direction).getByRole('radio', { name: 'この証言が、相手の証言を撤回・訂正している' })).toBeChecked();
+    await user.click(within(direction).getByRole('radio', { name: '相手の証言が、この証言を撤回・訂正している' }));
+    await user.click(screen.getByRole('button', { name: '照合を保存' }));
+
+    expect(openedCase().crossChecks[0]?.claimIds).toEqual(['claim-report', 'claim-neighbor']);
+  });
+
   it('照合を削除しても、照合した証言は残る', async () => {
     const user = userEvent.setup();
     renderNeighborCrossCheck();
@@ -245,6 +282,18 @@ describe('CrossCheckSection の反応の記録', () => {
     expect(caseData.crossChecks.find((crossCheck) => crossCheck.claimIds.includes(reactionClaimId))).toMatchObject({
       kind: 'supports',
     });
+  });
+
+  it('反応の種類には、撤回・訂正を並べない', async () => {
+    // 前提: 撤回・訂正は同じ発言者が前の発言を改めるものであり、別の人物の反応ではない
+    const user = userEvent.setup();
+    renderNeighborCrossCheck();
+
+    await user.click(screen.getByRole('button', { name: '反応を記録' }));
+    const reactionRegion = screen.getByRole('region', { name: '反応の記録' });
+
+    expect(within(reactionRegion).getByRole('radio', { name: '食い違う' })).toBeInTheDocument();
+    expect(within(reactionRegion).queryByRole('radio', { name: '撤回・訂正している' })).not.toBeInTheDocument();
   });
 
   it('発言者を選ばずに保存しようとすると、理由を示して、証言も照合も追加しない', async () => {
