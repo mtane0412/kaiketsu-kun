@@ -2,13 +2,14 @@
  * 資料（聴取。証言を得た機会）の入力フォーム
  *
  * 1件の資料（Interview）を登録・編集します。資料のカード（InterviewCard）と、資料の登録ページ（InterviewDetail の NewInterviewDetail）から開きます。
- * 入力するのは、URL・タイトル・本文と、詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典）です。
+ * 入力するのは、URL・タイトル・本文と、詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典・この資料での呼び方）です。
  * - どれも任意ですが、資料を見分けられるよう、タイトル・URL・本文のいずれかは必須です。
  *   資料を見つけた時点では、URLだけを登録し、ほかは後から補えるようにするためです。
  * - 詳しい情報は、最初は閉じておきます（URLと本文から始める流れで、入力欄の多さに迷わないようにするためです）。
  *   編集で詳しい情報が入力済みの場合と、記事の公開日時を日時の欄に入れた場合は、開いた状態にします。
  * - 転載の原典（媒体・発行日・紙面など）は、原典が手に入らず転載で読んだ資料に入力します。そのとき、聴取者または媒体と日時には、転載した媒体と転載した日時を入れます。
  *   原典の欄がすべて空なら、原典を持たない資料として保存します。
+ * - この資料での人物の呼び方（「男」「Aさん」など）と、それが指す人物を登録できます（InterviewPersonNamesField）。
  * - 資料に載っている人物は入力しません。資料にひもづく証言の発言者から導きます（src/domain/interviews.ts）。
  * 本文には、記事の本文や動画の文字起こしを貼り付けます。証言は、本文の範囲を選んで書き起こせます（InterviewTranscript）。
  * Web の記事は、URLを入れて「本文を取得」を押すと、本文の取得 API（src/app/api/fetch-article/route.ts）で本文を取り出して本文の欄に入れます。
@@ -49,6 +50,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
+import { InterviewPersonNamesField, toInterviewPersonNames, toPersonNameRows } from './InterviewPersonNamesField';
 
 /** 選択肢で「選ばない」を表す値です。 */
 const UNSELECTED = '';
@@ -62,11 +64,11 @@ type InterviewFormProps = {
   onCancel: () => void;
 };
 
-/** 詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典）のいずれかを持つかどうかを返します。 */
+/** 詳しい情報（日時・聴取者または媒体・場所・発言者の立場・資料番号・資料の格・転載の原典・この資料での呼び方）のいずれかを持つかどうかを返します。 */
 function hasDetails(interview: Interview | undefined): boolean {
   if (interview === undefined) return false;
-  const { at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin } = interview;
-  return [at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin].some((value) => value !== undefined);
+  const { at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin, personNames } = interview;
+  return [at, interviewerPersonId, placeId, subjectRole, documentRef, grade, origin, personNames].some((value) => value !== undefined);
 }
 
 /** 選択肢の値が資料の格かどうかを判定します（選択肢の値は文字列のため、格に絞り込みます）。 */
@@ -92,6 +94,7 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
   const [originPublisherPersonId, setOriginPublisherPersonId] = useState<Id>(initial?.origin?.publisherPersonId ?? UNSELECTED);
   const [originPublishedAt, setOriginPublishedAt] = useState(initial?.origin?.publishedAt ?? '');
   const [originCitation, setOriginCitation] = useState(initial?.origin?.citation ?? '');
+  const [personNameRows, setPersonNameRows] = useState(() => toPersonNameRows(initial?.personNames));
   const [url, setUrl] = useState(initial?.url ?? '');
   const [transcript, setTranscript] = useState(initial?.transcript ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -186,6 +189,12 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
     if (originCitation.trim()) origin.citation = originCitation.trim();
     // 原典の欄がすべて空なら、原典を持たない（転載ではない）資料として保存する
     if (Object.keys(origin).length > 0) interview.origin = origin;
+    const personNamesResult = toInterviewPersonNames(personNameRows);
+    if ('error' in personNamesResult) {
+      setError(personNamesResult.error);
+      return;
+    }
+    if (personNamesResult.personNames.length > 0) interview.personNames = personNamesResult.personNames;
     if (url.trim()) {
       if (!isHttpUrl(url.trim())) {
         setError(`URLは http か https のURLで指定してください: ${url.trim()}`);
@@ -315,6 +324,8 @@ export function InterviewForm({ initial, onDone, onCancel }: InterviewFormProps)
             <TextField label="原典の発行日（任意）" value={originPublishedAt} onChange={setOriginPublishedAt} placeholder="2008-07-07、2008年7月7日 など" />
             <TextField label="紙面・版など（任意）" value={originCitation} onChange={setOriginCitation} placeholder="朝刊 社会面 など" />
           </fieldset>
+
+          <InterviewPersonNamesField rows={personNameRows} onChange={setPersonNameRows} persons={currentCase.persons} />
         </fieldset>
       ) : (
         <Button type="button" variant="ghost" size="sm" onClick={() => setShowsDetails(true)}>

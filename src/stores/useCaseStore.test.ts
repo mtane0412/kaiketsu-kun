@@ -261,6 +261,24 @@ describe('remove', () => {
   });
 });
 
+describe('mergePersons', () => {
+  it('人物を別の人物にまとめ、参照を付け替えて保存する', async () => {
+    // 前提: 隣家の住人と管理人が、同じ人物だと分かった（架空の例）
+    useCaseStore.getState().mergePersons('person-neighbor', 'person-caretaker');
+
+    const merged = getOpenCase();
+    expect(merged.persons.map((person) => person.id)).not.toContain('person-neighbor');
+    expect(merged.claims.some((claim) => claim.speaker.kind === 'person' && claim.speaker.personIds.includes('person-neighbor'))).toBe(false);
+    // 保存済みのケースにも、まとめた結果が残る
+    expect(await loadSavedCase(sampleFictionalCase.id)).toEqual(merged);
+  });
+
+  it('まとめられない場合はエラーにし、ケースを変更しない', () => {
+    expect(() => useCaseStore.getState().mergePersons('person-gone', 'person-caretaker')).toThrow(/person-gone/);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
+  });
+});
+
 describe('照合', () => {
   it('2件の証言の間に、種類と理由をつけた照合を登録する', () => {
     useCaseStore.getState().upsert('crossChecks', {

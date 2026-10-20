@@ -5,6 +5,7 @@
  * 証言のカード（ClaimCard）と、証言の詳細（ClaimDetail）の読む表示で共有します。
  * - 人物・場所のメンションは、種類ごとに色分けし、「@現在の名前」の形で、その詳細ページへのリンクにします。
  *   エンティティのアイコン（登録した画像。画像の無い人物は1文字）を添えます。
+ *   資料での表記（別名・資料ごとの呼び方）で書いたメンションは「@資料での表記（＝現在の名前）」にし、資料が誰をどう呼んでいたかと、それが誰かの両方を示します。
  * - 日時のメンションは、ケースのエンティティではなく開く先が無いため、リンクにせず色だけをそろえます。
  * リンク先のURLには、開いているタブ（tab）を「ボードに戻る」の戻り先として引き継ぎます。
  *
@@ -13,7 +14,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ContentSegment, SegmentKind } from '@/domain/mention';
+import { displayLabelOf, type ContentSegment, type SegmentKind } from '@/domain/mention';
 import { EntityAvatar } from './EntityAvatar';
 import { mentionHref, type TabKey } from './routes';
 import { useCaseId } from './useCaseId';
@@ -49,7 +50,7 @@ export function ClaimContentSegments({ segments, tab, linkClassName = '' }: Clai
         href={mentionHref(caseId, segment.kind, segment.id, tab)}
         className={`${linkClassName} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
       >
-        <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
+        <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{displayLabelOf(segment)}
       </Link>
     )
   );

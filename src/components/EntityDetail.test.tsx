@@ -19,6 +19,65 @@ beforeEach(async () => {
   resetMockNavigation('/cases/case-lakeside/persons/person-neighbor');
 });
 
+describe('PersonDetail の、同じ人物をまとめる操作', () => {
+  /** 管理人と同じ人物だと後から分かった「別荘の男」を登録したケースです。 */
+  function caseWithDuplicate(): Case {
+    return {
+      ...sampleFictionalCase,
+      persons: [...sampleFictionalCase.persons, { id: 'person-man', name: '別荘の男', kind: 'individual' }],
+    };
+  }
+
+  it('まとめ先を選んで確認すると、開いている人物をまとめ先にまとめ、まとめ先の人物の詳細へ移る', async () => {
+    const user = userEvent.setup();
+    await openTestCase(caseWithDuplicate());
+    render(<PersonDetail personId="person-man" />);
+
+    const mergeSection = screen.getByRole('region', { name: '同じ人物をまとめる' });
+    await user.selectOptions(within(mergeSection).getByLabelText('まとめ先の人物'), '管理人');
+    await user.click(within(mergeSection).getByRole('button', { name: 'まとめる' }));
+    // 取り消せない操作のため、確認の画面で改めて承認を求める
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('「別荘の男」を「管理人」にまとめますか？');
+    await user.click(within(dialog).getByRole('button', { name: 'まとめる' }));
+
+    const persons = openedCase().persons;
+    expect(persons.map((person) => person.id)).not.toContain('person-man');
+    expect(persons.find((person) => person.id === 'person-caretaker')?.aliases).toContain('別荘の男');
+    expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside/persons/person-caretaker');
+  });
+
+  it('まとめ先を選ぶまでは、まとめるボタンを押せない', async () => {
+    await openTestCase(caseWithDuplicate());
+    render(<PersonDetail personId="person-man" />);
+
+    const mergeSection = screen.getByRole('region', { name: '同じ人物をまとめる' });
+    expect(within(mergeSection).getByRole('button', { name: 'まとめる' })).toBeDisabled();
+  });
+
+  it('まとめられない場合は、理由を示してケースを変えない', async () => {
+    // 前提: 別荘の男と管理人の間に関係があり、まとめると自分自身との関係になる
+    const user = userEvent.setup();
+    const target: Case = {
+      ...caseWithDuplicate(),
+      relationships: [
+        ...sampleFictionalCase.relationships,
+        { id: 'relationship-same', fromPersonId: 'person-man', toPersonId: 'person-caretaker', label: '同僚', directed: false, basisClaimIds: [] },
+      ],
+    };
+    await openTestCase(target);
+    render(<PersonDetail personId="person-man" />);
+
+    const mergeSection = screen.getByRole('region', { name: '同じ人物をまとめる' });
+    await user.selectOptions(within(mergeSection).getByLabelText('まとめ先の人物'), '管理人');
+    await user.click(within(mergeSection).getByRole('button', { name: 'まとめる' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'まとめる' }));
+
+    expect(await within(mergeSection).findByRole('alert')).toHaveTextContent('2人の間の関係（同僚）を削除してから、まとめてください');
+    expect(openedCase().persons.map((person) => person.id)).toContain('person-man');
+  });
+});
+
 describe('PersonDetail のアイコンの文字の重なり', () => {
   it('アイコンの文字が他の人物と重なる場合は、重なる人物を示し、アイコンの文字の指定を促す', () => {
     // 前提: 「県警」と「県道の防犯カメラ」は、どちらも画像もアイコンの文字の指定も無く、アイコンが「県」になる

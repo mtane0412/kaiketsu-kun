@@ -8,8 +8,12 @@
  * - 引用（原文）が本文に一字一句ない候補は示さず、捨てた件数だけを返します。
  *   LLM がでっち上げた発言を、原文に裏付けられた証言として登録しないためです（照らし合わせは src/domain/transcript.ts の findQuoteRange）。
  * - 動画の位置（秒数）は LLM に出させず、引用の位置から補います（quoteSecondsAt）。
- * - 人物の名前は登録済みの人物の名前・別名（Person.name・Person.aliases）と、場所の名前は登録済みの場所の名前と、
- *   正規化した完全一致で照らし合わせます（normalizeName）。一致しない名前は、新規作成の候補として示します。
+ * - 人物の名前は、この資料での呼び方（Interview.personNames）を優先し、無ければ登録済みの人物の名前・別名
+ *   （Person.name・Person.aliases）と照らし合わせます（src/domain/person-names.ts の findPersonsByName）。
+ *   場所の名前は登録済みの場所の名前と照らし合わせます。どちらも正規化した完全一致です（normalizeName）。
+ *   一致しない名前は、新規作成の候補として示します。
+ *   人物の名前・別名が2人以上に一致した場合（同姓同名など）は、1人に決めず「決められない名前」（status: 'ambiguous'）として示し、
+ *   ユーザーが人物を選びます（chooseAmbiguousPerson）。選ぶまでは、入力欄の初期値にしません（candidateToClaimDraft がエラーにします）。
  * - 日時は、本文のメンションと同じ表記（src/domain/date-input.ts の parseDateInput）で解釈します。
  *   解釈できない日時は時刻参照を持たせず、LLM が出した文字列（whenText）だけを参考として示します。
  * - 同じ聴取で書き起こし済みの引用（この聴取の出典の ClaimSource.quote）と範囲が重なる候補は、捨てずに印（overlapsTranscribed）を付けます。
@@ -26,6 +30,7 @@ import { parseDateInput } from './date-input';
 import { buildTimeline, describeClaimAttribution } from './case-views';
 import { interviewIdsOf, sourceForInterview, viaPersonIdsOf } from './claim-sources';
 import { dateMentionOf, resolveContent, type ClaimDraft, type DraftMention, type MentionKind } from './mention';
+import { findPersonsByName, normalizeName, type PersonNameMatch } from './person-names';
 import { findQuoteRange, quoteSecondsAt, type TextRange } from './transcript';
 import type { Case, Claim, ClaimQuote, Id, Interview, TimeRef } from './types';
 
@@ -67,8 +72,19 @@ export const ExtractionResultSchema = z.object({
 /** LLM が出した証言の候補1件です。 */
 export type ExtractedClaim = z.infer<typeof ExtractedClaimSchema>;
 
-/** 候補の中の人物・場所の名前を、登録済みのものと照らし合わせた結果です。 */
-export type ResolvedName = { status: 'registered'; id: Id; name: string } | { status: 'new'; name: string };
+/**
+ * 候補の中の人物・場所の名前を、登録済みのものと照らし合わせた結果です。
+ * - registered: 登録済みの1件に一致した（name は登録済みの名前）
+ * - new: 一致しない（新規作成の候補。name は LLM が出した名前）
+ * - ambiguous: 人物の名前・別名が2人以上に一致し、決められない（name は LLM が出した名前、matches は一致した人物）
+ */
+export type ResolvedName =
+  | { status: 'registered'; id: Id; name: string }
+  | { status: 'new'; name: string }
+  | { status: 'ambiguous'; name: string; matches: PersonNameMatch[] };
+
+/** 決められない名前です。 */
+export type AmbiguousName = Extract<ResolvedName, { status: 'ambiguous' }>;
 
 /** 原文と照らし合わせ、人物・場所・日時を解釈した証言の候補です。 */
 export type ClaimCandidate = {
@@ -103,19 +119,55 @@ export type ClaimCandidates = {
   discardedCount: number;
 };
 
-/**
- * 名前を照らし合わせ用に正規化します。
- * 前後の空白を除き、連続する空白（全角の空白を含みます）を半角の空白1つにし、大文字小文字を区別しないよう小文字にします。
- */
-export function normalizeName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+/** 場所の名前を、登録済みの場所の名前と照らし合わせます。 */
+function resolvePlaceName(target: Case, name: string): ResolvedName {
+  const normalized = normalizeName(name);
+  const matched = target.places.find((place) => normalizeName(place.name) === normalized);
+  return matched ? { status: 'registered', id: matched.id, name: matched.name } : { status: 'new', name: name.trim() };
 }
 
-/** 名前を、登録済みの名前の一覧（IDと、照らし合わせる名前の組）と照らし合わせます。 */
-function resolveName(name: string, entries: { id: Id; name: string; keys: string[] }[]): ResolvedName {
+/** 資料 interviewId に現れた人物の名前を、この資料での呼び方・登録済みの名前・別名と照らし合わせます。 */
+function resolvePersonName(target: Case, interviewId: Id, name: string): ResolvedName {
+  const matches = findPersonsByName(target, interviewId, name);
+  const [first] = matches;
+  if (first === undefined) return { status: 'new', name: name.trim() };
+  if (matches.length === 1) return { status: 'registered', id: first.id, name: first.name };
+  return { status: 'ambiguous', name, matches };
+}
+
+/** 候補の中の人物の名前（発言者・経由・言及）を、出てくる順に返します。 */
+function personNamesOf(candidate: ClaimCandidate): ResolvedName[] {
+  return [...(candidate.speaker ? [candidate.speaker] : []), ...candidate.via, ...candidate.mentioned];
+}
+
+/**
+ * 候補の中の、決められない人物の名前を、正規化した名前ごとに1件ずつ、出てくる順に返します。
+ * 同じ名前は、どの位置（発言者・経由・言及）でも同じ人物を指すものとして、ユーザーに1回だけ選んでもらうためです。
+ */
+export function ambiguousNamesOf(candidate: ClaimCandidate): AmbiguousName[] {
+  const seen = new Set<string>();
+  return personNamesOf(candidate).filter((resolved): resolved is AmbiguousName => {
+    if (resolved.status !== 'ambiguous' || seen.has(normalizeName(resolved.name))) return false;
+    seen.add(normalizeName(resolved.name));
+    return true;
+  });
+}
+
+/**
+ * 決められない名前 name（正規化後に同じ名前のすべての位置）に、ユーザーが選んだ人物 personId を当てはめた候補を返します。
+ * 一致した人物に含まれない人物は選べないため、エラーにします（候補として示していない人物を、誤って結び付けないためです）。
+ */
+export function chooseAmbiguousPerson(candidate: ClaimCandidate, name: string, personId: Id): ClaimCandidate {
   const normalized = normalizeName(name);
-  const matched = entries.find((entry) => entry.keys.some((key) => normalizeName(key) === normalized));
-  return matched ? { status: 'registered', id: matched.id, name: matched.name } : { status: 'new', name: name.trim() };
+  const choose = (resolved: ResolvedName): ResolvedName => {
+    if (resolved.status !== 'ambiguous' || normalizeName(resolved.name) !== normalized) return resolved;
+    const chosen = resolved.matches.find((match) => match.id === personId);
+    if (chosen === undefined) throw new Error(`「${resolved.name}」に一致した人物ではありません: ${personId}`);
+    return { status: 'registered', id: chosen.id, name: chosen.name };
+  };
+  const next: ClaimCandidate = { ...candidate, via: candidate.via.map(choose), mentioned: candidate.mentioned.map(choose) };
+  if (candidate.speaker) next.speaker = choose(candidate.speaker);
+  return next;
 }
 
 /** 本文を持つ聴取を返します。聴取が無いか、本文が無い場合は、照らし合わせられないためエラーにします。 */
@@ -138,8 +190,6 @@ function overlaps(a: TextRange, b: TextRange): boolean {
  */
 export function buildClaimCandidates(target: Case, interviewId: Id, extracted: ExtractedClaim[]): ClaimCandidates {
   const { transcript } = interviewWithTranscript(target, interviewId);
-  const persons = target.persons.map((person) => ({ id: person.id, name: person.name, keys: [person.name, ...(person.aliases ?? [])] }));
-  const places = target.places.map((place) => ({ id: place.id, name: place.name, keys: [place.name] }));
   const transcribedRanges = target.claims.flatMap((claim) => {
     const quote = sourceForInterview(claim, interviewId)?.quote;
     if (quote === undefined) return [];
@@ -162,14 +212,14 @@ export function buildClaimCandidates(target: Case, interviewId: Id, extracted: E
       overlapsTranscribed: transcribedRanges.some((transcribed) => overlaps(transcribed, range)),
       // LLM の出力を裏付けなしに信用しないため、ケースに無い証言のIDは捨てる
       sameClaimIds: [...new Set(item.sameClaimIds)].filter((claimId) => claimIds.has(claimId)),
-      via: item.viaNames.map((name) => resolveName(name, persons)),
-      mentioned: item.mentionedPersonNames.map((name) => resolveName(name, persons)),
+      via: item.viaNames.map((name) => resolvePersonName(target, interviewId, name)),
+      mentioned: item.mentionedPersonNames.map((name) => resolvePersonName(target, interviewId, name)),
     };
     if (title) candidate.title = title;
     if (when !== null) candidate.when = when;
     if (item.when !== null) candidate.whenText = item.when;
-    if (item.speakerName !== null) candidate.speaker = resolveName(item.speakerName, persons);
-    if (item.placeName !== null) candidate.place = resolveName(item.placeName, places);
+    if (item.speakerName !== null) candidate.speaker = resolvePersonName(target, interviewId, item.speakerName);
+    if (item.placeName !== null) candidate.place = resolvePlaceName(target, item.placeName);
     return [candidate];
   });
 
@@ -226,6 +276,7 @@ function insertMentions(content: string, mentions: DraftMention[]): string {
  * - 転載の原典を持つ聴取では、媒体は「原典の媒体 → 転載した媒体（聴取者）」の順に伝えたものとして扱います。
  *   発言者の分からない候補は原典の媒体を発言者にし、経由の最後には媒体をこの順に並べます。
  * - 一致しない名前は、同じ種類・同じ名前（正規化後）ごとに1件だけ、createId で振ったIDで新規作成します。
+ * - 決められない名前（status: 'ambiguous'）が残っている候補はエラーにします。先に chooseAmbiguousPerson で人物を選びます。
  */
 export function candidateToClaimDraft(
   target: Case,
@@ -234,6 +285,11 @@ export function candidateToClaimDraft(
   createId: () => Id
 ): CandidateClaimDraft {
   const interview = interviewWithTranscript(target, interviewId);
+  // 決められない名前を黙ってどちらかの人物にしないよう、ユーザーが選ぶ前の候補は入力欄の初期値にしない
+  const ambiguous = ambiguousNamesOf(candidate);
+  if (ambiguous.length > 0) {
+    throw new Error(`人物を選んでいない名前があります: ${ambiguous.map((resolved) => resolved.name).join('、')}`);
+  }
   // 発言を伝えた媒体の並び（転載の資料では、原典の媒体が先、転載した媒体が後）
   const mediaIds = [...new Set([interview.origin?.publisherPersonId, interview.interviewerPersonId].filter((id) => id !== undefined))];
   const newEntities: NewEntity[] = [];
@@ -303,7 +359,7 @@ function summarizeClaim(target: Case, claim: Claim): string {
 /**
  * 資料から証言を抽出するときに、「同じ事柄を述べていそうな既存の証言」を探させるため、LLM に渡す既存の証言を選びます。
  *
- * ケース全体の証言を渡すとプロンプトが長くなるため、抽出する本文 text に名前（人物は別名も含みます）が出てくる人物・場所に
+ * ケース全体の証言を渡すとプロンプトが長くなるため、抽出する本文 text に名前（人物は別名と、この資料での呼び方も含みます）が出てくる人物・場所に
  * 触れている証言（発言者・経由・言及・場所）だけを選びます。本文に出てくる名前を多く含む証言から順に、
  * 最大 MAX_EXISTING_CLAIMS_FOR_EXTRACTION 件を返します。同じ数の証言は、時系列ボードの並び順に並べます。
  * この資料（interviewId）をすでに出典に持つ証言は返しません。同じ資料の中の重なりは、書き起こし済みの印（overlapsTranscribed）で示すためです。
@@ -311,9 +367,12 @@ function summarizeClaim(target: Case, claim: Claim): string {
 export function selectExistingClaimsForExtraction(target: Case, interviewId: Id, text: string): ExistingClaimForExtraction[] {
   const searchText = compactForSearch(text);
   const appears = (names: string[]) => names.some((name) => compactForSearch(name) !== '' && searchText.includes(compactForSearch(name)));
-  const appearingPersonIds = new Set(
-    target.persons.filter((person) => appears([person.name, ...(person.aliases ?? [])])).map((person) => person.id)
-  );
+  // この資料での呼び方も、その人物の名前として探す（ほかの資料での呼び方は、この資料では別の人物を指しうるため使わない）
+  const sourceNames = target.interviews.find((interview) => interview.id === interviewId)?.personNames ?? [];
+  const appearingPersonIds = new Set([
+    ...target.persons.filter((person) => appears([person.name, ...(person.aliases ?? [])])).map((person) => person.id),
+    ...sourceNames.filter((personName) => appears([personName.name])).map((personName) => personName.personId),
+  ]);
   const appearingPlaceIds = new Set(target.places.filter((place) => appears([place.name])).map((place) => place.id));
 
   const scored = buildTimeline(target).items.flatMap(({ view: { claim } }) => {
