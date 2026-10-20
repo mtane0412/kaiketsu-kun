@@ -30,7 +30,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { UNKNOWN_INTERVIEW_TIME_LABEL, UNTITLED_INTERVIEW_LABEL, type InterviewView } from '@/domain/interviews';
+import { UNTITLED_INTERVIEW_LABEL } from '@/domain/interview-source-label';
+import { UNKNOWN_INTERVIEW_TIME_LABEL, type InterviewView } from '@/domain/interviews';
 import { sourceForInterview } from '@/domain/claim-sources';
 import { INTERVIEW_GRADE_LABELS } from '@/domain/labels';
 import { formatTimeRef } from '@/domain/time-ref';

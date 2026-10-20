@@ -32,9 +32,9 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'ケース設定' }));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -74,6 +74,30 @@ describe('CaseSettingsMenu', () => {
     expect(JSON.parse(await exported!.text())).toEqual(sampleFictionalCase);
   });
 
+  it('資料の本文を除いて、JSONファイルとして書き出せる（有料の記事データベースから写した本文を、共有するJSONに含めないため）', async () => {
+    // 前提: 資料に、記事データベースから写した本文が入っている
+    const caseWithTranscript = {
+      ...sampleFictionalCase,
+      interviews: [{ id: 'interview-newspaper', title: '湖畔新聞の記事', transcript: '別荘の管理人は、午後9時ごろに車の音を聞いたと話した。' }],
+    };
+    await openTestCase(caseWithTranscript);
+    const user = userEvent.setup();
+    let exported: Blob | undefined;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      exported = blob;
+      return 'blob:exported-case';
+    });
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderMenu();
+
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: 'JSONを書き出す（資料の本文を除く）' }));
+
+    // 検証: 本文だけを除き、資料そのもの（タイトルなど）は残す
+    expect(JSON.parse(await exported!.text()).interviews).toEqual([{ id: 'interview-newspaper', title: '湖畔新聞の記事' }]);
+  });
+
   it('ケースを削除する前に確認し、承認された場合は削除して一覧へ移る', async () => {
     const user = userEvent.setup();
     renderMenu();
@@ -83,8 +107,8 @@ describe('CaseSettingsMenu', () => {
     // 削除は取り消せないため、確認の画面で改めて承認する
     await user.click(await screen.findByRole('button', { name: '削除する' }));
 
-    expect(listCaseSummaries()).toEqual([]);
-    expect(mockRouter.replace).toHaveBeenCalledWith('/');
+    await vi.waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/'));
+    expect(await listCaseSummaries()).toEqual([]);
   });
 
   it('ケースの削除が取り消された場合は、ケースを消さない', async () => {
@@ -95,7 +119,7 @@ describe('CaseSettingsMenu', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'このケースを削除' }));
     await user.click(await screen.findByRole('button', { name: 'やめる' }));
 
-    expect(listCaseSummaries().map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
+    expect((await listCaseSummaries()).map((summary) => summary.id)).toEqual([sampleFictionalCase.id]);
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 });

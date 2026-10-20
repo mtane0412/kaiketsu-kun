@@ -10,10 +10,12 @@
  * エンティティ同士の関連は、人物・場所のメモに書かれたメンションから導出します（findRelatedEntities）。
  * 人物・場所の詳細では、その人物・場所から証言を逆引きします（buildPersonDetail・buildPlaceDetail）。
  * 逆引きした証言は、証言の詳細と同じく時系列の並び順に並べます。
+ * 証言の表示（ClaimView）には、証言が載っている資料の短い表示（src/domain/interview-source-label.ts）を出典の順に持たせます。
  * 参照先（人物・場所）が見つからない場合は、データ破損として例外を投げます。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
-import { viaChainsOf, viaPersonIdsOf } from './claim-sources';
+import { interviewIdsOf, viaChainsOf, viaPersonIdsOf } from './claim-sources';
+import { formatInterviewSourceLabel } from './interview-source-label';
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
 import { PERSON_KINDS } from './person-kind';
@@ -36,6 +38,18 @@ export type ClaimView = {
   /** この証言が述べる場所です。 */
   place?: Place;
   mentionedPersons: Person[];
+  /**
+   * 証言が載っている資料です。出典の順に、資料のIDと資料の短い表示（src/domain/interview-source-label.ts）を並べます。
+   * 資料にひもづかない出典（経由だけの出典）は含みません。資料にひもづかない証言では空の配列です。
+   */
+  interviewSources: ClaimInterviewSource[];
+};
+
+/** 証言が載っている資料1件の表示です。 */
+export type ClaimInterviewSource = {
+  interviewId: Id;
+  /** 資料の短い表示です（例「架空日報 朝刊 1998年8月14日・主要報道」）。 */
+  label: string;
 };
 
 /** 時系列ボードの1項目（証言）です。 */
@@ -115,6 +129,10 @@ function toClaimView(target: Case, claim: Claim): ClaimView {
     viaChains: viaChainsOf(claim).map((chain) => chain.map((id) => findOrThrow(target.persons, id, '人物'))),
     place,
     mentionedPersons: claim.mentionedPersonIds.map((id) => findOrThrow(target.persons, id, '人物')),
+    interviewSources: interviewIdsOf(claim).map((interviewId) => ({
+      interviewId,
+      label: formatInterviewSourceLabel(target, findOrThrow(target.interviews, interviewId, '資料')),
+    })),
   };
 }
 
@@ -424,8 +442,13 @@ export type RelatedClaimGroup = {
   id: Id;
   /** エンティティの現在の名前です。 */
   label: string;
-  /** 同じエンティティに触れている他の証言です。時系列の並び順に並びます。 */
+  /** 同じエンティティに、発言者・言及・場所として触れている他の証言です。時系列の並び順に並びます。 */
   claims: ClaimView[];
+  /**
+   * 同じ人物に、経由としてだけ触れている他の証言です。時系列の並び順に並びます。場所のグループでは常に空です。
+   * 記事を転載した媒体のように、多くの証言の経由に現れる人物では、関係の薄い証言が長く並ぶため、claims と分けて持ちます。
+   */
+  viaOnlyClaims: ClaimView[];
 };
 
 /** 証言の詳細ページに表示する内容です。 */
@@ -449,6 +472,7 @@ export function personIdsOf(claim: Claim): Id[] {
  *
  * 証言から連想して次の証言へ進めるよう、時系列の前後の証言と、同じ人物・場所に触れている他の証言をまとめます。
  * グループは、発言者・経由した人物・言及している人物・場所の順に並べます。他の証言が無いエンティティのグループは作りません。
+ * 人物のグループでは、その人物に経由としてだけ触れている証言を、発言者・言及として触れている証言と分けて持ちます。
  * 注意: ケースに無いIDを渡すと undefined を返します。URLの直接入力や、削除済みの証言のURLを開いた場合に、
  * 呼び出し側が「見つからない」表示を出すためです。
  */
@@ -461,12 +485,20 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
   const others = views.filter((other) => other !== view);
   const persons = [...view.speakerPersons, ...view.viaPersons, ...view.mentionedPersons];
   const groups: RelatedClaimGroup[] = [
-    ...personIdsOf(view.claim).map((id) => ({
-      kind: 'person' as const,
-      id,
-      label: findOrThrow(persons, id, '人物').name,
-      claims: others.filter((other) => personIdsOf(other.claim).includes(id)),
-    })),
+    ...personIdsOf(view.claim).map((id) => {
+      const touching = others.filter((other) => personIdsOf(other.claim).includes(id));
+      // 発言者・言及として触れていない証言は、経由としてだけ触れている（personIdsOf に含まれるため）
+      const isDirect = (other: ClaimView) =>
+        other.claim.mentionedPersonIds.includes(id) ||
+        (other.claim.speaker.kind === 'person' && other.claim.speaker.personIds.includes(id));
+      return {
+        kind: 'person' as const,
+        id,
+        label: findOrThrow(persons, id, '人物').name,
+        claims: touching.filter(isDirect),
+        viaOnlyClaims: touching.filter((other) => !isDirect(other)),
+      };
+    }),
     ...(view.place
       ? [
           {
@@ -474,6 +506,7 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
             id: view.place.id,
             label: view.place.name,
             claims: others.filter((other) => other.claim.placeId === view.place?.id),
+            viaOnlyClaims: [],
           },
         ]
       : []),
@@ -483,7 +516,7 @@ export function buildClaimDetail(target: Case, claimId: Id): ClaimDetail | undef
     view,
     previous: views[index - 1],
     next: views[index + 1],
-    relatedClaimGroups: groups.filter((group) => group.claims.length > 0),
+    relatedClaimGroups: groups.filter((group) => group.claims.length > 0 || group.viaOnlyClaims.length > 0),
   };
 }
 

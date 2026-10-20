@@ -29,8 +29,8 @@ const pastedInterview: Interview = {
   transcript: '手で貼り付けた本文',
 };
 
-beforeEach(() => {
-  openTestCase(sampleFictionalCase);
+beforeEach(async () => {
+  await openTestCase(sampleFictionalCase);
 });
 
 afterEach(() => {

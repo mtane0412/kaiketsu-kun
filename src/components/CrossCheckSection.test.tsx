@@ -11,10 +11,10 @@ import { CrossCheckSection } from './CrossCheckSection';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: サンプルのケースには、防犯カメラ↔隣家の住人（裏付ける）と、管理人↔隣家の住人（食い違う）の照合がある
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');
 });
 
@@ -50,9 +50,9 @@ describe('CrossCheckSection', () => {
     );
   });
 
-  it('相手の証言が載っている資料を、媒体・原典の日付・資料の格の短い表示で示す（どの資料どうしの食い違いかを見比べるため）', () => {
+  it('相手の証言が載っている資料を、媒体・原典の日付・資料の格の短い表示で示す（どの資料どうしの食い違いかを見比べるため）', async () => {
     // 前提: 管理人の証言は、架空日報の朝刊（1998年8月14日）の記事を書籍の著者が転載した資料（二次報道）に載っている
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       interviews: [
         {
@@ -144,9 +144,9 @@ describe('CrossCheckSection', () => {
     });
   });
 
-  it('同じ相手との照合が複数ある場合も、編集・削除のボタンの名前を種類で区別する', () => {
+  it('同じ相手との照合が複数ある場合も、編集・削除のボタンの名前を種類で区別する', async () => {
     // 前提: 管理人の証言との間に、食い違う照合に加えて、同じ事柄を述べている照合も登録されている
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       crossChecks: [
         ...sampleFictionalCase.crossChecks,

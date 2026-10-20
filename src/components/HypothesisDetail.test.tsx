@@ -13,11 +13,11 @@ import { HypothesisDetail, NewHypothesisDetail } from './HypothesisDetail';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: 「管理人が失踪に関わっている」は検討中で、支える証言にユーザーの推測をひもづけ、
   // 管理人を対象に、動機にユーザーの推測、機会に管理人の証言をひもづけている
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/hypotheses/hypothesis-caretaker?tab=hypotheses');
 });
 
