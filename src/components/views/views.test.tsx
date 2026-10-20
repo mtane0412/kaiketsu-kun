@@ -16,9 +16,9 @@ import { TimelineView } from './TimelineView';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -261,8 +261,8 @@ const searchStatement: Claim = {
 };
 
 describe('TimelineView への書き足し', () => {
-  beforeEach(() => {
-    openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
+  beforeEach(async () => {
+    await openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
   });
 
   it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {
@@ -636,7 +636,7 @@ describe('PersonLaneView の時刻軸', () => {
   };
 
   it('日付だけの証言は列の端の細い段に、時刻のある証言は残りの幅に描き、互いに覆わない', async () => {
-    openTestCase(walkCase);
+    await openTestCase(walkCase);
     const user = userEvent.setup();
     render(<PersonLaneView target={walkCase} />);
     const timeAxis = await switchToTimeAxis(user);
@@ -651,7 +651,7 @@ describe('PersonLaneView の時刻軸', () => {
   });
 
   it('帯には、帯の幅に関わらず読めるよう、日時と見出しの全文をホバー・フォーカスで示す要素を持たせる', async () => {
-    openTestCase(walkCase);
+    await openTestCase(walkCase);
     const user = userEvent.setup();
     render(<PersonLaneView target={walkCase} />);
     const timeAxis = await switchToTimeAxis(user);
@@ -684,6 +684,90 @@ describe('証言カードの重なり順', () => {
     // isolate（isolation: isolate）が無いと、カード内の z-10 がページ全体の重なり順に加わり、
     // 後に描画されるカードの本文が、ポップアップ（z-10）の上に重なって見えてしまう
     expect(residentClaim).toHaveClass('isolate');
+  });
+});
+
+describe('証言のカードの資料の表示', () => {
+  /** 防犯カメラの記録を、架空日報の記事と書籍の2つの資料が伝えたケースです。 */
+  const caseWithInterviews: Case = {
+    ...sampleFictionalCase,
+    interviews: [
+      { id: 'interview-newspaper', title: '別荘の事件を報じる記事', interviewerPersonId: 'person-newspaper', at: '1998-08-14', grade: 'majorReport' },
+      { id: 'interview-book', title: '湖畔の夏 第3章', interviewerPersonId: 'person-book', at: '2018-05' },
+    ],
+    claims: sampleFictionalCase.claims.map((claim) =>
+      claim.id === 'claim-police-camera'
+        ? {
+            ...claim,
+            sources: [
+              { interviewId: 'interview-newspaper', viaPersonIds: ['person-police', 'person-newspaper'] },
+              { interviewId: 'interview-book', viaPersonIds: ['person-book'] },
+            ],
+          }
+        : claim
+    ),
+  };
+
+  /** 防犯カメラの記録のカードを返します。 */
+  function cameraCard(): HTMLElement {
+    const card = screen.getByText(/車が別荘の方向へ走る/).closest('li');
+    if (!card) throw new Error('防犯カメラの記録のカードが見つかりません');
+    return card;
+  }
+
+  it('時系列のカードに、1件目の資料の短い表示を、資料の詳細へのリンクとして示し、残りの資料の件数を添える', async () => {
+    await openTestCase(caseWithInterviews);
+    render(<TimelineView target={caseWithInterviews} />);
+
+    const card = cameraCard();
+    expect(within(card).getByRole('link', { name: '架空日報 朝刊 1998年8月14日・主要報道' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/interviews/interview-newspaper'
+    );
+    expect(within(card).getByText('ほか1件')).toBeInTheDocument();
+  });
+
+  it('資料が1件だけの証言には、残りの件数を添えない', async () => {
+    const caseWithOneInterview: Case = {
+      ...caseWithInterviews,
+      claims: caseWithInterviews.claims.map((claim) =>
+        claim.id === 'claim-police-camera' ? { ...claim, sources: [{ interviewId: 'interview-book', viaPersonIds: ['person-book'] }] } : claim
+      ),
+    };
+    await openTestCase(caseWithOneInterview);
+    render(<TimelineView target={caseWithOneInterview} />);
+
+    const card = cameraCard();
+    expect(within(card).getByRole('link', { name: '湖畔の夏 20年目の証言（架空の書籍） 2018年5月' })).toBeInTheDocument();
+    expect(within(card).queryByText(/^ほか/)).not.toBeInTheDocument();
+  });
+
+  it('資料にひもづかない証言のカードには、資料の欄を出さない', async () => {
+    await openTestCase(caseWithInterviews);
+    render(<TimelineView target={caseWithInterviews} />);
+
+    const guess = screen.getByText(/金銭の問題があった可能性/).closest('li');
+    if (!guess) throw new Error('ユーザーの推測のカードが見つかりません');
+    expect(within(guess).queryByText('資料')).not.toBeInTheDocument();
+  });
+
+  it('証言者別・人物の動きのカードでも資料を示し、リンクに開いているタブを戻り先として引き継ぐ', async () => {
+    await openTestCase(caseWithInterviews);
+    const { unmount } = render(<SpeakerView target={caseWithInterviews} />);
+    expect(within(cameraCard()).getByRole('link', { name: '架空日報 朝刊 1998年8月14日・主要報道' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/interviews/interview-newspaper?tab=speaker'
+    );
+    unmount();
+
+    render(<PersonLaneView target={caseWithInterviews} />);
+    // 人物の動きでは、同じ証言が発言者と言及された人物の両方の列に置かれるため、最初のカードで確かめる
+    const laneCard = screen.getAllByText(/車が別荘の方向へ走る/)[0]!.closest('li');
+    if (!laneCard) throw new Error('人物の動きの防犯カメラの記録のカードが見つかりません');
+    expect(within(laneCard).getByRole('link', { name: '架空日報 朝刊 1998年8月14日・主要報道' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/interviews/interview-newspaper?tab=lanes'
+    );
   });
 });
 

@@ -11,9 +11,9 @@ import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { openedCase, openTestCase } from '@/test/open-case';
 import { ClaimForm } from './ClaimForm';
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
 });
 
 /** 内容欄に文字列を入力し、表示された候補から名前が一致するものを選びます。 */
@@ -924,9 +924,9 @@ describe('ClaimForm（聴取）', () => {
   };
   const caretakerClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // 前提: 管理人の書籍の取材が、聴取として登録されている
-    openTestCase({ ...sampleFictionalCase, interviews: [bookInterview] });
+    await openTestCase({ ...sampleFictionalCase, interviews: [bookInterview] });
   });
 
   it('聴取を選ぶと、証言をその聴取にひもづけて保存する', async () => {
@@ -945,7 +945,7 @@ describe('ClaimForm（聴取）', () => {
   it('聴取を「資料なし」に戻すと、聴取の項目を持たない証言として保存する', async () => {
     const user = userEvent.setup();
     const linkedClaim = { ...caretakerClaim, sources: [{ interviewId: bookInterview.id, viaPersonIds: ['person-book'] }] };
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       interviews: [bookInterview],
       claims: sampleFictionalCase.claims.map((claim) => (claim.id === caretakerClaim.id ? linkedClaim : claim)),
@@ -997,8 +997,8 @@ describe('ClaimForm（聴取）', () => {
       ],
     };
 
-    beforeEach(() => {
-      openTestCase({
+    beforeEach(async () => {
+      await openTestCase({
         ...sampleFictionalCase,
         interviews: [bookInterview, newspaperInterview],
         claims: sampleFictionalCase.claims.map((claim) => (claim.id === caretakerClaim.id ? claimInTwoSources : claim)),

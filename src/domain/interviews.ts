@@ -10,25 +10,18 @@
  *   経由（ClaimSource.viaPersonIds）に含まれるだけの人物は、その人物の供述ではないため含めません。
  * - 資料の一覧と詳細: ケースのすべての聴取を日時の順に並べた一覧（サイドバー）と、1件の聴取の表示（資料の詳細）を作ります。
  * - 聴取の名前: 証言のフォームの選択肢で、聴取を見分けるための短い名前を組み立てます。
- * - 資料の短い表示: 証言のカードや照合の一覧で、どの媒体のいつの資料か（転載なら原典）と資料の格を示す短い文字列を組み立てます。
  *
  * 注意: 参照先の人物・場所が見つからない場合は、データ破損として例外を投げます（case-views.ts と同じ扱いです）。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { buildTimeline, type ClaimView } from './case-views';
 import { interviewIdsOf } from './claim-sources';
-import { INTERVIEW_GRADE_LABELS } from './labels';
+import { UNTITLED_INTERVIEW_LABEL } from './interview-source-label';
 import { compareTimeRef, formatTimeRef } from './time-ref';
-import type { Case, Claim, Id, Interview, Person, Place } from './types';
+import type { Case, Id, Interview, Person, Place } from './types';
 
 /** 日時の分からない聴取の名前に使う言葉です。 */
 export const UNKNOWN_INTERVIEW_TIME_LABEL = '日時不明';
-
-/** タイトルもURLも無い聴取の名前に使う言葉です。 */
-export const UNTITLED_INTERVIEW_LABEL = '無題の資料';
-
-/** 原典を持つ（転載の）資料の短い表示に添える言葉です。 */
-export const REPRINT_LABEL = '転載';
 
 /** 資料（聴取）1件の表示です。供述の変遷・資料の一覧・資料の詳細で使います。 */
 export type InterviewView = {
@@ -128,41 +121,4 @@ export function formatInterviewLabel(target: Case, interview: Interview): string
     ...(interview.at === undefined ? [] : [formatTimeRef(interview.at)]),
     ...(interview.interviewerPersonId === undefined ? [] : [personOf(target, interview.interviewerPersonId).name]),
   ].join('・');
-}
-
-/**
- * 資料の短い表示を返します（例「架空日報 朝刊 1998年8月14日・主要報道・転載」）。
- * 証言のカードや照合の一覧で、どの媒体のいつの資料かと資料の格を、資料を開かずに見分けるために使います。
- *
- * - 媒体と日時は、転載の原典を持つ資料では原典の媒体・発行日を優先します。同じ媒体が日によって違う内容を報じる場合に、
- *   判断の材料になるのは原典の日付だからです。原典に無い項目は、資料自身の媒体（聴取者）・日時で補います。
- * - 媒体も日時も無い資料は、資料の名前（タイトル、無ければURL、それも無ければ「無題の資料」）を先頭に置きます。
- * - 資料の格を持つ資料は格の表示名を、原典を持つ資料は「転載」を「・」でつないで添えます。
- */
-export function formatInterviewSourceLabel(target: Case, interview: Interview): string {
-  const publisherId = interview.origin?.publisherPersonId ?? interview.interviewerPersonId;
-  const time = interview.origin?.publishedAt ?? interview.at;
-  const head = [
-    ...(publisherId === undefined ? [] : [personOf(target, publisherId).name]),
-    ...(time === undefined ? [] : [formatTimeRef(time)]),
-  ].join(' ');
-  return [
-    head === '' ? (interview.title ?? interview.url ?? UNTITLED_INTERVIEW_LABEL) : head,
-    ...(interview.grade === undefined ? [] : [INTERVIEW_GRADE_LABELS[interview.grade]]),
-    ...(interview.origin === undefined ? [] : [REPRINT_LABEL]),
-  ].join('・');
-}
-
-/**
- * 証言が載っている資料を、出典の順に資料の短い表示（formatInterviewSourceLabel）にして返します。
- * 資料にひもづかない出典（経由だけの出典）は含めません。資料にひもづかない証言では空の配列です。
- * 照合の一覧や証言のカードで、証言がどの資料に載っているかを示すために使います。
- */
-export function formatClaimSourceLabels(target: Case, claim: Claim): string[] {
-  return interviewIdsOf(claim).map((interviewId) => {
-    const interview = target.interviews.find((candidate) => candidate.id === interviewId);
-    // 参照の整合性は findCaseViolations で担保する前提のため、見つからない場合はデータ破損として扱う
-    if (interview === undefined) throw new Error(`証言が存在しない資料を参照しています: ${interviewId}`);
-    return formatInterviewSourceLabel(target, interview);
-  });
 }

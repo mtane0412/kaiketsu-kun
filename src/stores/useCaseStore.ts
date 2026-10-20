@@ -1,7 +1,9 @@
 /**
  * ケースストア
  *
- * 複数のケースのうち、いま開いているケースを1件だけ保持し、変更のたびにブラウザへ保存します（src/lib/case-storage.ts）。
+ * 複数のケースのうち、いま開いているケースを1件だけ保持し、変更のたびにブラウザ（IndexedDB）へ保存します（src/lib/case-storage.ts）。
+ * 変更はまずメモリ上のケースへ同期的に反映し、保存は順番待ちの列に積んで非同期に行います。IndexedDB の読み書きは非同期のためです。
+ * 保存に失敗した場合は、変更を画面に残したまま saveError に理由を設定します（次の保存が成功すれば消えます。保存はケース全体を書き直すためです）。
  * どのケースを開くかはURL（/cases/<ケースのID>）が決めるため、このストアはケースの切り替えをURLから受け取ります（openCase）。
  * ケースの一覧（summaries）は、ケースを開かずに一覧ページへ表示するために保持します。
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
@@ -12,7 +14,7 @@
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
- * - LocalStorage を読み書きするため、ケースを開く（openCase）・一覧を読む（refreshSummaries）操作は、
+ * - IndexedDB を読み書きするため、ケースを開く（openCase）・一覧を読む（refreshSummaries）操作は、
  *   ブラウザ側（useEffect の中）から呼び出してください。サーバー描画との食い違いを避けるためです。
  * - この段階はドメインモデルの検証が目的のため、スキーマのマイグレーションは実装していません。
  *   モデルを変更して保存済みデータが検証に失敗した場合は、ケースを開かずに loadError へ理由を設定します
@@ -29,13 +31,16 @@ import { detachFromTasks, type TaskLinkKind } from '@/domain/tasks';
 import { moveTimelineItem, placeTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
 import {
+  CaseNotFoundError,
   createEmptyCase,
+  InvalidStoredCaseError,
   deleteCase as deleteStoredCase,
   listCaseSummaries,
   loadCase,
-  migrateLegacyCase,
+  migrateLocalStorageCases,
   saveCase,
   type CaseSummary,
+  type MigrationFailure,
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
@@ -65,29 +70,50 @@ export type TimelineMove = { key: TimelineKey; toIndex: number };
 
 export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][number] } }[CollectionKey];
 
+/**
+ * ケースを開けなかった理由です。
+ * - missing: 保存が無い（URLが誤っている・削除済み）
+ * - invalid: 保存データの形式が正しくない（退避用のストアへ写しています）
+ * - migration: LocalStorage に保存していた頃のデータを移せなかった
+ * - storage: ブラウザの保存領域（IndexedDB）を読み書きできなかった（プライベートブラウズで使えない場合など）
+ */
+export type CaseLoadError = { kind: 'missing' | 'invalid' | 'migration' | 'storage'; message: string };
+
+/** ケースを開けなかったエラーの種類を判定します。 */
+function loadErrorKindOf(error: unknown): CaseLoadError['kind'] {
+  if (error instanceof CaseNotFoundError) return 'missing';
+  if (error instanceof InvalidStoredCaseError) return 'invalid';
+  return 'storage';
+}
+
 type CaseStore = {
   /** いま開いているケースです。開いていない場合は null です。 */
   currentCase: Case | null;
   /** 保存済みのケースの一覧です。更新日時の新しい順に並びます。 */
   summaries: CaseSummary[];
   /** ケースを開けなかった理由です。開けている場合は null です。 */
-  loadError: string | null;
-  /** IDを指定してケースを開きます。開けない場合はケースを開かず、loadError に理由を設定します。 */
-  openCase: (caseId: Id) => void;
+  loadError: CaseLoadError | null;
+  /** 最後の保存に失敗した理由です。保存できている場合は null です。 */
+  saveError: string | null;
+  /**
+   * IDを指定してケースを開きます。開けない場合はケースを開かず、loadError に理由を設定します。
+   * 読み出しの途中で別のケースを開いた場合は、後から開いた方だけを反映します。
+   */
+  openCase: (caseId: Id) => Promise<void>;
   /** 開いているケースを閉じます。ケースの一覧ページへ移るときに使います。 */
   closeCase: () => void;
   /** 保存済みのケースの一覧を読み直します。 */
-  refreshSummaries: () => void;
+  refreshSummaries: () => Promise<void>;
   /** 空のケースを作って保存し、そのIDを返します。開いているケースは切り替えません。 */
-  createCase: (name?: string) => Id;
+  createCase: (name?: string) => Promise<Id>;
   /**
    * 型の保証が無いデータを検証し、新しいケースとして保存して、そのIDを返します。
    * 保存済みのケースとIDが重なる場合は、元のケースを上書きしないよう、新しいIDを振ります。
    * 検証に失敗した場合は例外を投げ、ケースを追加しません。
    */
-  importCase: (data: unknown) => Id;
+  importCase: (data: unknown) => Promise<Id>;
   /** ケースを保存から消します。開いているケースを消した場合は、開いているケースを空にします。 */
-  deleteCase: (caseId: Id) => void;
+  deleteCase: (caseId: Id) => Promise<void>;
   /** 開いているケースの名前を変更します。 */
   renameCase: (name: string) => void;
   /** 同じIDの要素があれば置き換え、無ければ追加します。参照の整合性に違反する場合は例外を投げます。 */
@@ -130,10 +156,55 @@ const TASK_LINK_KIND_BY_COLLECTION_KEY: Partial<Record<CollectionKey, TaskLinkKi
   disputes: 'dispute',
 };
 
+/**
+ * 保存の順番待ちの列の末尾です。保存・削除・一覧の読み出しは、この列に積んで1件ずつ順に行います。
+ * 先に積んだ保存が終わる前に後の保存が終わり、古い内容で上書きされることを防ぐためです。
+ */
+let pendingWrites: Promise<void> = Promise.resolve();
+
+/** 保存の順番待ちの列に処理を積み、その処理の結果を返します。前の処理が失敗しても、後の処理は行います。 */
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const result = pendingWrites.then(task);
+  pendingWrites = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
+/** 積んである保存がすべて終わるまで待ちます。保存した内容を読み出して確かめる前（テストなど）に使います。 */
+export function flushPendingSaves(): Promise<void> {
+  return pendingWrites;
+}
+
+/** 最後に開こうとしたケースのIDです。読み出しの途中で別のケースを開いた場合に、先の読み出しの結果を捨てるために使います。 */
+let latestOpenRequest: Id | null = null;
+
+/** エラーを、利用者へ伝える文字列にします。 */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** LocalStorage から移せなかったデータです。移せなかったケースを開こうとしたときに、「見つからない」ではなく理由を示すために使います。 */
+let migrationFailures: MigrationFailure[] = [];
+
+/** 一覧の項目を1件だけ差し替え、更新日時の新しい順に並べ直します（保存のたびに一覧を全件読み直さないためです）。 */
+function withSummary(summaries: CaseSummary[], summary: CaseSummary): CaseSummary[] {
+  return [summary, ...summaries.filter((item) => item.id !== summary.id)].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
+}
+
 export const useCaseStore = create<CaseStore>()((set, get) => {
+  /** 積んである保存が終わった後の、ケースの一覧を読み直します。 */
+  const reloadSummaries = async (): Promise<void> => {
+    set({ summaries: await enqueue(listCaseSummaries) });
+  };
+
   /**
-   * 開いているケースを、与えられた関数の結果で置き換えて保存します。
+   * 開いているケースを、与えられた関数の結果で置き換え、保存を順番待ちの列に積みます。
    * ケースを開いていない場合は例外を投げます（どのケースへ書き込むべきか決められないため）。
+   * 注意: 保存の完了は待ちません。保存に失敗した場合は saveError に理由を設定します。
    */
   const updateCurrentCase = (update: (current: Case) => Case): void => {
     const { currentCase } = get();
@@ -141,51 +212,82 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 
     const nextCase = update(currentCase);
     if (nextCase === currentCase) return;
-    saveCase(nextCase);
-    set({ currentCase: nextCase, summaries: listCaseSummaries() });
+    set({ currentCase: nextCase });
+    void enqueue(async () => {
+      try {
+        const summary = await saveCase(nextCase);
+        set({ summaries: withSummary(get().summaries, summary), saveError: null });
+      } catch (error) {
+        set({
+          saveError: `変更をブラウザに保存できませんでした。画面を閉じる前に、ケース設定から JSON を書き出してください（${messageOf(error)}）`,
+        });
+      }
+    });
   };
 
   return {
     currentCase: null,
     summaries: [],
     loadError: null,
+    saveError: null,
 
-    openCase: (caseId) => {
-      try {
-        set({ currentCase: loadCase(caseId), loadError: null });
-      } catch (error) {
-        set({ currentCase: null, loadError: error instanceof Error ? error.message : String(error) });
+    openCase: async (caseId) => {
+      latestOpenRequest = caseId;
+      // 開いているケースへの保存が終わってから読み出す（保存前の古い内容を開かないため）
+      const result = await enqueue(async () => {
+        try {
+          return { opened: await loadCase(caseId) };
+        } catch (error) {
+          return { error };
+        }
+      });
+      if (latestOpenRequest !== caseId) return;
+
+      if ('opened' in result) {
+        // 前に開いていたケースの保存の失敗は、開いたケースとは関係が無いため消す
+        set({ currentCase: result.opened, loadError: null, saveError: null });
+        return;
       }
+      const migrationFailure = migrationFailures.find((failure) => failure.caseId === caseId);
+      const loadError: CaseLoadError =
+        result.error instanceof CaseNotFoundError && migrationFailure !== undefined
+          ? { kind: 'migration', message: migrationFailure.message }
+          : { kind: loadErrorKindOf(result.error), message: messageOf(result.error) };
+      set({ currentCase: null, loadError });
     },
 
-    closeCase: () => set({ currentCase: null, loadError: null }),
+    closeCase: () => {
+      latestOpenRequest = null;
+      set({ currentCase: null, loadError: null, saveError: null });
+    },
 
-    refreshSummaries: () => set({ summaries: listCaseSummaries() }),
+    refreshSummaries: reloadSummaries,
 
-    createCase: (name) => {
+    createCase: async (name) => {
       const created = createEmptyCase(name);
-      saveCase(created);
-      set({ summaries: listCaseSummaries() });
+      await enqueue(() => saveCase(created));
+      await reloadSummaries();
       return created.id;
     },
 
-    importCase: (data) => {
+    importCase: async (data) => {
       const parsed = parseCase(data);
-      // 同じケースを2回読み込んだ場合に、先に読み込んだケースを失わないよう、IDが重なるときは新しいIDを振る
-      const isDuplicated = listCaseSummaries().some((summary) => summary.id === parsed.id);
-      const imported: Case = isDuplicated ? { ...parsed, id: nanoid() } : parsed;
-      saveCase(imported);
-      set({ summaries: listCaseSummaries() });
+      const imported = await enqueue(async () => {
+        // 同じケースを2回読み込んだ場合に、先に読み込んだケースを失わないよう、IDが重なるときは新しいIDを振る
+        const isDuplicated = (await listCaseSummaries()).some((summary) => summary.id === parsed.id);
+        const target: Case = isDuplicated ? { ...parsed, id: nanoid() } : parsed;
+        await saveCase(target);
+        return target;
+      });
+      await reloadSummaries();
       return imported.id;
     },
 
-    deleteCase: (caseId) => {
-      deleteStoredCase(caseId);
+    deleteCase: async (caseId) => {
+      await enqueue(() => deleteStoredCase(caseId));
       const { currentCase } = get();
-      set({
-        summaries: listCaseSummaries(),
-        currentCase: currentCase?.id === caseId ? null : currentCase,
-      });
+      if (currentCase?.id === caseId) set({ currentCase: null });
+      await reloadSummaries();
     },
 
     renameCase: (name) => updateCurrentCase((current) => ({ ...current, name })),
@@ -263,15 +365,33 @@ export function useCurrentCase(): Case {
   return currentCase;
 }
 
+/** LocalStorage からの移行の結果です。画面を開くたびに移行を繰り返さないよう、1回目の結果を使い回します。 */
+let migration: Promise<MigrationFailure[]> | null = null;
+
 /**
  * 保存済みのデータを読み込む準備を行い、ケースの一覧を読み直します。
- * 1件だけ保存していた頃のデータがあれば、1件目のケースとして移行します（移行できなかった場合は loadError に理由を設定します）。
+ * LocalStorage に保存していた頃のケースがあれば、IndexedDB へ移します（移せなかった場合は loadError に理由を設定します）。
+ * ブラウザの保存領域を開けなかった場合も、例外にせず loadError に理由を設定します（画面に理由を示すためです）。
  * ブラウザ側（useEffect の中）から呼び出してください。
  */
-export function initializeCaseStore(): void {
-  const migrationError = migrateLegacyCase();
-  useCaseStore.setState({
-    summaries: listCaseSummaries(),
-    ...(migrationError === null ? {} : { loadError: migrationError }),
-  });
+export async function initializeCaseStore(): Promise<void> {
+  const running = (migration ??= enqueue(migrateLocalStorageCases));
+  try {
+    migrationFailures = await running;
+    if (migrationFailures.length > 0) {
+      const message = migrationFailures.map((failure) => failure.message).join('\n');
+      useCaseStore.setState({ loadError: { kind: 'migration', message } });
+    }
+    await useCaseStore.getState().refreshSummaries();
+  } catch (error) {
+    // 保存領域を開けなかった場合は、次に画面を開いたときに移行をやり直す
+    if (migration === running) migration = null;
+    useCaseStore.setState({ loadError: { kind: 'storage', message: messageOf(error) } });
+  }
+}
+
+/** LocalStorage からの移行を、次の initializeCaseStore でもう一度行うようにします。テストで保存を空に戻すときに使います。 */
+export function resetCaseStoreInitialization(): void {
+  migration = null;
+  migrationFailures = [];
 }
