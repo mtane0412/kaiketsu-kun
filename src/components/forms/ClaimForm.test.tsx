@@ -1005,42 +1005,148 @@ describe('ClaimForm（聴取）', () => {
       });
     });
 
-    it('1つ目の出典を資料の欄と発言者の欄で編集し、2つ目以降の出典は一覧に示してそのまま保存する', async () => {
+    /** 保存済みの、管理人の証言の出典を返します。 */
+    const savedSources = () => openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources;
+
+    it('1つ目の出典を資料の欄と発言者の欄で、2つ目の出典を「出典 2」の欄で示し、変えなければそのまま保存する', async () => {
       const user = userEvent.setup();
       render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
 
-      // 検証: 資料の欄と経由は1つ目の出典、2つ目の出典は「ほかの出典」に示す
+      // 検証: 資料の欄と経由は1つ目の出典、2つ目の出典は「出典 2」の欄に入力済みで示す
       expect(screen.getByLabelText('資料（任意）')).toHaveValue(bookInterview.id);
       expect(screen.getByRole('button', { name: /^発言者/ })).toHaveTextContent('発言者: 管理人（湖畔の夏 20年目の証言（架空の書籍） による）');
-      const otherSources = screen.getByRole('list', { name: 'ほかの出典' });
-      expect(within(otherSources).getByText(/架空日報 1998年8月14日 朝刊/)).toBeInTheDocument();
-      expect(within(otherSources).getByText(/別荘は真っ暗だった/)).toBeInTheDocument();
+      const secondSource = screen.getByRole('group', { name: '出典 2' });
+      expect(within(secondSource).getByLabelText('資料')).toHaveValue(newspaperInterview.id);
+      expect(within(secondSource).getByRole('checkbox', { name: '架空日報 朝刊（記録・媒体）' })).toBeChecked();
+      expect(within(secondSource).getByLabelText('引用')).toHaveValue('別荘は真っ暗だった');
 
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual(claimInTwoSources.sources);
+      expect(savedSources()).toEqual(claimInTwoSources.sources);
     });
 
-    it('ほかの出典を「外す」と、その出典を除いて保存する', async () => {
+    it('2つ目の出典の経由・引用・引用の秒数を書き換えて保存する', async () => {
       const user = userEvent.setup();
       render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
 
-      await user.click(screen.getByRole('button', { name: '出典を外す: 架空日報 1998年8月14日 朝刊・架空日報 朝刊' }));
+      // 前提: 新聞の記事は、書籍の著者から聞いた話として載っていた（経由: 書籍 → 新聞）
+      const secondSource = screen.getByRole('group', { name: '出典 2' });
+      const viaField = within(secondSource).getByRole('group', { name: '経由' });
+      await user.click(within(viaField).getByRole('checkbox', { name: '架空日報 朝刊（記録・媒体）' }));
+      await user.click(within(viaField).getByRole('checkbox', { name: '湖畔の夏 20年目の証言（架空の書籍）（記録・媒体）' }));
+      await user.click(within(viaField).getByRole('checkbox', { name: '架空日報 朝刊（記録・媒体）' }));
+      const quoteField = within(secondSource).getByLabelText('引用');
+      await user.clear(quoteField);
+      await user.type(quoteField, '別荘の明かりは消えていた');
+      await user.type(within(secondSource).getByLabelText('引用の位置（秒）'), '95');
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual([claimInTwoSources.sources[0]]);
+      expect(savedSources()).toEqual([
+        claimInTwoSources.sources[0],
+        {
+          interviewId: newspaperInterview.id,
+          viaPersonIds: ['person-book', 'person-newspaper'],
+          quote: { text: '別荘の明かりは消えていた', seconds: 95 },
+        },
+      ]);
     });
 
-    it('資料の欄で、ほかの出典と同じ資料を選ぶと、保存せずに理由を示す', async () => {
+    it('2つ目の出典の引用を空にすると、引用を持たない出典として保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      await user.clear(within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('引用'));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(savedSources()).toEqual([claimInTwoSources.sources[0], { interviewId: newspaperInterview.id, viaPersonIds: ['person-newspaper'] }]);
+    });
+
+    it('2つ目の出典を「出典 2 を外す」で外すと、その出典を除いて保存する', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: '出典 2 を外す' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(savedSources()).toEqual([claimInTwoSources.sources[0]]);
+    });
+
+    it('「出典を追加」で出典を足し、資料を選んで保存する。何も入力しなかった出典は保存しない', async () => {
+      const user = userEvent.setup();
+      // 前提: 1つ目の出典だけを持つ証言に、新聞の記事を2つ目の出典として足す
+      const claimInBook = { ...caretakerClaim, sources: claimInTwoSources.sources.slice(0, 1) };
+      render(<ClaimForm initial={claimInBook} onDone={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: '出典を追加' }));
+      await user.selectOptions(within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('資料'), newspaperInterview.id);
+      // 3つ目の出典は足しただけで、何も入力しない
+      await user.click(screen.getByRole('button', { name: '出典を追加' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(savedSources()).toEqual([claimInTwoSources.sources[0], { interviewId: newspaperInterview.id, viaPersonIds: [] }]);
+    });
+
+    it('資料の欄で、2つ目の出典と同じ資料を選ぶと、保存せずに2つ目の出典の資料の欄に理由を示す', async () => {
       const user = userEvent.setup();
       render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
 
       await user.selectOptions(screen.getByLabelText('資料（任意）'), newspaperInterview.id);
       await user.click(screen.getByRole('button', { name: '証言を保存' }));
 
-      expect(screen.getByText('この資料は、ほかの出典にすでに含まれています。ほかの出典を外すか、別の資料を選んでください')).toBeInTheDocument();
-      expect(openedCase().claims.find((claim) => claim.id === caretakerClaim.id)?.sources).toEqual(claimInTwoSources.sources);
+      // 検証: 誤りの理由を、2つ目の出典の資料の欄の説明として読み上げる
+      const interviewField = within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('資料');
+      expect(interviewField).toHaveAttribute('aria-invalid', 'true');
+      expect(interviewField).toHaveAccessibleDescription('この資料は、前の出典ですでに選んでいます。別の資料を選ぶか、この出典を外してください');
+      expect(savedSources()).toEqual(claimInTwoSources.sources);
     });
+
+    it('誤りを示した後で出典の欄を直すと、誤りの表示を消す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      // 前提: 1つ目の出典と同じ資料を選んで保存し、2つ目の出典の資料の欄に誤りを示した
+      await user.selectOptions(screen.getByLabelText('資料（任意）'), newspaperInterview.id);
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+      const interviewField = within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('資料');
+      expect(interviewField).toHaveAttribute('aria-invalid', 'true');
+
+      await user.selectOptions(interviewField, bookInterview.id);
+
+      expect(interviewField).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByText('この資料は、前の出典ですでに選んでいます。別の資料を選ぶか、この出典を外してください')).not.toBeInTheDocument();
+    });
+
+    it('引用の秒数が0以上の整数でない場合は、保存せずに秒数の欄に理由を示す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      const secondsField = within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('引用の位置（秒）');
+      await user.type(secondsField, '1分35秒');
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(secondsField).toHaveAttribute('aria-invalid', 'true');
+      expect(secondsField).toHaveAccessibleDescription('引用の位置は、0以上の整数の秒数で入力してください');
+      expect(savedSources()).toEqual(claimInTwoSources.sources);
+    });
+
+    it('発言者を選ばずに、2つ目の出典に経由だけを指定すると、保存せずに理由を示す', async () => {
+      const user = userEvent.setup();
+      // 前提: 発言者の無い証言（ユーザーの推測）に、新聞の出典を足して経由を選ぶ
+      render(<ClaimForm initial={{ ...caretakerClaim, speaker: { kind: 'user' }, sources: [] }} onDone={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: '出典を追加' }));
+      const secondSource = screen.getByRole('group', { name: '出典 2' });
+      await user.click(within(within(secondSource).getByRole('group', { name: '経由' })).getByRole('checkbox', { name: '架空日報 朝刊（記録・媒体）' }));
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+
+      expect(screen.getByText('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）')).toBeInTheDocument();
+    });
+  });
+
+  it('ボード上の入力欄（compact）では、「出典を追加」を表示しない', () => {
+    render(<ClaimForm onDone={vi.fn()} compact />);
+
+    expect(screen.queryByRole('button', { name: '出典を追加' })).not.toBeInTheDocument();
   });
 
   it('ボード上の入力欄（compact）で聴取を指定していない場合は、聴取の欄を表示しない', () => {
