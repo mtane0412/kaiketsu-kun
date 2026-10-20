@@ -13,8 +13,9 @@
  * 証言の出典（Claim.sources）は、1つ目の出典を「資料（任意）」の欄・「発言者」の経由・引用で編集します。
  * どの人物の証言でも、聴取にひもづけられます（記事のように、1件の資料に何人もの発言が載るためです。
  * 資料に載っている人物は、ひもづく証言の発言者から導きます）。聴取を選んでも、発言者は選び直しません。
- * 2つ目以降の出典（資料から抽出した候補を既存の証言に書き足したもの。src/components/ClaimExtraction.tsx）は、
- * 「ほかの出典」に一覧で示し、そのまま保存します。「外す」で出典ごと外せます。
+ * 2つ目以降の出典（資料から抽出した候補を既存の証言に書き足したものなど。src/components/ClaimExtraction.tsx）は、
+ * 「出典 2」「出典 3」…の欄で、出典ごとに資料・経由・引用を編集します（src/components/forms/OtherClaimSourcesField.tsx）。
+ * 「出典を追加」で出典を足し、「出典 N を外す」で外せます。compact では、2つ目以降の出典を持たない限り、この欄を表示しません。
  * 資料も経由も引用も持たない場合は、1つ目の出典を作りません（出典の無い証言にします）。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
@@ -54,7 +55,6 @@ import {
 } from '@/domain/mention';
 import { timelineKeyOf } from '@/domain/timeline-order';
 import { formatTimeRef } from '@/domain/time-ref';
-import { formatViaLabel } from '@/domain/case-views';
 import { formatInterviewLabel } from '@/domain/interviews';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import { DEFAULT_PERSON_KIND } from '@/domain/person-kind';
@@ -65,6 +65,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
+import { OtherClaimSourcesField, toClaimSources, toSourceRows, type SourceRow, type SourceRowErrors } from './OtherClaimSourcesField';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft, type SpeakerPersonOption } from './SpeakerPicker';
 
 /**
@@ -138,9 +139,10 @@ export function ClaimForm({
   const [interviewId, setInterviewId] = useState<Id>(() =>
     initial ? (editedSource?.interviewId ?? NO_INTERVIEW) : (defaults?.interviewId ?? NO_INTERVIEW)
   );
-  /** 2つ目以降の出典です。このフォームでは編集せず、外すことだけができます。 */
-  const [otherSources, setOtherSources] = useState<ClaimSource[]>(() => initial?.sources.slice(1) ?? []);
-  const otherSourcesLabelId = useId();
+  /** 2つ目以降の出典の入力中の行です。 */
+  const [otherSourceRows, setOtherSourceRows] = useState<SourceRow[]>(() => toSourceRows(initial?.sources.slice(1) ?? []));
+  /** 直前の保存で見つかった、2つ目以降の出典の欄の誤りです。 */
+  const [otherSourceErrors, setOtherSourceErrors] = useState<SourceRowErrors>({});
   const [speaker, setSpeaker] = useState<SpeakerDraft>(() =>
     initial === undefined && defaults?.speaker !== undefined ? defaults.speaker : speakerToDraft(initial)
   );
@@ -184,6 +186,12 @@ export function ClaimForm({
       return { id: candidate.id, label: candidate.label, personKind };
     });
 
+  /** 発言者・経由の欄で、名前だけから人物を新規作成します。種別は既定値（人物）になります（createEntry）。 */
+  const createPersonOption = (name: string): SpeakerPersonOption => {
+    const { id, label } = handleCreate('person', name);
+    return { id, label, personKind: DEFAULT_PERSON_KIND };
+  };
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
@@ -191,15 +199,19 @@ export function ClaimForm({
       setError(speakerRequiredMessage);
       return;
     }
-    const hasOtherVia = otherSources.some((source) => source.viaPersonIds.length > 0);
+    const hasOtherVia = otherSourceRows.some((row) => row.viaPersonIds.length > 0);
     if (speaker.personIds.length === 0 && (speaker.viaPersonIds.length > 0 || hasOtherVia)) {
       setError('発言者を選んでください。経由だけを指定することはできません（新聞の地の文は、新聞を発言者に選びます）');
       return;
     }
-    if (interviewId !== NO_INTERVIEW && otherSources.some((source) => source.interviewId === interviewId)) {
-      setError('この資料は、ほかの出典にすでに含まれています。ほかの出典を外すか、別の資料を選んでください');
+    const otherSourcesResult = toClaimSources(otherSourceRows, interviewId === NO_INTERVIEW ? undefined : interviewId);
+    if ('errors' in otherSourcesResult) {
+      // 誤りの理由は、該当する出典の欄に示す（フォーム全体の誤りの表示は消す）
+      setError(null);
+      setOtherSourceErrors(otherSourcesResult.errors);
       return;
     }
+    setOtherSourceErrors({});
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
     const hasEditedSource = interviewId !== NO_INTERVIEW || speaker.viaPersonIds.length > 0 || quote !== undefined;
     const source: ClaimSource = {
@@ -212,7 +224,7 @@ export function ClaimForm({
       speaker: toSpeaker(speaker),
       content,
       ...links,
-      sources: [...(hasEditedSource ? [source] : []), ...otherSources],
+      sources: [...(hasEditedSource ? [source] : []), ...otherSourcesResult.sources],
     };
     if (title.trim()) claim.title = title.trim();
     if (initial?.locator) claim.locator = initial.locator;
@@ -222,6 +234,7 @@ export function ClaimForm({
       ...parseContent(content).flatMap((segment) => (segment.type === 'mention' ? [segment.id] : [])),
       ...speaker.personIds,
       ...speaker.viaPersonIds,
+      ...otherSourcesResult.sources.flatMap((otherSource) => otherSource.viaPersonIds),
     ]);
     const newEntries = pending.filter((item) => usedIds.has(item.mention.id)).map((item) => item.entry);
 
@@ -310,41 +323,15 @@ export function ClaimForm({
           </select>
         </div>
       )}
-      {otherSources.length > 0 && (
-        <div>
-          <p id={otherSourcesLabelId} className={LABEL_CLASS}>
-            ほかの出典
-          </p>
-          <ul aria-labelledby={otherSourcesLabelId} className="space-y-1">
-            {otherSources.map((otherSource) => {
-              const interview = currentCase.interviews.find((item) => item.id === otherSource.interviewId);
-              const sourceLabel = interview ? formatInterviewLabel(currentCase, interview) : '資料なし';
-              const viaNames = otherSource.viaPersonIds.map((id) => speakerOptions.find((option) => option.id === id)?.label ?? id);
-              return (
-                <li
-                  key={`${otherSource.interviewId ?? ''}:${otherSource.viaPersonIds.join(',')}`}
-                  className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
-                >
-                  <p className="flex-1">
-                    <span className="font-medium">{sourceLabel}</span>
-                    {formatViaLabel([viaNames])}
-                    {otherSource.quote && (
-                      <span className="line-clamp-2 whitespace-pre-line">「{stripTimestampLines(otherSource.quote.text)}」</span>
-                    )}
-                  </p>
-                  <button
-                    type="button"
-                    aria-label={`出典を外す: ${sourceLabel}`}
-                    onClick={() => setOtherSources((current) => current.filter((item) => item !== otherSource))}
-                    className="shrink-0 hover:underline"
-                  >
-                    外す
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {(!compact || otherSourceRows.length > 0) && (
+        <OtherClaimSourcesField
+          rows={otherSourceRows}
+          onChange={setOtherSourceRows}
+          errors={otherSourceErrors}
+          interviewOptions={currentCase.interviews.map((interview) => ({ id: interview.id, label: formatInterviewLabel(currentCase, interview) }))}
+          persons={speakerOptions}
+          onCreatePerson={createPersonOption}
+        />
       )}
       {!compact && (
         <>
@@ -383,11 +370,7 @@ export function ClaimForm({
           value={speaker}
           onChange={setSpeaker}
           persons={speakerOptions}
-          onCreatePerson={(name) => {
-            // 名前だけで新規作成する人物の種別は、既定値（人物）になる（createEntry）
-            const { id, label } = handleCreate('person', name);
-            return { id, label, personKind: DEFAULT_PERSON_KIND };
-          }}
+          onCreatePerson={createPersonOption}
         />
         <SubmitButton label={compact && !initial ? '書き足す' : '証言を保存'} />
       </div>
