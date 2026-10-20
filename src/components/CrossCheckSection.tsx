@@ -54,6 +54,10 @@ type CrossCheckSectionProps = {
   tab: TabKey;
 };
 
+/**
+ * 開いている証言の照合の一覧と、登録・編集・削除・反応の記録の操作を描画します。
+ * 撤回・訂正の照合は、開いている証言がどちらの側かを示します。
+ */
 export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
   const currentCase = useCurrentCase();
   const remove = useCaseStore((state) => state.remove);

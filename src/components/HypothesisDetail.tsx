@@ -115,6 +115,10 @@ function LinkedClaimList({ views, tab, linkLabel, onRemove, emptyMessage }: Link
   );
 }
 
+/**
+ * 仮説1件の詳細を描画します。第三者の説では、主唱者の立場の変化の節も表示します。
+ * ケースに無い仮説のIDには、見つからないことを表示します。
+ */
 export function HypothesisDetail({ hypothesisId }: { hypothesisId: Id }) {
   const currentCase = useCurrentCase();
   const caseId = useCaseId();

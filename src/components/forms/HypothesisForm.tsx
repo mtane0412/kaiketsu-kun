@@ -34,6 +34,10 @@ type HypothesisFormProps = {
   actions?: ReactNode;
 };
 
+/**
+ * 仮説の見出し・説明・主唱者・唱えた時期・状態・否定の理由を入力するフォームを描画します。
+ * 保存できたときは、保存した仮説のIDで onDone を呼びます。
+ */
 export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps) {
   const currentCase = useCurrentCase();
   const upsert = useCaseStore((state) => state.upsert);
@@ -55,6 +59,9 @@ export function HypothesisForm({ initial, onDone, actions }: HypothesisFormProps
   const stanceChangeCount =
     currentCase.hypotheses.find((hypothesis) => hypothesis.id === initial?.id)?.stanceChanges?.length ?? 0;
 
+  /**
+   * 入力から仮説を組み立てて保存します。唱えた時期を解釈できない場合と、規則違反で保存できない場合は、理由を表示します。
+   */
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setIsProposedAtInvalid(false);

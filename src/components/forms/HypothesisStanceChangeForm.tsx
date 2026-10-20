@@ -31,6 +31,10 @@ type HypothesisStanceChangeFormProps = {
   onCancel: () => void;
 };
 
+/**
+ * 立場の変化を1件入力するフォームを描画します。
+ * 保存すると、入力から作った立場の変化を onSave に渡します。時期を解釈できない場合は、理由を示して onSave を呼びません。
+ */
 export function HypothesisStanceChangeForm({ onSave, onCancel }: HypothesisStanceChangeFormProps) {
   const currentCase = useCurrentCase();
   /** 同じ画面に複数のフォームが並んでも入力欄が混ざらないよう、このフォーム固有の接頭辞を持ちます。 */
@@ -45,12 +49,14 @@ export function HypothesisStanceChangeForm({ onSave, onCancel }: HypothesisStanc
 
   const claimOptions = useMemo(() => buildTimeline(currentCase).items.map((item) => item.view), [currentCase]);
 
+  /** 根拠の証言の選択を切り替えます。 */
   const toggleBasisClaim = (claimId: Id) => {
     setBasisClaimIds((current) =>
       current.includes(claimId) ? current.filter((id) => id !== claimId) : [...current, claimId]
     );
   };
 
+  /** 入力を検証し、時期を解釈できれば立場の変化を作って onSave に渡します。 */
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     const parsedAt = at.trim() === '' ? undefined : parseDateInput(at);

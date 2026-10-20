@@ -38,6 +38,9 @@ type CrossCheckFormProps = {
   onCancel: () => void;
 };
 
+/**
+ * 照合の相手・種類・撤回・訂正の向き・理由を入力するフォームを描画します。保存できたときは onDone を呼びます。
+ */
 export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossCheckFormProps) {
   const currentCase = useCurrentCase();
   const upsert = useCaseStore((state) => state.upsert);
@@ -65,6 +68,7 @@ export function CrossCheckForm({ claimId, initial, onDone, onCancel }: CrossChec
     [currentCase, claimId]
   );
 
+  /** 入力から照合を組み立てて保存します。撤回・訂正は選んだ向きで、他の種類は登録済みの並びで証言を並べます。 */
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     // 未入力の理由はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）

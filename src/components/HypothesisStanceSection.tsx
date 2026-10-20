@@ -40,9 +40,14 @@ type HypothesisStanceSectionProps = {
   update: (change: (current: Hypothesis) => Hypothesis) => void;
 };
 
+/**
+ * 主唱者の立場の変化の一覧と、記録・削除の操作を描画します。
+ * 記録・削除は update に渡して仮説を書き換えます（記録した変化は時期の順の位置に入ります）。
+ */
 export function HypothesisStanceSection({ stanceChanges, tab, update }: HypothesisStanceSectionProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
 
+  /** 記録した立場の変化を、時期の順の位置に入れて保存し、フォームを閉じます。 */
   const handleSave = (change: HypothesisStanceChange) => {
     update((current) => ({ ...current, stanceChanges: insertStanceChange(current.stanceChanges ?? [], change) }));
     setIsFormOpen(false);
