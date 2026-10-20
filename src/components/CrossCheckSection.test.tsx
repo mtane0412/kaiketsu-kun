@@ -38,13 +38,13 @@ describe('CrossCheckSection', () => {
     const item = within(crossCheckSection).getAllByRole('listitem');
     // 検証: 相手の証言の時系列の並び順（管理人 → 防犯カメラ）に並ぶ
     expect(within(item[0]!).getByText('食い違う')).toBeInTheDocument();
-    expect(within(item[0]!).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+    expect(within(item[0]!).getByRole('link', { name: /^管理人.*見回りをしたとき/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
     expect(within(item[0]!).getByText(/管理人は別荘が真っ暗で/)).toBeInTheDocument();
     expect(within(item[1]!).getByText('裏付ける')).toBeInTheDocument();
-    expect(within(item[1]!).getByRole('link', { name: /車が別荘の方向へ/ })).toHaveAttribute(
+    expect(within(item[1]!).getByRole('link', { name: /^県道の防犯カメラ.*車が別荘の方向へ/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-police-camera'
     );
@@ -163,6 +163,15 @@ describe('CrossCheckSection', () => {
 
     expect(screen.getByRole('button', { name: /見回りをしたとき.*との照合（食い違う）を編集/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /見回りをしたとき.*との照合（同じ事柄を述べている）を編集/ })).toBeInTheDocument();
+  });
+
+  it('照合ごとに、照合した2件の証言を束ねた論点を作るページへのリンクを置く', () => {
+    renderNeighborCrossCheck();
+
+    expect(screen.getByRole('link', { name: /見回りをしたとき.*との照合（食い違う）をもとに論点を作る/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/disputes/new?claim=claim-caretaker&claim=claim-neighbor'
+    );
   });
 
   it('撤回・訂正の照合は、どちらがどちらを撤回・訂正したかを選んで保存し、撤回・訂正した証言を1件目に置く', async () => {

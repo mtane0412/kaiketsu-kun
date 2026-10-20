@@ -391,6 +391,23 @@ describe('未了事項', () => {
 
     expect(getOpenCase().tasks.find((task) => task.id === 'task-weather')?.placeIds).toEqual(['place-villa']);
   });
+
+  it('論点を削除すると、未了事項からその論点のひもづけを外し、未了事項は残す', () => {
+    // 前提: 「管理人への再聴取」の未了事項は、論点「12日夜、持ち主は別荘にいたか」をひもづけている
+    useCaseStore.getState().remove('disputes', 'dispute-villa-presence');
+
+    expect(getOpenCase().disputes).toEqual([]);
+    expect(getOpenCase().tasks.find((task) => task.id === 'task-caretaker')?.disputeIds).toEqual([]);
+  });
+});
+
+describe('論点', () => {
+  it('証言を削除すると、論点からその証言を外し、論点は残す', () => {
+    // 前提: 論点「12日夜、持ち主は別荘にいたか」は、管理人・防犯カメラ・隣家の住人の証言を束ねている
+    useCaseStore.getState().remove('claims', 'claim-police-camera');
+
+    expect(getOpenCase().disputes[0]?.claimIds).toEqual(['claim-caretaker', 'claim-neighbor']);
+  });
 });
 
 /** 管理人が、書籍の著者の取材に応じた機会です。 */

@@ -8,7 +8,7 @@ import type { Case } from '@/domain/types';
 import { layoutGraph, NODE_RADIUS, shortLabelOf } from './graph-layout';
 
 /** 人物も証言も持たない、空のケースです。 */
-const emptyCase: Case = { id: 'case-empty', name: '空のケース', persons: [], places: [], claims: [], relationships: [], interviews: [], crossChecks: [], hypotheses: [], tasks: [], timelineOrder: [], personLaneOrder: [] };
+const emptyCase: Case = { id: 'case-empty', name: '空のケース', persons: [], places: [], claims: [], relationships: [], interviews: [], crossChecks: [], hypotheses: [], tasks: [], disputes: [], timelineOrder: [], personLaneOrder: [] };
 
 describe('layoutGraph', () => {
   it('すべてのノードに座標を与える', () => {

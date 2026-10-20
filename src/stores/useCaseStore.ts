@@ -9,7 +9,8 @@
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
  * 証言を削除すると、その証言を含む照合（CrossCheck）もあわせて削除します。照合は2件の証言がそろって初めて意味を持つためです。
  * あわせて、仮説（Hypothesis）からも、その証言のひもづけを外します。仮説は証言が減っても見立てとして残るためです。
- * 証言・人物・場所を削除すると、未了事項（Task）から、そのひもづけを外します。未了事項は対象が無くなっても、確認すべきこととして残るためです。
+ * あわせて、論点（Dispute）からも、その証言を外します。論点は束ねた証言が減っても、事柄の記録として残るためです。
+ * 証言・人物・場所・論点を削除すると、未了事項（Task）から、そのひもづけを外します。未了事項は対象が無くなっても、確認すべきこととして残るためです。
  * 証言の追加・更新・削除で時系列ボードの並び順が日時と矛盾した場合は、該当する項目を最も近い矛盾しない位置へ動かします。
  *
  * 注意:
@@ -22,6 +23,7 @@
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { findCaseViolations, parseCase } from '@/domain/case-schema';
+import { detachClaimFromDisputes } from '@/domain/disputes';
 import { detachClaimFromHypotheses } from '@/domain/hypotheses';
 import type { MentionKind } from '@/domain/mention';
 import { movePersonLane } from '@/domain/person-lane-order';
@@ -43,7 +45,16 @@ import {
 } from '@/lib/case-storage';
 
 /** ケースが持つ一覧の名前です。 */
-export type CollectionKey = 'persons' | 'places' | 'claims' | 'relationships' | 'interviews' | 'crossChecks' | 'hypotheses' | 'tasks';
+export type CollectionKey =
+  | 'persons'
+  | 'places'
+  | 'claims'
+  | 'relationships'
+  | 'interviews'
+  | 'crossChecks'
+  | 'hypotheses'
+  | 'tasks'
+  | 'disputes';
 
 /**
  * メンションで参照できるエンティティの種類（人物・場所）に対応する、ケースの一覧の名前です。
@@ -148,6 +159,7 @@ const TASK_LINK_KIND_BY_COLLECTION_KEY: Partial<Record<CollectionKey, TaskLinkKi
   claims: 'claim',
   persons: 'person',
   places: 'place',
+  disputes: 'dispute',
 };
 
 /**
@@ -325,6 +337,7 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
             ...nextCase,
             crossChecks: nextCase.crossChecks.filter((crossCheck) => !crossCheck.claimIds.includes(id)),
             hypotheses: detachClaimFromHypotheses(nextCase.hypotheses, id),
+            disputes: detachClaimFromDisputes(nextCase.disputes, id),
           };
         }
         const taskLinkKind = TASK_LINK_KIND_BY_COLLECTION_KEY[key];

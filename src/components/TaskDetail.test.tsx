@@ -115,6 +115,27 @@ describe('TaskDetail（ひもづけ）', () => {
     );
   });
 
+  it('ひもづけた論点を、論点の詳細へのリンクで並べる', () => {
+    render(<TaskDetail taskId="task-caretaker" />);
+
+    const dispute = screen.getByRole('region', { name: '対象の論点' });
+    expect(within(dispute).getByRole('link', { name: '12日夜、持ち主は別荘にいたか' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/disputes/dispute-villa-presence?tab=tasks'
+    );
+  });
+
+  it('論点を選ぶとすぐにひもづけ、外すボタンですぐに外す', async () => {
+    const user = userEvent.setup();
+    render(<TaskDetail taskId="task-camera" />);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '対象の論点を追加' }), 'dispute-villa-presence');
+    expect(findTask('task-camera').disputeIds).toEqual(['dispute-villa-presence']);
+
+    await user.click(screen.getByRole('button', { name: '「12日夜、持ち主は別荘にいたか」を対象の論点から外す' }));
+    expect(findTask('task-camera').disputeIds).toEqual([]);
+  });
+
   it('人物を選ぶとすぐにひもづけ、外すボタンですぐに外す', async () => {
     const user = userEvent.setup();
     render(<TaskDetail taskId="task-caretaker" />);
@@ -167,6 +188,7 @@ describe('NewTaskDetail（未了事項の登録）', () => {
       claimIds: [],
       personIds: [],
       placeIds: [],
+      disputeIds: [],
     });
     expect(mockRouter.replace).toHaveBeenCalledWith(`/cases/case-lakeside/tasks/${registeredTask?.id}?tab=tasks`);
   });
@@ -181,6 +203,18 @@ describe('NewTaskDetail（未了事項の登録）', () => {
     await user.click(screen.getByRole('button', { name: '未了事項を保存' }));
 
     expect(openedCase().tasks.at(-1)?.claimIds).toEqual(['claim-report']);
+  });
+
+  it('URLで指定した論点を、最初からひもづけて登録する', async () => {
+    resetMockNavigation('/cases/case-lakeside/tasks/new?link=dispute%3Adispute-villa-presence');
+    const user = userEvent.setup();
+    render(<NewTaskDetail />);
+
+    expect(screen.getByText('ひもづける対象: 論点「12日夜、持ち主は別荘にいたか」')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: '内容' }), '見回りの記録簿を探す');
+    await user.click(screen.getByRole('button', { name: '未了事項を保存' }));
+
+    expect(openedCase().tasks.at(-1)?.disputeIds).toEqual(['dispute-villa-presence']);
   });
 
   it('URLで指定した対象がケースに無い場合は、ひもづけずに登録する', async () => {

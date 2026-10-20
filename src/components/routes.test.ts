@@ -6,14 +6,17 @@ import {
   boardHref,
   casesHref,
   claimHref,
+  disputeHref,
   hypothesisHref,
   interviewHref,
   mentionHref,
+  newDisputeHref,
   newHypothesisHref,
   newInterviewHref,
   newPersonHref,
   newPlaceHref,
   newTaskHref,
+  parseDisputeClaimIds,
   parseTaskLink,
   parseDetailKind,
   parseTab,
@@ -33,6 +36,7 @@ describe('parseTab', () => {
     expect(parseTab('lanes')).toBe('lanes');
     expect(parseTab('hypotheses')).toBe('hypotheses');
     expect(parseTab('tasks')).toBe('tasks');
+    expect(parseTab('disputes')).toBe('disputes');
   });
 
   it('tab が無い場合と、知らない値の場合は、時系列のタブとして扱う', () => {
@@ -178,6 +182,36 @@ describe('taskHref・newTaskHref', () => {
   });
 });
 
+describe('disputeHref・newDisputeHref', () => {
+  it('論点の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
+    expect(disputeHref(caseId, 'dispute-villa-presence', 'disputes')).toBe(
+      '/cases/case-villa/disputes/dispute-villa-presence?tab=disputes'
+    );
+    expect(newDisputeHref(caseId, 'disputes')).toBe('/cases/case-villa/disputes/new?tab=disputes');
+  });
+
+  it('登録ページのURLに、最初から束ねる証言を持たせる', () => {
+    expect(newDisputeHref(caseId, 'timeline', ['claim-caretaker', 'claim-neighbor'])).toBe(
+      '/cases/case-villa/disputes/new?claim=claim-caretaker&claim=claim-neighbor'
+    );
+  });
+
+  it('論点の詳細・登録のURLから、開いている詳細の種類を読み取る', () => {
+    expect(parseDetailKind('/cases/case-villa/disputes/dispute-villa-presence')).toBe('dispute');
+    expect(parseDetailKind('/cases/case-villa/disputes/new')).toBe('newDispute');
+  });
+});
+
+describe('parseDisputeClaimIds', () => {
+  it('URLの claim の値を、最初から束ねる証言のIDとして、重複と空の値を除いて読み取る', () => {
+    // 前提: URLはユーザーが自由に書き換えられるため、同じIDの重複や空の値を含みうる
+    expect(parseDisputeClaimIds(['claim-caretaker', '', 'claim-neighbor', 'claim-caretaker'])).toEqual([
+      'claim-caretaker',
+      'claim-neighbor',
+    ]);
+  });
+});
+
 describe('interviewHref・newInterviewHref', () => {
   it('資料の詳細ページと登録ページのURLに、戻り先のタブを引き継ぐ', () => {
     expect(interviewHref(caseId, 'interview-book', 'graph')).toBe('/cases/case-villa/interviews/interview-book?tab=graph');
@@ -193,6 +227,7 @@ describe('interviewHref・newInterviewHref', () => {
 describe('parseTaskLink', () => {
   it('URLの link の値を、ひもづけ先の種類とIDとして読み取る', () => {
     expect(parseTaskLink('person:person-caretaker')).toEqual({ kind: 'person', id: 'person-caretaker' });
+    expect(parseTaskLink('dispute:dispute-villa-presence')).toEqual({ kind: 'dispute', id: 'dispute-villa-presence' });
   });
 
   it('link が無い場合と、知らない種類の場合は undefined を返す', () => {
