@@ -20,6 +20,7 @@
  * 主唱者・唱えた時期・立場の変化を持たない頃の仮説は、読み手自身の仮説として受け付けます。
  * 時期の順に並んでいない立場の変化は、時期の順に並べ直して受け付けます（sortStanceChanges）。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
+ * 論点（disputes）を持たない頃のデータは、論点を空として補います。未了事項の論点のひもづけ（disputeIds）を持たない頃のデータは、ひもづけを空として補います。
  * 関係の期間（since・until）を持たない頃のデータは、期間を持たない（すべての時点で成り立つ）関係として受け付けます。
  * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
  *
@@ -316,6 +317,20 @@ const caseSchema = z.object({
         claimIds: z.array(idSchema),
         personIds: z.array(idSchema),
         placeIds: z.array(idSchema),
+        // 論点を持たない頃に保存した未了事項も読み込めるよう、省略を許して空の一覧を補う
+        disputeIds: z.array(idSchema).default([]),
+      })
+    )
+    .optional(),
+  // 論点を持たない頃に保存したデータも読み込めるよう、省略を許す（parseCase で空の一覧を補う）
+  disputes: z
+    .array(
+      z.object({
+        id: idSchema,
+        title: z.string(),
+        claimIds: z.array(idSchema),
+        reconciliation: z.string().optional(),
+        resolved: z.boolean(),
       })
     )
     .optional(),
@@ -329,6 +344,7 @@ const caseSchema = z.object({
  * ケース内の規則違反（参照切れ、ユーザーの推測に付いた経由、証言に関わらない相手の聴取へのひもづけ、
  * 同じ証言どうしの照合、理由の無い照合、見出しの無い仮説、否定の理由と状態の食い違い、
  * 支える証言と反する証言の両方にひもづけた証言、仮説の対象の重複、内容の無い未了事項、未了事項のひもづけの重複、
+ * 名前の無い論点、論点に束ねた証言の重複、
  * 種類か値の欠けた人物の識別子）を列挙します。
  * 違反が無い場合は空の配列を返します。ストアの操作時と読み込み時の両方で使用します。
  */
@@ -338,6 +354,7 @@ export function findCaseViolations(target: Case): string[] {
   const personIds = idsOf(target.persons);
   const placeIds = idsOf(target.places);
   const claimIds = idsOf(target.claims);
+  const disputeIds = idsOf(target.disputes);
   const interviewsById = new Map(target.interviews.map((interview) => [interview.id, interview]));
 
   const mentionTargets: Record<MentionKind, { ids: Set<string>; name: string }> = {
@@ -490,12 +507,24 @@ export function findCaseViolations(target: Case): string[] {
     task.claimIds.forEach((id) => check(claimIds, id, '証言'));
     task.personIds.forEach((id) => check(personIds, id, '人物'));
     task.placeIds.forEach((id) => check(placeIds, id, '場所'));
+    task.disputeIds.forEach((id) => check(disputeIds, id, '論点'));
     if (task.content.trim() === '') {
       violations.push(`未了事項の内容がありません: ${task.id}`);
     }
-    const hasDuplicate = [task.claimIds, task.personIds, task.placeIds].some((ids) => new Set(ids).size !== ids.length);
+    const hasDuplicate = [task.claimIds, task.personIds, task.placeIds, task.disputeIds].some(
+      (ids) => new Set(ids).size !== ids.length
+    );
     if (hasDuplicate) {
-      violations.push(`未了事項に同じ証言・人物・場所を2回以上ひもづけることはできません: ${task.id}`);
+      violations.push(`未了事項に同じ証言・人物・場所・論点を2回以上ひもづけることはできません: ${task.id}`);
+    }
+  }
+  for (const dispute of target.disputes) {
+    dispute.claimIds.forEach((id) => check(claimIds, id, '証言'));
+    if (dispute.title.trim() === '') {
+      violations.push(`論点の名前がありません: ${dispute.id}`);
+    }
+    if (new Set(dispute.claimIds).size !== dispute.claimIds.length) {
+      violations.push(`論点に同じ証言を2回以上束ねることはできません: ${dispute.id}`);
     }
   }
   return violations;
@@ -656,7 +685,7 @@ export function parseCase(data: unknown): Case {
     throw new Error(`ケースデータの形式が正しくありません\n${details}`);
   }
 
-  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], crossChecks = [], hypotheses = [], tasks = [], ...current } = result.data;
+  const { sources: _legacySources, events, timelineOrder, personLaneOrder = [], interviews = [], crossChecks = [], hypotheses = [], tasks = [], disputes = [], ...current } = result.data;
   const { persons, claims: legacyClaims } = migrateLegacySources(result.data);
   let parsed: Case = {
     ...current,
@@ -669,6 +698,7 @@ export function parseCase(data: unknown): Case {
       hypothesis.stanceChanges === undefined ? hypothesis : { ...hypothesis, stanceChanges: sortStanceChanges(hypothesis.stanceChanges) }
     ),
     tasks,
+    disputes,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
   };
   // 束は束ねた証言の日時の全体を区間としていたため、束を解くと、束の前後にあった証言と日時が矛盾する並びになる場合がある

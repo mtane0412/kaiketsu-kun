@@ -3,13 +3,13 @@
  *
  * ボード（CaseBoard）と入れ替えて表示します。未了事項1件について、次の3つをこの1か所で行います。
  * 1. 内容・状態・担当・期限・結果のメモの編集と、未了事項の削除（TaskForm）
- * 2. 対象の証言・人物・場所のひもづけ。選ぶとすぐにひもづけ、外すボタンですぐに外します
+ * 2. 対象の証言・人物・場所・論点のひもづけ。選ぶとすぐにひもづけ、外すボタンですぐに外します
  * 3. 確認した結果を、新しい証言として書き足す導線（「結果を証言として書き足す」）。
  *    書き足した証言は、この未了事項の対象の証言にひもづけ、未了事項から結果の証言へたどれるようにします。
  *    証言の保存とひもづけは1回の保存で行い、どちらかができない場合は証言も保存しません
  *
  * 未了事項の登録（NewTaskDetail）は、内容・状態・担当・期限・結果のメモだけを入力し、保存すると、ひもづけを続けられるよう詳細へ移ります。
- * 証言・人物・場所の詳細の「未了事項を追加」から開いた場合は、その対象（URLの ?link=）をひもづけた状態で登録します。
+ * 証言・人物・場所・論点の詳細の「未了事項を追加」から開いた場合は、その対象（URLの ?link=）をひもづけた状態で登録します。
  * 登録のURLへ「戻る」で戻ると、同じ未了事項を二重に登録しかねないため、履歴は置き換えます。
  *
  * 注意: ケースに無い未了事項のIDが渡された場合（URLの直接入力、削除済みの未了事項）は、見つからないことを表示します。
@@ -36,6 +36,7 @@ import { FormError, INPUT_CLASS } from './forms/fields';
 import { TaskForm, type TaskLinks } from './forms/TaskForm';
 import {
   boardHref,
+  disputeHref,
   parseTab,
   parseTaskLink,
   personHref,
@@ -61,7 +62,7 @@ function CloseLink({ tab }: { tab: TabKey }) {
 }
 
 /**
- * ひもづけの対象の種類ごとの選択肢を返します。証言は時系列の並び順に、人物・場所は登録した順に並べます。
+ * ひもづけの対象の種類ごとの選択肢を返します。証言は時系列の並び順に、人物・場所・論点は登録した順に並べます。
  * 証言の表示名は、発言者を添えた「発言者: 見出し」の形です。
  */
 function linkOptionsOf(target: Case): Record<TaskLinkKind, LinkOption[]> {
@@ -72,6 +73,7 @@ function linkOptionsOf(target: Case): Record<TaskLinkKind, LinkOption[]> {
     })),
     person: target.persons.map((person) => ({ id: person.id, label: person.name })),
     place: target.places.map((place) => ({ id: place.id, label: place.name })),
+    dispute: target.disputes.map((dispute) => ({ id: dispute.id, label: dispute.title })),
   };
 }
 
@@ -87,7 +89,7 @@ type LinkSectionProps = {
   onRemove: (id: Id) => void;
 };
 
-/** 対象の証言・人物・場所の節です。ひもづけた対象と外すボタンの組を並べ、選択欄で対象を加えます。 */
+/** 対象の証言・人物・場所・論点の節です。ひもづけた対象と外すボタンの組を並べ、選択欄で対象を加えます。 */
 function LinkSection({ kind, linked, candidates, renderLink, onAdd, onRemove }: LinkSectionProps) {
   const label = `対象の${TASK_LINK_KIND_LABELS[kind]}`;
   return (
@@ -198,7 +200,7 @@ export function TaskDetail({ taskId }: { taskId: Id }) {
     router.replace(boardHref(caseId, tab));
   };
 
-  /** 種類 kind の対象の節です。ひもづけた対象は、証言は時系列の並び順、人物・場所はひもづけた順に並べます。 */
+  /** 種類 kind の対象の節です。ひもづけた対象は、証言は時系列の並び順、人物・場所・論点はひもづけた順に並べます。 */
   const linkSection = (kind: TaskLinkKind, renderLink: (option: LinkOption) => ReactNode) => {
     const linkedIds = task[TASK_LINK_KEYS[kind]];
     const linked =
@@ -294,6 +296,11 @@ export function TaskDetail({ taskId }: { taskId: Id }) {
           {option.label}
         </Link>
       ))}
+      {linkSection('dispute', (option) => (
+        <Link href={disputeHref(caseId, option.id, tab)} className={entityLinkClass}>
+          {option.label}
+        </Link>
+      ))}
     </div>
   );
 }
@@ -304,7 +311,7 @@ function initialLinksOf(target: Case, link: TaskLinkTarget | undefined): { links
   const option = linkOptionsOf(target)[link.kind].find((candidate) => candidate.id === link.id);
   if (!option) return undefined;
   return {
-    links: { claimIds: [], personIds: [], placeIds: [], [TASK_LINK_KEYS[link.kind]]: [link.id] },
+    links: { claimIds: [], personIds: [], placeIds: [], disputeIds: [], [TASK_LINK_KEYS[link.kind]]: [link.id] },
     label: `${TASK_LINK_KIND_LABELS[link.kind]}「${option.label}」`,
   };
 }

@@ -246,7 +246,7 @@ describe('ClaimDetail', () => {
     render(<ClaimDetail claimId="claim-neighbor" />);
 
     const crossCheck = screen.getByRole('region', { name: '照合' });
-    expect(within(crossCheck).getByRole('link', { name: /見回りをしたとき/ })).toHaveAttribute(
+    expect(within(crossCheck).getByRole('link', { name: /^管理人.*見回りをしたとき/ })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/claims/claim-caretaker'
     );
@@ -292,6 +292,49 @@ describe('ClaimDetail', () => {
     await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
 
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた未了事項1件から、ひもづけを外します。');
+  });
+
+  it('この証言を束ねた論点を、論点の詳細へのリンクで並べ、この証言から論点を作るページへのリンクを置く', () => {
+    // 前提: 防犯カメラの証言は、論点「12日夜、持ち主は別荘にいたか」に束ねられている
+    render(<ClaimDetail claimId="claim-police-camera" />);
+
+    const section = screen.getByRole('region', { name: 'この証言を束ねた論点' });
+    expect(within(section).getByRole('link', { name: '12日夜、持ち主は別荘にいたか' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/disputes/dispute-villa-presence'
+    );
+    expect(within(section).getByRole('link', { name: 'この証言から論点を作る' })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/disputes/new?claim=claim-police-camera'
+    );
+  });
+
+  it('論点を選ぶと、この証言をその論点に束ねる', async () => {
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-report" />);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'この証言を論点に加える' }), 'dispute-villa-presence');
+
+    expect(openedCase().disputes[0]?.claimIds).toEqual([
+      'claim-caretaker',
+      'claim-police-camera',
+      'claim-neighbor',
+      'claim-report',
+    ]);
+    expect(
+      within(screen.getByRole('region', { name: 'この証言を束ねた論点' })).getByRole('link', {
+        name: '12日夜、持ち主は別荘にいたか',
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('論点に束ねた証言の削除の確認では、論点から外すことを伝える', async () => {
+    const user = userEvent.setup();
+    render(<ClaimDetail claimId="claim-police-camera" />);
+
+    await user.click(screen.getByRole('button', { name: 'この証言を削除' }));
+
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言を束ねた論点1件から、この証言を外します。');
   });
 
   it('第三者の説の、主唱者の立場の変化の根拠にした証言では、立場として「主唱者の撤回の根拠」などと示す', async () => {

@@ -15,6 +15,7 @@ const taskWithoutDue: Task = {
   claimIds: ['claim-report'],
   personIds: ['person-newspaper'],
   placeIds: [],
+  disputeIds: [],
 };
 
 /** 期限の早い、未着手の未了事項です。 */
@@ -26,6 +27,7 @@ const taskWithEarlyDue: Task = {
   claimIds: ['claim-neighbor'],
   personIds: ['person-neighbor'],
   placeIds: [],
+  disputeIds: [],
 };
 
 /**
@@ -58,6 +60,7 @@ describe('buildTaskList', () => {
     expect(caretakerReinterview?.claims.map((view) => view.claim.id)).toEqual(['claim-caretaker']);
     expect(caretakerReinterview?.persons.map((person) => person.name)).toEqual(['管理人']);
     expect(caretakerReinterview?.places.map((place) => place.name)).toEqual(['湖畔の別荘']);
+    expect(caretakerReinterview?.disputes.map((dispute) => dispute.title)).toEqual(['12日夜、持ち主は別荘にいたか']);
   });
 });
 
@@ -72,6 +75,13 @@ describe('findTasksLinkedTo', () => {
     expect(findTasksLinkedTo(caseWithFiveTasks, 'place', 'place-villa').map((task) => task.id)).toEqual([
       'task-caretaker',
       'task-weather',
+    ]);
+  });
+
+  it('論点をひもづけた未了事項を返す', () => {
+    // 前提: サンプルの「管理人への再聴取」は、論点「12日夜、持ち主は別荘にいたか」をひもづけている
+    expect(findTasksLinkedTo(caseWithFiveTasks, 'dispute', 'dispute-villa-presence').map((task) => task.id)).toEqual([
+      'task-caretaker',
     ]);
   });
 
@@ -91,6 +101,12 @@ describe('detachFromTasks', () => {
       placeIds: [],
     });
     expect(afterUnlink).toHaveLength(caseWithFiveTasks.tasks.length);
+  });
+
+  it('論点のひもづけを外す', () => {
+    const afterUnlink = detachFromTasks(caseWithFiveTasks.tasks, 'dispute', 'dispute-villa-presence');
+
+    expect(afterUnlink.find((task) => task.id === 'task-caretaker')?.disputeIds).toEqual([]);
   });
 
   it('同じIDでも、別の種類のひもづけは外さない', () => {

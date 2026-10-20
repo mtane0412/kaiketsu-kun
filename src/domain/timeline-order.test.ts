@@ -30,6 +30,7 @@ function makeCase(parts: Partial<Case>): Case {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
     ...parts,
