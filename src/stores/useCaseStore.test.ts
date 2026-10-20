@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
+import { listPersonReferences } from '@/domain/person-split';
 import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { openDB } from 'idb';
 import { DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
@@ -275,6 +276,31 @@ describe('mergePersons', () => {
 
   it('まとめられない場合はエラーにし、ケースを変更しない', () => {
     expect(() => useCaseStore.getState().mergePersons('person-gone', 'person-caretaker')).toThrow(/person-gone/);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
+  });
+});
+
+describe('splitPerson', () => {
+  it('選んだ参照だけを新しい人物に移し、新しい人物を足して保存する', async () => {
+    // 前提: 隣家の住人の証言のうち1件の発言者が、実は別の人物（隣家の息子）だと分かった（架空の例）
+    const reference = listPersonReferences(getOpenCase(), 'person-neighbor').find((item) => item.kind === 'claimSpeaker');
+    if (reference === undefined) throw new Error('隣家の住人が発言者の証言がありません');
+
+    useCaseStore.getState().splitPerson('person-neighbor', { id: 'person-neighbor-son', name: '隣家の息子', kind: 'individual' }, [reference.key]);
+
+    const split = getOpenCase();
+    expect(split.persons.map((person) => person.id)).toContain('person-neighbor-son');
+    expect(split.persons.map((person) => person.id)).toContain('person-neighbor');
+    const movedClaim = split.claims.find((claim) => reference.kind === 'claimSpeaker' && claim.id === reference.claimId);
+    expect(movedClaim?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor-son'] });
+    // 保存済みのケースにも、分けた結果が残る
+    expect(await loadSavedCase(sampleFictionalCase.id)).toEqual(split);
+  });
+
+  it('分けられない場合はエラーにし、ケースを変更しない', () => {
+    expect(() =>
+      useCaseStore.getState().splitPerson('person-neighbor', { id: 'person-caretaker', name: '管理人', kind: 'individual' }, [])
+    ).toThrow(/person-caretaker/);
     expect(getOpenCase()).toEqual(sampleFictionalCase);
   });
 });
