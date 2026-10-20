@@ -3,7 +3,10 @@
  *
  * 複数のケースのうち、いま開いているケースを1件だけ保持し、変更のたびにブラウザ（IndexedDB）へ保存します（src/lib/case-storage.ts）。
  * 変更はまずメモリ上のケースへ同期的に反映し、保存は順番待ちの列に積んで非同期に行います。IndexedDB の読み書きは非同期のためです。
- * 保存に失敗した場合は、変更を画面に残したまま saveError に理由を設定します（次の保存が成功すれば消えます。保存はケース全体を書き直すためです）。
+ * 保存に失敗した場合は、変更を画面に残したまま saveErrors にケースごとの理由を加えます。
+ * 同じ編集（ケースを開いてから、別のケースを開く・閉じるまで）の中で、後に積んだ保存が成功すれば消えます。保存はケース全体を書き直すためです。
+ * 保存に失敗したまま別のケースを開いた・一覧へ戻った場合は、保存できなかった変更は画面からも失われるため、そのことを示したまま残します（dismissSaveError で消します）。
+ * 開いているケースを削除している間は、変更を受け付けません。受け付けると、削除の後に保存され、削除したケースが戻ってしまうためです。
  * どのケースを開くかはURL（/cases/<ケースのID>）が決めるため、このストアはケースの切り替えをURLから受け取ります（openCase）。
  * ケースの一覧（summaries）は、ケースを開かずに一覧ページへ表示するために保持します。
  * 追加・更新・削除のたびに参照の整合性を検証し、違反する操作は例外を投げてケースを変更しません。
@@ -81,6 +84,40 @@ export type UpsertEntry = { [K in CollectionKey]: { key: K; entity: Case[K][numb
  */
 export type CaseLoadError = { kind: 'missing' | 'invalid' | 'migration' | 'storage'; message: string };
 
+/**
+ * 変更をブラウザに保存できなかったことの記録です。
+ * - caseId / caseName: 保存できなかったケースです。別のケースを開いた後も、どのケースの変更が失われたかを示すために持ちます。
+ * - reason: 保存できなかった理由です。
+ * - discarded: 保存できなかった変更を、画面（メモリ）からも失ったかどうかです。別のケースを開いた・一覧へ戻った場合は true です。
+ *   false の間は、開いているケースに変更が残っているため、JSON を書き出せば変更を失わずに済みます。
+ */
+export type SaveError = { caseId: Id; caseName: string; reason: string; discarded: boolean };
+
+/** 保存できなかったことを、利用者へ示す文にします。変更が画面に残っているかどうかで、取るべき対処が異なります。 */
+export function describeSaveError(error: SaveError): string {
+  if (error.discarded) {
+    return `ケース「${error.caseName}」の変更をブラウザに保存できませんでした。保存できなかった変更は、画面を移ったため失われています（${error.reason}）`;
+  }
+  return `変更をブラウザに保存できませんでした。画面を閉じる前に、ケース設定から JSON を書き出してください（${error.reason}）`;
+}
+
+/** 保存に失敗したまま開いているケースを手放す（別のケースを開く・閉じる）ときに、失敗の記録を「変更が失われた」ものに改めます。 */
+function discardSaveErrors(errors: SaveError[]): SaveError[] {
+  return errors.some((error) => !error.discarded) ? errors.map((error) => ({ ...error, discarded: true })) : errors;
+}
+
+/** 保存の失敗の記録を、ケースごとに1件だけになるよう差し替える（無ければ末尾に加える）。 */
+function withSaveError(errors: SaveError[], added: SaveError): SaveError[] {
+  return errors.some((error) => error.caseId === added.caseId)
+    ? errors.map((error) => (error.caseId === added.caseId ? added : error))
+    : [...errors, added];
+}
+
+/** ケースの保存の失敗の記録を取り除きます。 */
+function withoutSaveError(errors: SaveError[], caseId: Id): SaveError[] {
+  return errors.filter((error) => error.caseId !== caseId);
+}
+
 /** ケースを開けなかったエラーの種類を判定します。 */
 function loadErrorKindOf(error: unknown): CaseLoadError['kind'] {
   if (error instanceof CaseNotFoundError) return 'missing';
@@ -95,8 +132,13 @@ type CaseStore = {
   summaries: CaseSummary[];
   /** ケースを開けなかった理由です。開けている場合は null です。 */
   loadError: CaseLoadError | null;
-  /** 最後の保存に失敗した理由です。保存できている場合は null です。 */
-  saveError: string | null;
+  /** 保存に失敗したことの記録です。ケースごとに1件までで、失敗した順に並びます。保存できている場合と、利用者が表示を閉じた場合は空です。 */
+  saveErrors: SaveError[];
+  /**
+   * LocalStorage に保存していた頃のデータを、移せなかった理由です。すべて移せた場合は null です。
+   * ケースの一覧の画面で示します。移せなかったケースそのものを開こうとした場合は、loadError にも理由を設定します（openCase）。
+   */
+  migrationError: string | null;
   /**
    * IDを指定してケースを開きます。開けない場合はケースを開かず、loadError に理由を設定します。
    * 読み出しの途中で別のケースを開いた場合は、後から開いた方だけを反映します。
@@ -104,6 +146,8 @@ type CaseStore = {
   openCase: (caseId: Id) => Promise<void>;
   /** 開いているケースを閉じます。ケースの一覧ページへ移るときに使います。 */
   closeCase: () => void;
+  /** ケースの保存に失敗したことの表示を閉じます。 */
+  dismissSaveError: (caseId: Id) => void;
   /** 保存済みのケースの一覧を読み直します。 */
   refreshSummaries: () => Promise<void>;
   /** 空のケースを作って保存し、そのIDを返します。開いているケースは切り替えません。 */
@@ -114,7 +158,10 @@ type CaseStore = {
    * 検証に失敗した場合は例外を投げ、ケースを追加しません。
    */
   importCase: (data: unknown) => Promise<Id>;
-  /** ケースを保存から消します。開いているケースを消した場合は、開いているケースを空にします。 */
+  /**
+   * ケースを保存から消します。開いているケースを消した場合は、開いているケースを空にします。
+   * 開いているケースを消す間は、そのケースへの変更を受け付けません（例外を投げます）。削除に失敗した場合は、再び受け付けます。
+   */
   deleteCase: (caseId: Id) => Promise<void>;
   /** 開いているケースの名前を変更します。 */
   renameCase: (name: string) => void;
@@ -190,6 +237,24 @@ export function flushPendingSaves(): Promise<void> {
   return pendingWrites;
 }
 
+/**
+ * 削除している途中のケースのIDと、そのケースに対して終わっていない削除の数です。削除が終わるまで、そのケースへの変更を受け付けないために使います。
+ * 数で持つのは、同じケースの削除が重なった場合に、先に終わった削除が、後の削除の終わる前に受け付けを再開しないためです。
+ */
+const deletingCaseIds = new Map<Id, number>();
+
+/**
+ * 開いているケースを置き換える（別のケースを開く・閉じる・削除する）たびに1つ進める番号です。
+ * 保存が、どの編集（画面上に持っていた変更）から積まれたかを見分けます。
+ */
+let editingSession = 0;
+
+/** 積んだ保存の通し番号です。同じ編集の中で、保存の前後を比べるために使います。 */
+let saveSequence = 0;
+
+/** ケースごとの、最後に失敗した保存の編集の番号と通し番号です。後に積んだ保存の成功で、失敗した変更を取り戻せたかを判定するために使います。 */
+const lastFailedSaves = new Map<Id, { session: number; sequence: number }>();
+
 /** 最後に開こうとしたケースのIDです。読み出しの途中で別のケースを開いた場合に、先の読み出しの結果を捨てるために使います。 */
 let latestOpenRequest: Id | null = null;
 
@@ -217,22 +282,42 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
   /**
    * 開いているケースを、与えられた関数の結果で置き換え、保存を順番待ちの列に積みます。
    * ケースを開いていない場合は例外を投げます（どのケースへ書き込むべきか決められないため）。
-   * 注意: 保存の完了は待ちません。保存に失敗した場合は saveError に理由を設定します。
+   * 注意: 保存の完了は待ちません。保存に失敗した場合は saveErrors に理由を加えます。
    */
   const updateCurrentCase = (update: (current: Case) => Case): void => {
     const { currentCase } = get();
     if (currentCase === null) throw new Error(NO_OPEN_CASE_MESSAGE);
 
+    if (deletingCaseIds.has(currentCase.id)) throw new Error('ケースを削除しているため、変更できません');
+
     const nextCase = update(currentCase);
     if (nextCase === currentCase) return;
     set({ currentCase: nextCase });
+    const session = editingSession;
+    saveSequence += 1;
+    const sequence = saveSequence;
     void enqueue(async () => {
       try {
         const summary = await saveCase(nextCase);
-        set({ summaries: withSummary(get().summaries, summary), saveError: null });
-      } catch (error) {
+        // 保存はケース全体を書き直すため、同じ編集の中で失敗した保存より後に積んだ保存が成功すれば、失敗した変更も保存できている。
+        // 別の編集の保存（ケースを開き直した後の保存）では、失われた変更は戻らないため消さない
+        const failed = lastFailedSaves.get(nextCase.id);
+        const recovered = failed !== undefined && failed.session === session && failed.sequence < sequence;
+        if (recovered) lastFailedSaves.delete(nextCase.id);
         set({
-          saveError: `変更をブラウザに保存できませんでした。画面を閉じる前に、ケース設定から JSON を書き出してください（${messageOf(error)}）`,
+          summaries: withSummary(get().summaries, summary),
+          ...(recovered ? { saveErrors: withoutSaveError(get().saveErrors, nextCase.id) } : {}),
+        });
+      } catch (error) {
+        lastFailedSaves.set(nextCase.id, { session, sequence });
+        set({
+          saveErrors: withSaveError(get().saveErrors, {
+            caseId: nextCase.id,
+            caseName: nextCase.name,
+            reason: messageOf(error),
+            // 保存を待つ間に別のケースを開いた・閉じた場合は、保存できなかった変更は、もう画面にも無い
+            discarded: session !== editingSession,
+          }),
         });
       }
     });
@@ -242,7 +327,8 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
     currentCase: null,
     summaries: [],
     loadError: null,
-    saveError: null,
+    saveErrors: [],
+    migrationError: null,
 
     openCase: async (caseId) => {
       latestOpenRequest = caseId;
@@ -256,9 +342,11 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
       });
       if (latestOpenRequest !== caseId) return;
 
+      // 開けた場合も開けなかった場合も、前に開いていたケースの変更は画面から失われるため、保存の失敗はそのことを示す形に改める
+      editingSession += 1;
+      const saveErrors = discardSaveErrors(get().saveErrors);
       if ('opened' in result) {
-        // 前に開いていたケースの保存の失敗は、開いたケースとは関係が無いため消す
-        set({ currentCase: result.opened, loadError: null, saveError: null });
+        set({ currentCase: result.opened, loadError: null, saveErrors });
         return;
       }
       const migrationFailure = migrationFailures.find((failure) => failure.caseId === caseId);
@@ -266,12 +354,18 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
         result.error instanceof CaseNotFoundError && migrationFailure !== undefined
           ? { kind: 'migration', message: migrationFailure.message }
           : { kind: loadErrorKindOf(result.error), message: messageOf(result.error) };
-      set({ currentCase: null, loadError });
+      set({ currentCase: null, loadError, saveErrors });
     },
 
     closeCase: () => {
       latestOpenRequest = null;
-      set({ currentCase: null, loadError: null, saveError: null });
+      editingSession += 1;
+      set({ currentCase: null, loadError: null, saveErrors: discardSaveErrors(get().saveErrors) });
+    },
+
+    dismissSaveError: (caseId) => {
+      lastFailedSaves.delete(caseId);
+      set({ saveErrors: withoutSaveError(get().saveErrors, caseId) });
     },
 
     refreshSummaries: reloadSummaries,
@@ -297,9 +391,22 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
     },
 
     deleteCase: async (caseId) => {
-      await enqueue(() => deleteStoredCase(caseId));
-      const { currentCase } = get();
-      if (currentCase?.id === caseId) set({ currentCase: null });
+      deletingCaseIds.set(caseId, (deletingCaseIds.get(caseId) ?? 0) + 1);
+      try {
+        await enqueue(() => deleteStoredCase(caseId));
+      } finally {
+        const remaining = (deletingCaseIds.get(caseId) ?? 1) - 1;
+        if (remaining > 0) deletingCaseIds.set(caseId, remaining);
+        else deletingCaseIds.delete(caseId);
+      }
+      // 削除したケースの変更を保存できなかったことは、もう伝える意味が無い
+      lastFailedSaves.delete(caseId);
+      const { currentCase, saveErrors } = get();
+      if (currentCase?.id === caseId) {
+        editingSession += 1;
+        set({ currentCase: null });
+      }
+      set({ saveErrors: withoutSaveError(saveErrors, caseId) });
       await reloadSummaries();
     },
 
@@ -401,7 +508,7 @@ let migration: Promise<MigrationFailure[]> | null = null;
 
 /**
  * 保存済みのデータを読み込む準備を行い、ケースの一覧を読み直します。
- * LocalStorage に保存していた頃のケースがあれば、IndexedDB へ移します（移せなかった場合は loadError に理由を設定します）。
+ * LocalStorage に保存していた頃のケースがあれば、IndexedDB へ移します（移せなかった場合は migrationError に理由を設定します）。
  * ブラウザの保存領域を開けなかった場合も、例外にせず loadError に理由を設定します（画面に理由を示すためです）。
  * ブラウザ側（useEffect の中）から呼び出してください。
  */
@@ -409,10 +516,9 @@ export async function initializeCaseStore(): Promise<void> {
   const running = (migration ??= enqueue(migrateLocalStorageCases));
   try {
     migrationFailures = await running;
-    if (migrationFailures.length > 0) {
-      const message = migrationFailures.map((failure) => failure.message).join('\n');
-      useCaseStore.setState({ loadError: { kind: 'migration', message } });
-    }
+    // 移せなかったことは一覧の画面で示す。ケースを開けなかったこと（loadError）にすると、移せたケースを開くたびに、開けなかったという画面が出てしまう
+    const migrationError = migrationFailures.length > 0 ? migrationFailures.map((failure) => failure.message).join('\n') : null;
+    useCaseStore.setState({ migrationError });
     await useCaseStore.getState().refreshSummaries();
   } catch (error) {
     // 保存領域を開けなかった場合は、次に画面を開いたときに移行をやり直す
@@ -421,8 +527,13 @@ export async function initializeCaseStore(): Promise<void> {
   }
 }
 
-/** LocalStorage からの移行を、次の initializeCaseStore でもう一度行うようにします。テストで保存を空に戻すときに使います。 */
+/**
+ * LocalStorage からの移行を、次の initializeCaseStore でもう一度行うようにし、保存の失敗・削除の途中の記録も忘れます。
+ * テストで保存を空に戻すときに使います（前のテストの記録が、次のテストの判定に混ざらないためです）。
+ */
 export function resetCaseStoreInitialization(): void {
   migration = null;
   migrationFailures = [];
+  lastFailedSaves.clear();
+  deletingCaseIds.clear();
 }

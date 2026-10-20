@@ -138,6 +138,50 @@ describe('saveCase と loadCase', () => {
   });
 });
 
+describe('保存の途中で失敗した場合', () => {
+  it('一覧の項目を書けなかった場合は、ケースの本体も書き換えずにエラーにする', async () => {
+    // 前提: 保存済みのケースを改名して保存し直す途中で、一覧の項目の書き込みだけが失敗する
+    await saveCase(sampleFictionalCase);
+    const originalPut = IDBObjectStore.prototype.put;
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      if (this.name === 'summaries') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      return originalPut.call(this, value, key);
+    });
+
+    await expect(saveCase({ ...sampleFictionalCase, name: '改名したケース' })).rejects.toThrow('quota');
+    put.mockRestore();
+
+    // 検証: 本体だけが新しい名前になって、一覧と食い違うことがない
+    expect((await loadCase(sampleFictionalCase.id)).name).toBe(sampleFictionalCase.name);
+    expect((await listCaseSummaries()).map((summary) => summary.name)).toEqual([sampleFictionalCase.name]);
+  });
+
+  it('書き込みの途中でトランザクションが中断された場合は、エラーにし、処理されない失敗を残さない', async () => {
+    // 前提: 版を読み出すときに、ブラウザがトランザクションを中断する（保存領域の不足などで起こる）
+    const unhandled: unknown[] = [];
+    const recordUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', recordUnhandled);
+    const originalGet = IDBObjectStore.prototype.get;
+    const get = vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, query) {
+      const request = originalGet.call(this, query);
+      if (this.name === 'revisions') this.transaction.abort();
+      return request;
+    });
+
+    try {
+      await expect(saveCase(sampleFictionalCase)).rejects.toBeInstanceOf(DOMException);
+      // 処理されない Promise の失敗は、後のタスクで報告されるため、報告を待つ
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      get.mockRestore();
+      process.off('unhandledRejection', recordUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    await expect(loadCase(sampleFictionalCase.id)).rejects.toBeInstanceOf(CaseNotFoundError);
+  });
+});
+
 describe('別のタブとの書き込みの重なり', () => {
   it('別のタブが本文を書き換えて保存した後に、このタブで保存すると、本体と本文をこのタブの内容にそろえる', async () => {
     // 前提: このタブで本文 a を保存した後、別のタブが同じ資料の本文を b に書き換えて保存した
@@ -261,6 +305,20 @@ describe('migrateLocalStorageCases', () => {
     expect(await loadCase(withTranscripts.id)).toEqual(withTranscripts);
     expect(localStorage.getItem(`${CASE_KEY_PREFIX}${sampleFictionalCase.id}`)).toBeNull();
     expect(localStorage.getItem(INDEX_STORAGE_KEY)).toBeNull();
+  });
+
+  it('本文の後ろに資料の格を持つ資料も、項目の並びに関わらず、移せたと確かめて LocalStorage から消す', async () => {
+    // 前提: 読み出すときに本文を資料の末尾に付け直すため、本文の後ろに項目を持つ資料は、読み出す前と項目の並びが変わる
+    const withGrade: Case = {
+      ...createEmptyCase('格を持つ資料のケース'),
+      interviews: [{ id: 'interview-newspaper', title: '湖畔新聞の記事', transcript: '管理人は車の音を聞いたと話した。', grade: 'majorReport' }],
+    };
+    storeInLocalStorage(withGrade);
+
+    expect(await migrateLocalStorageCases()).toEqual([]);
+
+    expect(await loadCase(withGrade.id)).toEqual(withGrade);
+    expect(localStorage.getItem(`${CASE_KEY_PREFIX}${withGrade.id}`)).toBeNull();
   });
 
   it('移したケースの更新日時は、LocalStorage の一覧の日時を引き継ぐ', async () => {

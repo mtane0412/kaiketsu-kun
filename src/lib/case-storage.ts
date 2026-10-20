@@ -24,6 +24,7 @@ import { nanoid } from 'nanoid';
 import { parseCase } from '@/domain/case-schema';
 import { withoutTranscripts } from '@/domain/transcript-separation';
 import type { Case, Id } from '@/domain/types';
+import { inTransaction } from './idb-transaction';
 
 /** ケースを保存する IndexedDB のデータベース名です。 */
 export const DATABASE_NAME = 'kaiketsu-kun';
@@ -210,26 +211,25 @@ export async function saveCase(target: Case, updatedAt: string = new Date().toIS
   const transaction = database.transaction(['cases', 'transcripts', 'summaries', 'revisions'], 'readwrite');
   const transcriptStore = transaction.objectStore('transcripts');
   const revisionStore = transaction.objectStore('revisions');
-  const writes: Promise<unknown>[] = [
-    transaction.objectStore('cases').put(withoutTranscripts(target), target.id),
-    transaction.objectStore('summaries').put(summary),
-  ];
-  const storedRevision = await revisionStore.get(target.id);
-  const written = writtenTranscripts.get(target.id);
-  if (written === undefined || written.revision !== storedRevision) {
-    // 前回の内容が分からない（このタブで保存・読み出しをしていない、または別のタブが保存した）ため、本文をすべて書き直す
-    writes.push(transcriptStore.delete(transcriptRangeOf(target.id)));
-    for (const [interviewId, text] of transcripts) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
-  } else {
-    for (const [interviewId, text] of transcripts) {
-      if (written.transcripts.get(interviewId) !== text) writes.push(transcriptStore.put({ caseId: target.id, interviewId, text }));
+  await inTransaction(transaction, async (track) => {
+    const storedRevision = await track(revisionStore.get(target.id));
+    track(transaction.objectStore('cases').put(withoutTranscripts(target), target.id));
+    track(transaction.objectStore('summaries').put(summary));
+    const written = writtenTranscripts.get(target.id);
+    if (written === undefined || written.revision !== storedRevision) {
+      // 前回の内容が分からない（このタブで保存・読み出しをしていない、または別のタブが保存した）ため、本文をすべて書き直す
+      track(transcriptStore.delete(transcriptRangeOf(target.id)));
+      for (const [interviewId, text] of transcripts) track(transcriptStore.put({ caseId: target.id, interviewId, text }));
+    } else {
+      for (const [interviewId, text] of transcripts) {
+        if (written.transcripts.get(interviewId) !== text) track(transcriptStore.put({ caseId: target.id, interviewId, text }));
+      }
+      for (const interviewId of written.transcripts.keys()) {
+        if (!transcripts.has(interviewId)) track(transcriptStore.delete([target.id, interviewId]));
+      }
     }
-    for (const interviewId of written.transcripts.keys()) {
-      if (!transcripts.has(interviewId)) writes.push(transcriptStore.delete([target.id, interviewId]));
-    }
-  }
-  writes.push(revisionStore.put(revision, target.id));
-  await Promise.all([...writes, transaction.done]);
+    track(revisionStore.put(revision, target.id));
+  });
   writtenTranscripts.set(target.id, { revision, transcripts });
   return summary;
 }
@@ -312,6 +312,37 @@ function readLocalStorageUpdatedAt(): Map<Id, string> {
   return updatedAt;
 }
 
+/** 値が、配列ではないオブジェクトかどうかを返します。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** オブジェクトの、値が undefined ではない項目の名前です。JSON に書き出すと undefined の項目は消えるため、無い項目と同じに扱います。 */
+function definedKeysOf(value: Record<string, unknown>): string[] {
+  return Object.keys(value).filter((key) => value[key] !== undefined);
+}
+
+/**
+ * 2つの値が、JSON として同じ内容かどうかを返します。オブジェクトの項目の並びは比べません。
+ * 移行の照合に使います。読み出すときに資料の本文を資料の末尾に付け直すため、項目の並びは元の内容と変わることがあるためです。
+ * 注意: 配列は要素の並びも比べます（証言の並び・時系列の並び順などは、並びに意味があるためです）。
+ */
+function isSameData(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => isSameData(item, right[index]))
+    );
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const leftKeys = definedKeysOf(left);
+    return leftKeys.length === definedKeysOf(right).length && leftKeys.every((key) => isSameData(left[key], right[key]));
+  }
+  return Object.is(left, right);
+}
+
 /**
  * LocalStorage のケース1件を IndexedDB へ移し、移せたことを読み出して確かめてから、LocalStorage から消します。
  * 読み出した内容が元の内容と一致しない場合は、移した側を消してから例外を投げます（LocalStorage の側は残します）。
@@ -334,7 +365,7 @@ async function migrateLocalStorageCase(caseId: Id, stored: string, updatedAt: st
   }
   await saveCase(migrated, updatedAt);
   const reloaded = await loadCase(caseId);
-  if (JSON.stringify(reloaded) !== JSON.stringify(migrated)) {
+  if (!isSameData(reloaded, migrated)) {
     await deleteCase(caseId);
     throw new Error('移した内容を読み出して確かめたところ、元の内容と一致しませんでした');
   }

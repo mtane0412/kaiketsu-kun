@@ -6,7 +6,8 @@
  * 理由は2通りに分けて伝えます。保存が無い（URLが誤っている・削除済み）場合は「見つからない」ことだけを伝え、
  * 保存データの形式が正しくない場合だけ、データの退避先と対処を伝えます（無関係な対処へ誘導しないためです）。
  * LocalStorage に保存していた頃のデータがある場合は、開く前に新しい保存先（IndexedDB）へ移します。
- * ケースを開いた後に変更を保存できなかった場合は、中の画面を残したまま、上部に理由と対処を示します（saveError）。
+ * ケースを開いた後に変更を保存できなかった場合は、中の画面を残したまま、上部に理由と対処を示します（saveErrors。src/components/SaveErrorNotices.tsx）。
+ * 前に開いていたケースの変更が失われたことの知らせは、閉じるボタンで消せます。
  *
  * 注意: IndexedDB はブラウザにしか無いため、ケースを開く処理はマウント後（useEffect）に行います。
  * 開き終えるまでは、ケースが無い状態で中の画面が描かれないよう、何も描画しません。
@@ -20,6 +21,7 @@ import type { Id } from '@/domain/types';
 import { CASE_KEY_PREFIX, DATABASE_NAME } from '@/lib/case-storage';
 import { initializeCaseStore, useCaseStore, type CaseLoadError } from '@/stores/useCaseStore';
 import { buttonVariants } from '@/components/ui/button';
+import { SaveErrorNotices } from './SaveErrorNotices';
 import { casesHref } from './routes';
 
 /** 保存データの場所を示す、等幅の短い表記です。 */
@@ -61,7 +63,6 @@ function LoadErrorGuidance({ kind, caseId }: { kind: Exclude<CaseLoadError['kind
 export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode }) {
   const currentCase = useCaseStore((state) => state.currentCase);
   const loadError = useCaseStore((state) => state.loadError);
-  const saveError = useCaseStore((state) => state.saveError);
   const openCase = useCaseStore((state) => state.openCase);
 
   useEffect(() => {
@@ -111,11 +112,7 @@ export function CaseGate({ caseId, children }: { caseId: Id; children: ReactNode
 
   return (
     <>
-      {saveError !== null && (
-        <div role="alert" className="sticky top-0 z-50 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {saveError}
-        </div>
-      )}
+      <SaveErrorNotices className="sticky top-0 z-50 border-b border-destructive/40 bg-background px-4 py-2" />
       {children}
     </>
   );
