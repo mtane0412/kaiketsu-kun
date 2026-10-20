@@ -96,6 +96,30 @@ describe('InterviewSection', () => {
     ).toBeInTheDocument();
   });
 
+  it('この資料での呼び方を、それが指す人物・同一人物とした根拠・確認した人とともに示す', () => {
+    // 前提: 書籍は管理人を「男」と書き、記者を「筆者」と書いている
+    openTestCase({
+      ...caseWithInterviews,
+      interviews: [
+        {
+          ...bookInterview,
+          personNames: [
+            { name: '男', personId: 'person-caretaker', basis: '勤務先が一致する', confirmedBy: '山田' },
+            { name: '筆者', personId: 'person-book' },
+          ],
+        },
+        firstInterview,
+      ],
+    });
+    const history = renderCaretakerStatementHistory();
+
+    const names = within(history).getByRole('list', { name: 'この資料での呼び方' });
+    expect(within(names).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '「男」→ 管理人（根拠: 勤務先が一致する・確認: 山田）',
+      '「筆者」→ 湖畔の夏 20年目の証言（架空の書籍）',
+    ]);
+  });
+
   it('各聴取に、資料の詳細へのリンクをタイトルで置く', () => {
     const history = renderCaretakerStatementHistory();
 
@@ -522,6 +546,66 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     // 保存した候補は、候補の一覧から外す
     expect(within(extraction).queryByRole('list', { name: '証言の候補' })).not.toBeInTheDocument();
     expect(extraction).toHaveTextContent('候補をすべて確かめました');
+  });
+
+  describe('名前が2人以上に一致する候補（同姓同名など）', () => {
+    /** 別荘の元管理人も「管理人」と呼ばれる（別名に「管理人」を持つ）ケースです。 */
+    function withNamesake(): Case {
+      const base = withArticleInterview();
+      return {
+        ...base,
+        persons: [...base.persons, { id: 'person-former-caretaker', name: '元管理人', kind: 'individual', aliases: ['管理人'] }],
+      };
+    }
+
+    it('1人に決めずに一致した人物を示し、人物を選ぶまでは採用できない', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [caretakerCandidate] });
+      openTestCase(withNamesake());
+      renderCaretakerStatementHistory();
+
+      const candidates = await sendWithApiKey(user, await openExtraction(user));
+
+      expect(within(candidates).getByRole('listitem')).toHaveTextContent('発言者: 管理人（2人に一致。人物を選んでください）');
+      expect(within(candidates).getByRole('button', { name: '採用' })).toBeDisabled();
+    });
+
+    it('選んだ人物を発言者にして保存する', async () => {
+      const user = userEvent.setup();
+      mockExtractionApi(200, { claims: [caretakerCandidate] });
+      openTestCase(withNamesake());
+      renderCaretakerStatementHistory();
+
+      const candidates = await sendWithApiKey(user, await openExtraction(user));
+      await user.selectOptions(within(candidates).getByLabelText('「管理人」はどの人物か'), '元管理人');
+
+      expect(within(candidates).getByRole('listitem')).toHaveTextContent('発言者: 元管理人（登録済み）');
+      await user.click(within(candidates).getByRole('button', { name: '採用' }));
+      const composer = within(candidates).getByRole('region', { name: '候補からの証言の書き足し' });
+      await user.click(within(composer).getByRole('button', { name: '書き足す' }));
+
+      expect(openedCase().claims.at(-1)?.speaker).toEqual({ kind: 'person', personIds: ['person-former-caretaker'] });
+    });
+  });
+
+  it('この資料での呼び方も、人物の名前として抽出のリクエストに含める', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockExtractionApi(200, { claims: [] });
+    const base = withArticleInterview();
+    openTestCase({
+      ...base,
+      interviews: base.interviews.map((interview) =>
+        interview.id === firstInterview.id ? { ...interview, personNames: [{ name: '男', personId: 'person-caretaker' }] } : interview
+      ),
+    });
+    renderCaretakerStatementHistory();
+
+    const extraction = await openExtraction(user);
+    await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+    await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+
+    const [, init] = extractionCalls(fetchSpy)[0]!;
+    expect(JSON.parse(String(init?.body)).personNames).toContain('男');
   });
 
   it('候補を破棄すると、ケースを変えずに候補の一覧から外す', async () => {

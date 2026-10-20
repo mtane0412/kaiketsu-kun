@@ -19,7 +19,7 @@ import { buildTimeline, type ClaimView } from './case-views';
 import { interviewIdsOf } from './claim-sources';
 import { INTERVIEW_GRADE_LABELS } from './labels';
 import { compareTimeRef, formatTimeRef } from './time-ref';
-import type { Case, Claim, Id, Interview, Person, Place } from './types';
+import type { Case, Claim, Id, Interview, InterviewPersonName, Person, Place } from './types';
 
 /** 日時の分からない聴取の名前に使う言葉です。 */
 export const UNKNOWN_INTERVIEW_TIME_LABEL = '日時不明';
@@ -39,6 +39,8 @@ export type InterviewView = {
   interviewer?: Person;
   /** 転載の原典の媒体です。 */
   originPublisher?: Person;
+  /** この資料での呼び方と、それが指す人物です。登録した順に並びます。 */
+  personNames: { personName: InterviewPersonName; person: Person }[];
   place?: Place;
   /** この聴取で得た証言です。時系列ボードの並び順に並びます。 */
   claims: ClaimView[];
@@ -73,6 +75,7 @@ function toInterviewView(target: Case, interview: Interview, claimViews: ClaimVi
     ...(interview.interviewerPersonId !== undefined && { interviewer: personOf(target, interview.interviewerPersonId) }),
     ...(interview.origin?.publisherPersonId !== undefined && { originPublisher: personOf(target, interview.origin.publisherPersonId) }),
     ...(interview.placeId !== undefined && { place: placeOf(target, interview.placeId) }),
+    personNames: (interview.personNames ?? []).map((personName) => ({ personName, person: personOf(target, personName.personId) })),
     claims,
   };
 }

@@ -238,6 +238,28 @@ export type Interview = {
   origin?: InterviewOrigin;
   /** 資料の格です。証言の確度を、発言者の種別とあわせて読み手が判断する材料にします（真偽の評価ではありません）。 */
   grade?: InterviewGrade;
+  /**
+   * この資料での人物の呼び方です（「男」「Aさん」「村内の男性」など）。
+   * 資料によって同じ呼び方が別の人物を指すことがあるため（ブログの「Aさん」と週刊誌の「Aさん」が別人など）、
+   * 呼び方と人物の対応は、人物の別名（Person.aliases）ではなく資料ごとに持ちます。
+   * 証言の抽出では、この対応を人物の名前・別名より優先して照らし合わせます（src/domain/person-names.ts）。
+   * 1つの資料の中で、同じ呼び方（正規化後）を2回以上登録することはできません（src/domain/case-schema.ts で拒否します）。
+   */
+  personNames?: InterviewPersonName[];
+};
+
+/**
+ * 資料の中での人物の呼び方1件です。呼び方がどの人物を指すかは、読み手の判断なので、根拠と確認した人を残せます。
+ */
+export type InterviewPersonName = {
+  /** 資料の中での表記です。 */
+  name: string;
+  /** 呼び方が指す人物です。 */
+  personId: Id;
+  /** 同一人物とした根拠です（「年齢と勤務先が一致する」など）。 */
+  basis?: string;
+  /** 同一人物と確認した人です（調べた人の名前など、任意の文字列です）。 */
+  confirmedBy?: string;
 };
 
 /**

@@ -663,6 +663,55 @@ describe('parseCase（聴取）', () => {
     expect(() => parseCase(toJsonData(caseData))).toThrow(/interviews\.0\.grade/);
   });
 
+  it('資料での呼び方と、それが指す人物・同一人物とした根拠・確認した人を保持して受け付ける', () => {
+    // 前提: 書籍は管理人を「男」と書いている。同一人物とした根拠と、確かめた人を残す
+    const withNames = {
+      ...bookInterview,
+      personNames: [
+        { name: '男', personId: 'person-caretaker', basis: '勤務先と年齢が一致する', confirmedBy: '山田' },
+        { name: '記者', personId: 'person-newspaper' },
+      ],
+    };
+    const caseData = { ...caseWithInterviews, interviews: [withNames] };
+
+    expect(parseCase(toJsonData(caseData)).interviews).toEqual([withNames]);
+  });
+
+  it('資料での呼び方が存在しない人物を指す場合は拒否する', () => {
+    const caseData = { ...caseWithInterviews, interviews: [{ ...bookInterview, personNames: [{ name: '男', personId: 'person-gone' }] }] };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない人物を参照しています: person-gone/);
+  });
+
+  it('1つの資料で、同じ呼び方を2人に割り当てた場合は拒否する（呼び方から人物を1人に決められなくなるため）', () => {
+    // 前提: 「Aさん」と「 aさん 」は、大文字小文字と前後の空白の違いだけなので、同じ呼び方とみなす
+    const caseData = {
+      ...caseWithInterviews,
+      interviews: [
+        {
+          ...bookInterview,
+          personNames: [
+            { name: 'Aさん', personId: 'person-caretaker' },
+            { name: ' aさん ', personId: 'person-newspaper' },
+          ],
+        },
+      ],
+    };
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/同じ呼び方を2回以上登録しています: aさん/);
+  });
+
+  it('空白だけの呼び方・根拠・確認した人は拒否する', () => {
+    const withBlank = (name: Record<string, string>) => ({
+      ...caseWithInterviews,
+      interviews: [{ ...bookInterview, personNames: [{ name: '男', personId: 'person-caretaker', ...name }] }],
+    });
+
+    expect(() => parseCase(toJsonData(withBlank({ name: ' ' })))).toThrow(/interviews\.0\.personNames\.0\.name/);
+    expect(() => parseCase(toJsonData(withBlank({ basis: ' ' })))).toThrow(/interviews\.0\.personNames\.0\.basis/);
+    expect(() => parseCase(toJsonData(withBlank({ confirmedBy: '' })))).toThrow(/interviews\.0\.personNames\.0\.confirmedBy/);
+  });
+
   it('どの人物の証言でも、聴取にひもづけられる（記事には何人もの発言が載るため）', () => {
     // 前提: 隣家の住人の証言を、書籍の取材にひもづける
     const caseData = {

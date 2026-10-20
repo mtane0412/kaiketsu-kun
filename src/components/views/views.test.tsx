@@ -97,6 +97,24 @@ describe('TimelineView', () => {
     expect(neighborClaim).not.toHaveTextContent('person:person-owner');
   });
 
+  it('資料での表記で書いたメンションは、資料での表記と、それが誰か（現在の名前）の両方を表示する', () => {
+    // 前提: 隣家の住人の証言は、別荘の持ち主を「あの家の旦那」と呼んでおり、その呼び方を資料での呼び方として登録してある
+    const caseData: Case = {
+      ...sampleFictionalCase,
+      claims: sampleFictionalCase.claims.map((claim) =>
+        claim.content.includes('明かりがついていて')
+          ? { ...claim, content: claim.content.replace(/@\[[^\]]*\]\(person:person-owner\)/, '@[あの家の旦那](person:person-owner)') }
+          : claim
+      ),
+      interviews: [...sampleFictionalCase.interviews, { id: 'interview-memo', personNames: [{ name: 'あの家の旦那', personId: 'person-owner' }] }],
+    };
+    render(<TimelineView target={caseData} />);
+
+    const neighborClaim = screen.getByText(/明かりがついていて/).closest('li')!;
+    expect(neighborClaim).toHaveTextContent('庭に@あの家の旦那（＝別荘の持ち主）の姿が見えた。');
+    expect(within(neighborClaim).getByRole('link', { name: /あの家の旦那（＝別荘の持ち主）/ })).toBeInTheDocument();
+  });
+
   it('証言同士の食い違いは判定せず、食い違いの表示を付けない', () => {
     // 前提: 管理人は「夜7時」、隣家の住人は「夜9時ごろ」と述べている。見比べて判断するのは読み手
     render(<TimelineView target={sampleFictionalCase} />);

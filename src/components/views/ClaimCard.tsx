@@ -36,7 +36,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, isLongClaimContent, type ClaimView } from '@/domain/case-views';
 import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
-import type { SegmentKind } from '@/domain/mention';
+import { displayLabelOf, type SegmentKind } from '@/domain/mention';
 import { personIconText } from '@/domain/person-icon';
 import { expandOnClippedFocus } from '../clipping';
 import { EntityAvatar } from '../EntityAvatar';
@@ -119,7 +119,9 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
             href={mentionHref(caseId, segment.kind, segment.id, tab)}
             className={`${ABOVE_CARD_LINK} rounded px-0.5 underline decoration-current/30 underline-offset-2 hover:decoration-current ${MENTION_STYLES[segment.kind]}`}
           >
-            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />@{segment.label}
+            <EntityAvatar imageDataUrl={segment.imageDataUrl} iconText={segment.iconText} size="sm" />
+            {/* 資料での表記で書いたメンションは、資料が誰をどう呼んでいたかと、それが誰かの両方を示す */}
+            @{displayLabelOf(segment)}
           </Link>
         )
       )}

@@ -27,6 +27,7 @@ import { z } from 'zod';
 import { deriveClaimLinks, parseContent, stripLegacySpeakerPrefix, type MentionKind } from './mention';
 import { migrateLegacyEvents, type LegacyClaim } from './legacy-events';
 import { INTERVIEW_GRADES } from './interview-grade';
+import { normalizeName } from './person-names';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
@@ -99,6 +100,17 @@ const interviewOriginSchema = z
     (origin) => origin.publisherPersonId !== undefined || origin.publishedAt !== undefined || origin.citation !== undefined,
     '原典は、媒体・発行日・紙面などの書誌のいずれかを持たせてください'
   );
+
+/** 空白だけの文字列を拒否する、資料での呼び方の項目です。 */
+const nonBlankString = (message: string) => z.string().refine((value) => value.trim() !== '', message);
+
+/** 資料での人物の呼び方1件です。人物の参照と、同じ資料での重複は findCaseViolations で検証します。 */
+const interviewPersonNameSchema = z.object({
+  name: nonBlankString('呼び方は空白以外の文字を含めてください'),
+  personId: idSchema,
+  basis: nonBlankString('同一人物とした根拠は空白以外の文字を含めてください').optional(),
+  confirmedBy: nonBlankString('確認した人は空白以外の文字を含めてください').optional(),
+});
 
 /**
  * 発言者を1人しか持てなかった頃のデータ（speaker.personId）を、現在の形（speaker.personIds）に変換します。
@@ -234,6 +246,7 @@ const caseSchema = z.object({
         transcript: z.string().optional(),
         origin: interviewOriginSchema.optional(),
         grade: z.enum(INTERVIEW_GRADES).optional(),
+        personNames: z.array(interviewPersonNameSchema).optional(),
         })
       )
     )
@@ -373,6 +386,14 @@ export function findCaseViolations(target: Case): string[] {
   for (const interview of target.interviews) {
     check(personIds, interview.interviewerPersonId, '人物');
     check(personIds, interview.origin?.publisherPersonId, '人物');
+    const seenNames = new Set<string>();
+    for (const personName of interview.personNames ?? []) {
+      check(personIds, personName.personId, '人物');
+      // 同じ呼び方が2回あると、呼び方から人物を1人に決められなくなるため
+      const normalized = normalizeName(personName.name);
+      if (seenNames.has(normalized)) violations.push(`同じ呼び方を2回以上登録しています: ${normalized}（${interview.id}）`);
+      seenNames.add(normalized);
+    }
     check(placeIds, interview.placeId, '場所');
   }
   for (const relationship of target.relationships) {

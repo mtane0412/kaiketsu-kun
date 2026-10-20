@@ -23,6 +23,7 @@ import { findCaseViolations, parseCase } from '@/domain/case-schema';
 import { detachClaimFromHypotheses } from '@/domain/hypotheses';
 import type { MentionKind } from '@/domain/mention';
 import { movePersonLane } from '@/domain/person-lane-order';
+import { mergePersons } from '@/domain/person-merge';
 import { detachFromTasks, type TaskLinkKind } from '@/domain/tasks';
 import { moveTimelineItem, placeTimelineItem, settleTimelineItems, timelineKeyOf, type TimelineKey } from '@/domain/timeline-order';
 import type { Case, Id } from '@/domain/types';
@@ -106,6 +107,11 @@ type CaseStore = {
    * どちらかの人物が存在しない場合は例外を投げ、ケースを変更しません。
    */
   movePersonLane: (personId: Id, overPersonId: Id) => void;
+  /**
+   * 人物 fromId を人物 intoId にまとめます（src/domain/person-merge.ts）。参照をすべて付け替え、fromId の人物を削除します。
+   * まとめられない場合（同じ人物・存在しない人物・2人の間に関係がある場合など）は例外を投げ、ケースを変更しません。
+   */
+  mergePersons: (fromId: Id, intoId: Id) => void;
 };
 
 /** ケースを開いていない状態で、ケースを変更しようとしたときのメッセージです。 */
@@ -233,6 +239,15 @@ export const useCaseStore = create<CaseStore>()((set, get) => {
 
     moveTimelineItem: (key, toIndex) =>
       updateCurrentCase((current) => ({ ...current, timelineOrder: moveTimelineItem(current, key, toIndex) })),
+
+    mergePersons: (fromId, intoId) =>
+      updateCurrentCase((current) => {
+        const merged = mergePersons(current, fromId, intoId);
+        // まとめた結果が規則に反する場合（付け替えで経由に発言者が並ぶ場合など）は、保存せずに理由を示す
+        const violations = findCaseViolations(merged);
+        if (violations.length > 0) throw new Error(`人物をまとめられません\n${violations.join('\n')}`);
+        return merged;
+      }),
 
     movePersonLane: (personId, overPersonId) =>
       updateCurrentCase((current) => ({ ...current, personLaneOrder: movePersonLane(current, personId, overPersonId) })),

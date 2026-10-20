@@ -4,6 +4,7 @@
  * 人物の詳細の「供述の変遷」（InterviewSection）と、資料の詳細（InterviewDetail）で、同じ資料を同じ形で表示するための部品です。
  * 日時の見出し・聴取者などの説明・URL・本文・ひもづく証言を並べ、資料に対する次の操作をこのカードの中で行います。
  * 説明には、資料の格と転載の原典（媒体・発行日・紙面など）も含めます。原典を持つ資料では、聴取者を「転載した媒体」と示します。
+ * この資料での人物の呼び方（Interview.personNames）は、それが指す人物・同一人物とした根拠・確認した人とともに一覧で示します。
  * - 「この資料の証言を書き足す」: 資料を選んだ状態の証言の入力欄（ClaimForm の compact）を開きます。
  *   同じ資料の証言を続けて書くときに、資料と発言者を選び直す手間を省くためです。
  *   speakerPersonId を渡した場合（人物の詳細から開いた場合）は、その人物を発言者に選んでおきます。
@@ -34,7 +35,7 @@ import { sourceForInterview } from '@/domain/claim-sources';
 import { INTERVIEW_GRADE_LABELS } from '@/domain/labels';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, youtubeEmbedUrl } from '@/domain/transcript';
-import type { ClaimQuote, Id } from '@/domain/types';
+import type { ClaimQuote, Id, InterviewPersonName, Person } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { Button } from '@/components/ui/button';
 import { ClaimLink } from './ClaimLink';
@@ -83,6 +84,12 @@ function describeInterview(view: InterviewView): string {
   ]
     .filter(Boolean)
     .join(' / ');
+}
+
+/** 資料での呼び方1件を「「呼び方」→ 人物（根拠: …・確認: …）」の1行にします。根拠と確認した人は、入力済みのものだけを添えます。 */
+function describePersonName(personName: InterviewPersonName, person: Person): string {
+  const notes = [personName.basis && `根拠: ${personName.basis}`, personName.confirmedBy && `確認: ${personName.confirmedBy}`].filter(Boolean);
+  return `「${personName.name}」→ ${person.name}${notes.length > 0 ? `（${notes.join('・')}）` : ''}`;
 }
 
 type InterviewCardProps = {
@@ -144,6 +151,13 @@ export function InterviewCard({ view, tab, speakerPersonId, showsSource = true, 
         <p className="text-xs text-muted-foreground">発言者: {view.speakers.map((person) => person.name).join('、')}</p>
       )}
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      {view.personNames.length > 0 && (
+        <ul aria-label="この資料での呼び方" className="text-xs text-muted-foreground">
+          {view.personNames.map(({ personName, person }) => (
+            <li key={personName.name}>{describePersonName(personName, person)}</li>
+          ))}
+        </ul>
+      )}
       {interview.url && (
         <a
           href={interview.url}
