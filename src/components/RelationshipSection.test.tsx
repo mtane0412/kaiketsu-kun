@@ -11,10 +11,10 @@ import { RelationshipSection } from './RelationshipSection';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   // 前提: サンプルのケースには「別荘の持ち主 → 管理人（雇用主・片方向）」と「管理人 と 別荘の持ち主（金銭トラブル？・双方向）」がある
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation('/cases/case-lakeside/persons/person-owner');
 });
 
@@ -47,7 +47,7 @@ describe('RelationshipSection', () => {
   });
 
   it('根拠の証言が登録されていない関係には、根拠が未登録であることを示す', async () => {
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       relationships: [
         {
@@ -161,8 +161,8 @@ describe('RelationshipSection', () => {
     });
   });
 
-  it('開始と終了を持つ関係には、その期間を表示する', () => {
-    openTestCase({
+  it('開始と終了を持つ関係には、その期間を表示する', async () => {
+    await openTestCase({
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04', until: '1998-05' }],
     });
@@ -275,7 +275,7 @@ describe('RelationshipSection', () => {
 
   it('編集で開始を消して保存すると、関係から開始を取り除く', async () => {
     const user = userEvent.setup();
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       relationships: [{ ...sampleFictionalCase.relationships[0]!, since: '1995-04' }],
     });

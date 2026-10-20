@@ -55,9 +55,9 @@ const caseWithInterviews: Case = {
   ],
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(caseWithInterviews);
+  await openTestCase(caseWithInterviews);
   resetMockNavigation('/cases/case-lakeside/persons/person-caretaker');
 });
 
@@ -76,9 +76,9 @@ describe('InterviewSection', () => {
     expect(within(history).getByText('聴取者: 県警 / 場所: 湖畔の別荘 / 立場: 参考人 / 資料番号: 供述調書 第1号')).toBeInTheDocument();
   });
 
-  it('転載の資料は、転載した媒体と原典（媒体・発行日・紙面）を分けて示し、資料の格を添える', () => {
+  it('転載の資料は、転載した媒体と原典（媒体・発行日・紙面）を分けて示し、資料の格を添える', async () => {
     // 前提: 書籍の著者の取材を、架空日報の朝刊の記事を転載したもの（二次報道）に置き換える
-    openTestCase({
+    await openTestCase({
       ...caseWithInterviews,
       interviews: [
         {
@@ -181,8 +181,8 @@ describe('InterviewSection', () => {
       },
     ];
 
-    beforeEach(() => {
-      openTestCase({
+    beforeEach(async () => {
+      await openTestCase({
         ...caseWithInterviews,
         interviews: [...caseWithInterviews.interviews, pressConference],
         claims: [...caseWithInterviews.claims, ...pressStatements],
@@ -213,8 +213,8 @@ describe('InterviewSection', () => {
     });
   });
 
-  it('URLを持つ聴取には、資料を新しいタブで開くリンクを置く', () => {
-    openTestCase(withVideoInterview());
+  it('URLを持つ聴取には、資料を新しいタブで開くリンクを置く', async () => {
+    await openTestCase(withVideoInterview());
     const history = renderCaretakerStatementHistory();
 
     const link = within(history).getByRole('link', { name: '1998年8月13日 10:00の資料のURLを開く' });
@@ -225,7 +225,7 @@ describe('InterviewSection', () => {
 
   it('本文の範囲を選んで「選んだ範囲を証言にする」を押すと、聴取・発言者・本文・引用を入力済みにして書き足せる', async () => {
     const user = userEvent.setup();
-    openTestCase(withVideoInterview());
+    await openTestCase(withVideoInterview());
     renderCaretakerStatementHistory();
 
     const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
@@ -248,8 +248,8 @@ describe('InterviewSection', () => {
     });
   });
 
-  it('本文の外を選んでいるときは、「選んだ範囲を証言にする」を押せない', () => {
-    openTestCase(withVideoInterview());
+  it('本文の外を選んでいるときは、「選んだ範囲を証言にする」を押せない', async () => {
+    await openTestCase(withVideoInterview());
     const history = renderCaretakerStatementHistory();
 
     selectTextIn(within(history).getByRole('heading', { name: '1998年8月13日 10:00' }), '1998年8月13日');
@@ -257,8 +257,8 @@ describe('InterviewSection', () => {
     expect(screen.getByRole('button', { name: '選んだ範囲を証言にする' })).toBeDisabled();
   });
 
-  it('本文のうち、証言として書き起こした範囲を、その証言へのリンクとして示す', () => {
-    openTestCase(
+  it('本文のうち、証言として書き起こした範囲を、その証言へのリンクとして示す', async () => {
+    await openTestCase(
       withVideoInterview((claims) =>
         claims.map((claim) =>
           claim.id === 'claim-caretaker'
@@ -282,8 +282,8 @@ describe('InterviewSection', () => {
       return { ...caseWithInterviews, interviews: [bookInterview, { ...firstInterview, transcript }] };
     }
 
-    it('本文を開く操作をしなくても、本文を表示する', () => {
-      openTestCase(withTranscript('管理人は「あの夜は別荘が真っ暗でした」と話した。'));
+    it('本文を開く操作をしなくても、本文を表示する', async () => {
+      await openTestCase(withTranscript('管理人は「あの夜は別荘が真っ暗でした」と話した。'));
       const history = renderCaretakerStatementHistory();
 
       expect(within(history).getByRole('region', { name: '1998年8月13日 10:00の資料の本文' })).toHaveTextContent(
@@ -292,8 +292,8 @@ describe('InterviewSection', () => {
       expect(within(history).queryByRole('button', { name: /の資料の本文を開く$/ })).not.toBeInTheDocument();
     });
 
-    it('短い本文は省略せず、「全文を表示」を置かない', () => {
-      openTestCase(withTranscript('管理人は「あの夜は別荘が真っ暗でした」と話した。'));
+    it('短い本文は省略せず、「全文を表示」を置かない', async () => {
+      await openTestCase(withTranscript('管理人は「あの夜は別荘が真っ暗でした」と話した。'));
       const history = renderCaretakerStatementHistory();
 
       expect(within(history).queryByRole('button', { name: '全文を表示' })).not.toBeInTheDocument();
@@ -301,9 +301,9 @@ describe('InterviewSection', () => {
 
     describe('省略中の本文の、証言へのリンクへのフォーカス', () => {
       /** 長い本文の最後の段落を書き起こした証言を持つケースを開き、本文の領域と、証言へのリンクと、本文の要素を返します。 */
-      function renderLongQuotedTranscript() {
+      async function renderLongQuotedTranscript() {
         const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');
-        openTestCase({
+        await openTestCase({
           ...withTranscript(longTranscript),
           claims: caseWithInterviews.claims.map((claim) =>
             claim.id === firstStatement.id
@@ -317,8 +317,8 @@ describe('InterviewSection', () => {
         return { transcriptRegion, quoted, text: within(transcriptRegion).getByTestId('transcript-text') };
       }
 
-      it('見えている行のリンクには Tab キーで移れ、移っても省略したままにする', () => {
-        const { transcriptRegion, quoted, text } = renderLongQuotedTranscript();
+      it('見えている行のリンクには Tab キーで移れ、移っても省略したままにする', async () => {
+        const { transcriptRegion, quoted, text } = await renderLongQuotedTranscript();
         // 前提: リンクは本文の枠の中に収まって見えている（jsdom はレイアウトを計算しないため、位置を与える）
         placeVertically(text, 0, 160);
         placeVertically(quoted, 20, 40);
@@ -329,8 +329,8 @@ describe('InterviewSection', () => {
         expect(within(transcriptRegion).getByRole('button', { name: '全文を表示' })).toHaveAttribute('aria-expanded', 'false');
       });
 
-      it('省略で隠れている行のリンクに移ると、本文を展開して見えるようにする', () => {
-        const { transcriptRegion, quoted, text } = renderLongQuotedTranscript();
+      it('省略で隠れている行のリンクに移ると、本文を展開して見えるようにする', async () => {
+        const { transcriptRegion, quoted, text } = await renderLongQuotedTranscript();
         // 前提: リンクは本文の枠の下端より下にあり、省略で隠れている
         placeVertically(text, 0, 160);
         placeVertically(quoted, 400, 420);
@@ -344,7 +344,7 @@ describe('InterviewSection', () => {
     it('長い本文は省略して表示し、「全文を表示」で展開、「折りたたむ」で省略に戻せる', async () => {
       const user = userEvent.setup();
       const longTranscript = Array.from({ length: 20 }, (_, index) => `管理人の話の${index + 1}段落目です。`).join('\n');
-      openTestCase(withTranscript(longTranscript));
+      await openTestCase(withTranscript(longTranscript));
       const history = renderCaretakerStatementHistory();
       const transcriptRegion = within(history).getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
 
@@ -437,7 +437,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('本文を外部の LLM に送る前に、送る範囲と送り先を示して確認する', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -450,7 +450,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('API キーを入力していない場合は、送らずに理由を示す', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -463,7 +463,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('引用が本文にある候補だけを、名前を登録済みのものと照らし合わせて示し、捨てた件数を示す', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [caretakerCandidate, fabricatedCandidate] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -492,7 +492,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('候補を採用すると、聴取・引用・発言者・本文を入力済みにした入力欄を開き、確認してから保存する', async () => {
     const user = userEvent.setup();
     mockExtractionApi(200, { claims: [caretakerCandidate] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
     const claimCount = openedCase().claims.length;
 
@@ -527,7 +527,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('候補を破棄すると、ケースを変えずに候補の一覧から外す', async () => {
     const user = userEvent.setup();
     mockExtractionApi(200, { claims: [caretakerCandidate] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
     const before = openedCase();
 
@@ -542,7 +542,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('書き起こし済みの範囲と重なる候補に印を付ける', async () => {
     const user = userEvent.setup();
     mockExtractionApi(200, { claims: [caretakerCandidate] });
-    openTestCase({
+    await openTestCase({
       ...withArticleInterview(),
       claims: caseWithInterviews.claims.map((claim) =>
         claim.id === 'claim-caretaker'
@@ -565,7 +565,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     it('抽出のリクエストに、本文に名前が出てくる人物に触れる既存の証言を含める', async () => {
       const user = userEvent.setup();
       const fetchSpy = mockExtractionApi(200, { claims: [] });
-      openTestCase(withArticleInterview());
+      await openTestCase(withArticleInterview());
       renderCaretakerStatementHistory();
 
       const extraction = await openExtraction(user);
@@ -583,7 +583,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     it('候補に、同じかもしれない既存の証言を示し、ケースに無いIDは示さない', async () => {
       const user = userEvent.setup();
       mockExtractionApi(200, { claims: [sameAsBookCandidate] });
-      openTestCase(withArticleInterview());
+      await openTestCase(withArticleInterview());
       renderCaretakerStatementHistory();
 
       const candidates = await sendWithApiKey(user, await openExtraction(user));
@@ -596,7 +596,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     it('「この証言に出典を書き足す」を押すと、新しい証言を作らずに、既存の証言にこの資料・経由・引用を書き足す', async () => {
       const user = userEvent.setup();
       mockExtractionApi(200, { claims: [sameAsBookCandidate] });
-      openTestCase(withArticleInterview());
+      await openTestCase(withArticleInterview());
       renderCaretakerStatementHistory();
       const claimCount = openedCase().claims.length;
 
@@ -616,7 +616,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     it('この資料をすでに出典に持つ既存の証言には、出典を書き足すボタンを置かない', async () => {
       const user = userEvent.setup();
       mockExtractionApi(200, { claims: [{ ...caretakerCandidate, sameClaimIds: [firstStatement.id] }] });
-      openTestCase(withArticleInterview());
+      await openTestCase(withArticleInterview());
       renderCaretakerStatementHistory();
 
       const candidates = await sendWithApiKey(user, await openExtraction(user));
@@ -629,7 +629,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
     it('新しい証言として採用するときに、既存の証言との照合を選んで、証言とあわせて保存できる', async () => {
       const user = userEvent.setup();
       mockExtractionApi(200, { claims: [sameAsBookCandidate] });
-      openTestCase(withArticleInterview());
+      await openTestCase(withArticleInterview());
       renderCaretakerStatementHistory();
 
       const candidates = await sendWithApiKey(user, await openExtraction(user));
@@ -651,7 +651,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('抽出に失敗した場合は、理由を示し、ケースを変えない', async () => {
     const user = userEvent.setup();
     mockExtractionApi(401, { error: 'OpenRouter が API キーを受け付けませんでした。キーを確かめてください。' });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
     const before = openedCase();
 
@@ -666,7 +666,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('本文の範囲を選んでから抽出すると、選んだ範囲だけを送る', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const transcriptRegion = screen.getByRole('region', { name: '1998年8月13日 10:00の資料の本文' });
@@ -685,7 +685,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('モデルを OpenRouter のモデルの一覧から選べ、選んだモデルの料金を示す（既定は GPT-6 Luna）', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -712,7 +712,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('モデルの一覧に無いモデルは、送らずに理由を示す', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -730,7 +730,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('モデルの一覧を取得できない場合は理由を示し、モデルの ID を直接入力して送れる', async () => {
     const user = userEvent.setup();
     const fetchSpy = mockExtractionApi(200, { claims: [] }, 503);
-    openTestCase(withArticleInterview());
+    await openTestCase(withArticleInterview());
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);
@@ -745,7 +745,7 @@ describe('InterviewSection（証言の候補の抽出）', () => {
   it('送る本文が上限の文字数を超える場合は、送らずに範囲を選ぶよう示す', async () => {
     const user = userEvent.setup();
     mockExtractionApi(200, { claims: [] });
-    openTestCase(withArticleInterview('あ'.repeat(MAX_EXTRACTION_TEXT_LENGTH + 1)));
+    await openTestCase(withArticleInterview('あ'.repeat(MAX_EXTRACTION_TEXT_LENGTH + 1)));
     renderCaretakerStatementHistory();
 
     const extraction = await openExtraction(user);

@@ -16,9 +16,9 @@ import { TimelineView } from './TimelineView';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(sampleFictionalCase);
+  await openTestCase(sampleFictionalCase);
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
 
@@ -261,8 +261,8 @@ const searchStatement: Claim = {
 };
 
 describe('TimelineView への書き足し', () => {
-  beforeEach(() => {
-    openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
+  beforeEach(async () => {
+    await openTestCase({ ...sampleFictionalCase, claims: [...sampleFictionalCase.claims, searchStatement] });
   });
 
   it('項目の前に書き足すと、日時を付けずに、その位置に現れる', async () => {
@@ -635,7 +635,7 @@ describe('PersonLaneView の時刻軸', () => {
   };
 
   it('日付だけの証言は列の端の細い段に、時刻のある証言は残りの幅に描き、互いに覆わない', async () => {
-    openTestCase(walkCase);
+    await openTestCase(walkCase);
     const user = userEvent.setup();
     render(<PersonLaneView target={walkCase} />);
     const timeAxis = await switchToTimeAxis(user);
@@ -650,7 +650,7 @@ describe('PersonLaneView の時刻軸', () => {
   });
 
   it('帯には、帯の幅に関わらず読めるよう、日時と見出しの全文をホバー・フォーカスで示す要素を持たせる', async () => {
-    openTestCase(walkCase);
+    await openTestCase(walkCase);
     const user = userEvent.setup();
     render(<PersonLaneView target={walkCase} />);
     const timeAxis = await switchToTimeAxis(user);
@@ -714,8 +714,8 @@ describe('証言のカードの資料の表示', () => {
     return card;
   }
 
-  it('時系列のカードに、1件目の資料の短い表示を、資料の詳細へのリンクとして示し、残りの資料の件数を添える', () => {
-    openTestCase(caseWithInterviews);
+  it('時系列のカードに、1件目の資料の短い表示を、資料の詳細へのリンクとして示し、残りの資料の件数を添える', async () => {
+    await openTestCase(caseWithInterviews);
     render(<TimelineView target={caseWithInterviews} />);
 
     const card = cameraCard();
@@ -726,14 +726,14 @@ describe('証言のカードの資料の表示', () => {
     expect(within(card).getByText('ほか1件')).toBeInTheDocument();
   });
 
-  it('資料が1件だけの証言には、残りの件数を添えない', () => {
+  it('資料が1件だけの証言には、残りの件数を添えない', async () => {
     const caseWithOneInterview: Case = {
       ...caseWithInterviews,
       claims: caseWithInterviews.claims.map((claim) =>
         claim.id === 'claim-police-camera' ? { ...claim, sources: [{ interviewId: 'interview-book', viaPersonIds: ['person-book'] }] } : claim
       ),
     };
-    openTestCase(caseWithOneInterview);
+    await openTestCase(caseWithOneInterview);
     render(<TimelineView target={caseWithOneInterview} />);
 
     const card = cameraCard();
@@ -741,8 +741,8 @@ describe('証言のカードの資料の表示', () => {
     expect(within(card).queryByText(/^ほか/)).not.toBeInTheDocument();
   });
 
-  it('資料にひもづかない証言のカードには、資料の欄を出さない', () => {
-    openTestCase(caseWithInterviews);
+  it('資料にひもづかない証言のカードには、資料の欄を出さない', async () => {
+    await openTestCase(caseWithInterviews);
     render(<TimelineView target={caseWithInterviews} />);
 
     const guess = screen.getByText(/金銭の問題があった可能性/).closest('li');
@@ -750,8 +750,8 @@ describe('証言のカードの資料の表示', () => {
     expect(within(guess).queryByText('資料')).not.toBeInTheDocument();
   });
 
-  it('証言者別・人物の動きのカードでも資料を示し、リンクに開いているタブを戻り先として引き継ぐ', () => {
-    openTestCase(caseWithInterviews);
+  it('証言者別・人物の動きのカードでも資料を示し、リンクに開いているタブを戻り先として引き継ぐ', async () => {
+    await openTestCase(caseWithInterviews);
     const { unmount } = render(<SpeakerView target={caseWithInterviews} />);
     expect(within(cameraCard()).getByRole('link', { name: '架空日報 朝刊 1998年8月14日・主要報道' })).toHaveAttribute(
       'href',

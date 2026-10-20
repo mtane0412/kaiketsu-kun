@@ -2,6 +2,7 @@
  * ケース設定のメニュー
  *
  * 開いているケースの名前の変更・JSONの書き出し・ケースの削除と、LLM の設定をまとめたメニューです。
+ * JSONの書き出しでは、資料の本文を除くこともできます。有料の記事データベースから写した本文などを、共有するJSONに含めないためです。
  * LLM の設定（OpenRouter の API キーとモデル）はケースごとではなくブラウザごとの設定ですが、証言の候補の抽出（ClaimExtraction）の前に
  * 設定しておけるよう、ここにも置きます。入力欄は抽出の画面と共通です（LlmSettingsFields）。
  * いずれも毎日使う操作ではないため、画面の一等地には置かず、サイドバーの足元のメニューに畳んでいます。
@@ -12,7 +13,7 @@
  */
 'use client';
 
-import { Download, KeyRound, Pencil, Settings, Trash2 } from 'lucide-react';
+import { Download, FileMinus, KeyRound, Pencil, Settings, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import {
@@ -42,6 +43,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { withoutTranscripts } from '@/domain/transcript-separation';
+import type { Case } from '@/domain/types';
 import { saveLlmSettings, type LlmSettings } from '@/lib/llm-settings';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
 import { FormError } from './forms/fields';
@@ -59,6 +62,8 @@ export function CaseSettingsMenu() {
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  /** ケースを削除できなかった理由です。 */
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isEditingLlmSettings, setIsEditingLlmSettings] = useState(false);
   /** 変更の画面を開いている間の、入力中のケース名です。保存するまで、開いているケースには反映しません。 */
   const [draftName, setDraftName] = useState(currentCase.name);
@@ -74,8 +79,9 @@ export function CaseSettingsMenu() {
     setIsRenaming(false);
   };
 
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(currentCase, null, 2)], { type: 'application/json' });
+  /** ケースをJSONファイルとしてダウンロードさせます。 */
+  const downloadJson = (exported: Case) => {
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -87,8 +93,14 @@ export function CaseSettingsMenu() {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const handleDelete = () => {
-    deleteCase(currentCase.id);
+  /** ケースを削除し、ケースの一覧へ移ります。削除できなかった場合は、確認の画面を開いたまま理由を示します。 */
+  const handleDelete = async () => {
+    try {
+      await deleteCase(currentCase.id);
+    } catch (caught) {
+      setDeleteError(`ケースを削除できませんでした\n${caught instanceof Error ? caught.message : String(caught)}`);
+      return;
+    }
     setIsDeleting(false);
     // 削除したケースのURLへ「戻る」で戻らないよう、履歴を置き換える
     router.replace(casesHref());
@@ -106,9 +118,13 @@ export function CaseSettingsMenu() {
             <Pencil />
             ケース名を変更
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleExport}>
+          <DropdownMenuItem onClick={() => downloadJson(currentCase)}>
             <Download />
             JSONを書き出す
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => downloadJson(withoutTranscripts(currentCase))}>
+            <FileMinus />
+            JSONを書き出す（資料の本文を除く）
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsEditingLlmSettings(true)}>
             <KeyRound />
@@ -154,7 +170,13 @@ export function CaseSettingsMenu() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={isDeleting} onOpenChange={setIsDeleting}>
+      <AlertDialog
+        open={isDeleting}
+        onOpenChange={(open) => {
+          setIsDeleting(open);
+          setDeleteError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>ケース「{currentCase.name}」を削除しますか？</AlertDialogTitle>
@@ -162,6 +184,7 @@ export function CaseSettingsMenu() {
               このケースの証言・人物・場所をすべて削除します。この操作は取り消せません。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <FormError message={deleteError} />
           <AlertDialogFooter>
             <AlertDialogCancel>やめる</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>削除する</AlertDialogAction>
