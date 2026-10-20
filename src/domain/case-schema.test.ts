@@ -1017,7 +1017,30 @@ describe('parseCase（未了事項）', () => {
   it('同じ証言を2回以上ひもづけた未了事項は拒否する', () => {
     const caseData = buildCaseWithReplacedReinterview({ claimIds: ['claim-caretaker', 'claim-caretaker'] });
 
-    expect(() => parseCase(toJsonData(caseData))).toThrow(/未了事項に同じ証言・人物・場所を2回以上ひもづけることはできません: task-caretaker/);
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/未了事項に同じ証言・人物・場所・論点を2回以上ひもづけることはできません: task-caretaker/);
+  });
+
+  it('論点のひもづけを持たない頃に保存した未了事項は、論点のひもづけを空として受け付ける', () => {
+    const caseData = {
+      ...sampleFictionalCase,
+      tasks: sampleFictionalCase.tasks.map(({ disputeIds: _disputeIds, ...task }) => task),
+    };
+
+    expect(parseCase(toJsonData(caseData)).tasks.map((task) => task.disputeIds)).toEqual([[], [], []]);
+  });
+
+  it('未了事項が存在しない論点を参照している場合は拒否する', () => {
+    const caseData = buildCaseWithReplacedReinterview({ disputeIds: ['dispute-gone'] });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない論点を参照しています: dispute-gone/);
+  });
+
+  it('同じ論点を2回以上ひもづけた未了事項は拒否する', () => {
+    const caseData = buildCaseWithReplacedReinterview({
+      disputeIds: ['dispute-villa-presence', 'dispute-villa-presence'],
+    });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/未了事項に同じ証言・人物・場所・論点を2回以上ひもづけることはできません: task-caretaker/);
   });
 
   it('期限が年月日（YYYY-MM-DD）の形でない未了事項は拒否する', () => {
@@ -1030,6 +1053,55 @@ describe('parseCase（未了事項）', () => {
     const caseData = buildCaseWithReplacedReinterview({ status: 'pending' });
 
     expect(() => parseCase(toJsonData(caseData))).toThrow(/tasks\.1\.status/);
+  });
+});
+
+describe('parseCase（論点）', () => {
+  /** サンプルの論点「12日夜、持ち主は別荘にいたか」を、一部の項目だけ差し替えたケースを作ります。 */
+  function buildCaseWithReplacedDispute(change: Record<string, unknown>) {
+    return {
+      ...sampleFictionalCase,
+      disputes: sampleFictionalCase.disputes.map((dispute) => ({ ...dispute, ...change })),
+    };
+  }
+
+  it('論点を保持して受け付ける', () => {
+    // 前提: サンプルのケースには、証言3件を束ねた未解決の論点が1件ある
+    expect(parseCase(toJsonData(sampleFictionalCase)).disputes).toEqual(sampleFictionalCase.disputes);
+  });
+
+  it('論点を持たない頃に保存したデータは、論点を空として受け付ける', () => {
+    const { disputes: _disputes, ...caseWithoutDisputes } = sampleFictionalCase;
+    const caseData = {
+      ...caseWithoutDisputes,
+      tasks: sampleFictionalCase.tasks.map(({ disputeIds: _disputeIds, ...task }) => task),
+    };
+
+    expect(parseCase(toJsonData(caseData)).disputes).toEqual([]);
+  });
+
+  it('論点が存在しない証言を束ねている場合は拒否する', () => {
+    const caseData = buildCaseWithReplacedDispute({ claimIds: ['claim-caretaker', 'claim-gone'] });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/存在しない証言を参照しています: claim-gone/);
+  });
+
+  it('名前が空白だけの論点は拒否する', () => {
+    const caseData = buildCaseWithReplacedDispute({ title: '  ' });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/論点の名前がありません: dispute-villa-presence/);
+  });
+
+  it('同じ証言を2回以上束ねた論点は拒否する', () => {
+    const caseData = buildCaseWithReplacedDispute({ claimIds: ['claim-caretaker', 'claim-caretaker'] });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/論点に同じ証言を2回以上束ねることはできません: dispute-villa-presence/);
+  });
+
+  it('解決したかどうかを持たない論点は拒否する', () => {
+    const caseData = buildCaseWithReplacedDispute({ resolved: undefined });
+
+    expect(() => parseCase(toJsonData(caseData))).toThrow(/disputes\.0\.resolved/);
   });
 });
 

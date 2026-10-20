@@ -11,6 +11,9 @@
  * 並びは相手の証言の時系列の並び順です（導出は src/domain/cross-checks.ts の buildClaimCrossChecks）。
  * 開いているタブ（tab）はリンク先のURLに引き継ぎます。
  *
+ * 各行には「論点を作る」を置き、照合した2件の証言を束ねた論点（Dispute）の登録へ進めます。
+ * 同じ事柄で3件目以上の証言が食い違うと分かったときに、照合の組み合わせを増やさずに論点で見比べられるようにするためです。
+ *
  * 「反応を記録」からは、この証言に対する別の人物の反応を、反応した人物の証言と照合として1回で記録します（ReactionForm）。
  *
  * 注意: 照合の入力は、この一覧の中でフォームを開いて行います（CrossCheckForm）。
@@ -18,6 +21,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { claimLabelOf } from '@/domain/case-views';
 import { buildClaimCrossChecks, type ClaimCrossCheckView } from '@/domain/cross-checks';
@@ -25,13 +29,14 @@ import { formatClaimSourceLabels } from '@/domain/interviews';
 import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import type { Id } from '@/domain/types';
 import { useCaseStore, useCurrentCase } from '@/stores/useCaseStore';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { ClaimLink } from './ClaimLink';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
 import { CrossCheckForm } from './forms/CrossCheckForm';
 import { ReactionForm } from './forms/ReactionForm';
 import { FormError } from './forms/fields';
-import type { TabKey } from './routes';
+import { newDisputeHref, type TabKey } from './routes';
+import { useCaseId } from './useCaseId';
 
 /** この節の見出しです。読み上げのための名前（aria-label）にも使います。 */
 const SECTION_LABEL = '照合';
@@ -56,6 +61,7 @@ type CrossCheckSectionProps = {
 
 export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
   const currentCase = useCurrentCase();
+  const caseId = useCaseId();
   const remove = useCaseStore((state) => state.remove);
   const [form, setForm] = useState<FormState>({ kind: 'closed' });
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -95,6 +101,13 @@ export function CrossCheckSection({ claimId, tab }: CrossCheckSectionProps) {
                 {view.crossCheck.reason && <p className="whitespace-pre-line text-sm">{view.crossCheck.reason}</p>}
 
                 <div className="flex items-center justify-end gap-2">
+                  <Link
+                    href={newDisputeHref(caseId, tab, view.crossCheck.claimIds)}
+                    aria-label={actionLabelOf(view, 'もとに論点を作る')}
+                    className={`mr-auto ${buttonVariants({ variant: 'ghost', size: 'sm' })}`}
+                  >
+                    論点を作る
+                  </Link>
                   <Button
                     type="button"
                     variant="outline"

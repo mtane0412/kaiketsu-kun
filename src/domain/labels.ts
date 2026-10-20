@@ -79,9 +79,10 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   done: '完了',
 };
 
-/** 未了事項にひもづける対象の種類の表示名です。未了事項の詳細の節と、証言・人物・場所の詳細の「この〇〇の未了事項」で使います。 */
+/** 未了事項にひもづける対象の種類の表示名です。未了事項の詳細の節と、証言・人物・場所・論点の詳細の「この〇〇の未了事項」で使います。 */
 export const TASK_LINK_KIND_LABELS: Record<TaskLinkKind, string> = {
   claim: '証言',
   person: MENTION_KIND_LABELS.person,
   place: MENTION_KIND_LABELS.place,
+  dispute: '論点',
 };

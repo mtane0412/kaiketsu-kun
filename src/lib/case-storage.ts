@@ -57,6 +57,7 @@ export function createEmptyCase(name: string = DEFAULT_CASE_NAME): Case {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
   };

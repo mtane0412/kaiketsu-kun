@@ -28,7 +28,7 @@ describe('TaskListView', () => {
     expect(securityCameraCheck).toHaveTextContent('担当: 捜査1係');
     expect(securityCameraCheck).toHaveTextContent('期限: 1998年8月20日');
     expect(caretakerReinterview).toHaveTextContent('未着手');
-    expect(caretakerReinterview).toHaveTextContent('対象: 証言1件・管理人・湖畔の別荘');
+    expect(caretakerReinterview).toHaveTextContent('対象: 証言1件・管理人・湖畔の別荘・論点「12日夜、持ち主は別荘にいたか」');
     // 検証: 完了した未了事項は、未完了の一覧には並べない
     expect(within(list).queryByText(/天気/)).not.toBeInTheDocument();
   });

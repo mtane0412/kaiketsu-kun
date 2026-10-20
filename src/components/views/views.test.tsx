@@ -630,6 +630,7 @@ describe('PersonLaneView の時刻軸', () => {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
   };

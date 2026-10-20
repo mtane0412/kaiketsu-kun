@@ -2,8 +2,8 @@
  * ボード全体
  *
  * 画面を「左のサイドバー（CaseSidebar）」と「メインの1カラム」の2つに分けます。
- * サイドバーは、ケースの切り替え・表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・未了事項）・登録済みの一覧（人物・場所・証言）を担います。
- * メインのカラムは、ボード（いま開いている表示）か、証言・人物・場所・仮説・未了事項の詳細のどちらか一方だけを表示します。
+ * サイドバーは、ケースの切り替え・表示の切り替え（時系列・グラフ・証言者別・人物の動き・地図・仮説・論点・未了事項）・登録済みの一覧（人物・場所・証言）を担います。
+ * メインのカラムは、ボード（いま開いている表示）か、証言・人物・場所・仮説・論点・未了事項の詳細のどちらか一方だけを表示します。
  * 以前はボードの上にタブを並べ、「登録済みの一覧」をボードを覆うオーバーレイで開いていましたが、
  * どちらもナビゲーションのため、サイドバーに集約しました。
  *
@@ -11,7 +11,7 @@
  * 証言・人物・場所の編集は、それぞれの詳細（ClaimDetail・EntityDetail）で行います。詳細のルート
  * （/claims/<証言のID>・/persons/<人物のID>・/places/<場所のID>）と、人物・場所を新しく登録するルート
  * （/persons/new・/places/new）と、仮説の詳細・登録のルート（/hypotheses/<仮説のID>・/hypotheses/new）と、
- * 未了事項の詳細・登録のルート（/tasks/<未了事項のID>・/tasks/new）では、
+ * 未了事項の詳細・登録のルート（/tasks/<未了事項のID>・/tasks/new）と、論点の詳細・登録のルート（/disputes/<論点のID>・/disputes/new）では、
  * 詳細（children）をボードと入れ替えて表示します。ボード全体の検索結果のルート（/search）も、同じく詳細として入れ替えます。
  * 以前はボードの横へ並べる2ペインでしたが、サイドバーを導入したあとは、サイドバーを押したときに
  * ボードと詳細のどちらが入れ替わったのかが分かりづらかったため、メインのカラムを1つに戻しました。
@@ -23,6 +23,7 @@
  * 再マウントされないため、証言を開閉しても、入力中の内容を保ちます。
  * 保存済みのケースの復元は CaseGate が担います。このコンポーネントは CaseGate の中に置いてください。
  * 人物の動きのビューは人物の数だけ列が増えるため、そのタブのときだけボードの幅の上限を外します。
+ * 論点の詳細は、束ねた証言を6列の表で見比べるため、他の詳細より幅の上限を広げます。
  * useSearchParams・usePathname を使うため、ページでは Suspense の中に置いてください。
  *
  * キーボードだけで操作できるよう、ページの先頭に「本文へ移動」のリンク（サイドバーを飛ばしてメインの領域へ移るリンク）を置き、
@@ -39,6 +40,7 @@ import { useBoardScrollRestoration } from './useBoardScrollRestoration';
 import { useBoardShortcuts } from './useBoardShortcuts';
 import { useCaseId } from './useCaseId';
 import { boardHref, parseDetailKind, parseTab, TAB_SEARCH_PARAM, TABS, type DetailKind, type TabKey } from './routes';
+import { DisputeListView } from './views/DisputeListView';
 import { GraphView } from './views/GraphView';
 import { HypothesisListView } from './views/HypothesisListView';
 import { MapView } from './views/MapView';
@@ -55,12 +57,14 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
   hypothesis: '仮説の詳細',
   task: '未了事項の詳細',
   interview: '資料の詳細',
+  dispute: '論点の詳細',
   search: '検索結果',
   newPerson: '人物の登録',
   newPlace: '場所の登録',
   newHypothesis: '仮説の登録',
   newTask: '未了事項の登録',
   newInterview: '資料の登録',
+  newDispute: '論点の登録',
 };
 
 /** 「本文へ移動」のリンクの移り先となる、メインの領域のIDです。 */
@@ -168,11 +172,15 @@ export function CaseBoard({ children }: CaseBoardProps) {
             {activeTab === 'lanes' && <PersonLaneView target={currentCase} />}
             {activeTab === 'map' && <MapView target={currentCase} />}
             {activeTab === 'hypotheses' && <HypothesisListView target={currentCase} />}
+            {activeTab === 'disputes' && <DisputeListView target={currentCase} />}
             {activeTab === 'tasks' && <TaskListView target={currentCase} />}
           </div>
 
           {detailKind && (
-            <section aria-label={DETAIL_LABELS[detailKind]} className="mx-auto min-w-0 max-w-4xl">
+            <section
+              aria-label={DETAIL_LABELS[detailKind]}
+              className={`mx-auto min-w-0 ${detailKind === 'dispute' ? 'max-w-6xl' : 'max-w-4xl'}`}
+            >
               {children}
             </section>
           )}
