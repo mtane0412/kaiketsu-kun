@@ -200,8 +200,8 @@ const bookTheory: Hypothesis = {
 };
 
 /** サンプルのケースに、架空の書籍の説を加えて開きます。 */
-function openCaseWithBookTheory(theory: Hypothesis = bookTheory) {
-  openTestCase({ ...sampleFictionalCase, hypotheses: [...sampleFictionalCase.hypotheses, theory] });
+async function openCaseWithBookTheory(theory: Hypothesis = bookTheory) {
+  await openTestCase({ ...sampleFictionalCase, hypotheses: [...sampleFictionalCase.hypotheses, theory] });
 }
 
 /** 開いているケースから、架空の書籍の説を取り出します。 */
@@ -227,7 +227,7 @@ describe('HypothesisDetail（第三者の説）', () => {
   });
 
   it('主唱者を「読み手（自分）」に戻すと、主唱者と唱えた時期を取り除いて保存する', async () => {
-    openCaseWithBookTheory();
+    await openCaseWithBookTheory();
     const user = userEvent.setup();
     render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
 
@@ -240,7 +240,7 @@ describe('HypothesisDetail（第三者の説）', () => {
   });
 
   it('立場の変化を記録した説を「読み手（自分）」に戻すときは、立場の変化を取り除くことを示し、取り除いて保存する', async () => {
-    openCaseWithBookTheory({
+    await openCaseWithBookTheory({
       ...bookTheory,
       stanceChanges: [{ id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: ['claim-report'] }],
     });
@@ -256,7 +256,7 @@ describe('HypothesisDetail（第三者の説）', () => {
   });
 
   it('唱えた時期を解釈できない場合は、理由を示して保存しない', async () => {
-    openCaseWithBookTheory();
+    await openCaseWithBookTheory();
     const user = userEvent.setup();
     render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
 
@@ -277,7 +277,7 @@ describe('HypothesisDetail（第三者の説）', () => {
   });
 
   it('主唱者の立場の変化（撤回など）を、時期・根拠の証言・メモとともに記録し、削除できる', async () => {
-    openCaseWithBookTheory();
+    await openCaseWithBookTheory();
     const user = userEvent.setup();
     render(<HypothesisDetail hypothesisId="hypothesis-book-theory" />);
 

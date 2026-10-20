@@ -294,9 +294,9 @@ describe('ClaimDetail', () => {
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた未了事項1件から、ひもづけを外します。');
   });
 
-  it('第三者の説の、主唱者の立場の変化の根拠にした証言では、立場として「主唱者の撤回の根拠」などと示す', () => {
+  it('第三者の説の、主唱者の立場の変化の根拠にした証言では、立場として「主唱者の撤回の根拠」などと示す', async () => {
     // 前提: 架空の書籍が唱えた説を、新聞の記事の証言を根拠に撤回したケース
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       hypotheses: [
         {
@@ -319,7 +319,7 @@ describe('ClaimDetail', () => {
 
   it('立場の変化の根拠にした証言の削除の確認では、仮説からひもづけを外すことを伝える', async () => {
     // 前提: 新聞の記事の証言は、架空の書籍の説の撤回の根拠にだけひもづいている
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       hypotheses: [
         {
@@ -342,9 +342,9 @@ describe('ClaimDetail', () => {
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('この証言をひもづけた仮説1件から、ひもづけを外します。');
   });
 
-  it('撤回・訂正の照合は、開いている証言が撤回・訂正された側であることを示す', () => {
+  it('撤回・訂正の照合は、開いている証言が撤回・訂正された側であることを示す', async () => {
     // 前提: 防犯カメラの証言が、新聞の記事の証言を訂正したケース
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-revision', claimIds: ['claim-police-camera', 'claim-report'], kind: 'revises' }],
     });

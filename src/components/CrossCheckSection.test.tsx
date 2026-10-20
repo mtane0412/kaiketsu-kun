@@ -185,7 +185,7 @@ describe('CrossCheckSection', () => {
 
   it('撤回・訂正の照合を編集するときは、登録済みの向きを初期値にし、向きを入れ替えて保存できる', async () => {
     // 前提: 隣家の住人の証言が、新聞の記事の証言を訂正したと登録されている
-    openTestCase({
+    await openTestCase({
       ...sampleFictionalCase,
       crossChecks: [{ id: 'cross-check-revision', claimIds: ['claim-neighbor', 'claim-report'], kind: 'revises' }],
     });
