@@ -1049,6 +1049,26 @@ describe('parseCase（仮説）', () => {
     );
   });
 
+  it('立場の変化が時期の順に並んでいないデータは、時期の順に並べ直して受け付け、時期の分からない変化は末尾に置く', () => {
+    // 前提: JSON を手で書いたため、2020年の「再び主張」・時期の分からない「修正」・2019年の「撤回」の順に並んでいる
+    const caseData = buildCaseWithReplacedCaretakerHypothesis({
+      ...thirdPartyFields,
+      stanceChanges: [
+        { id: 'stance-reaffirmed', kind: 'reaffirmed', at: '2020', basisClaimIds: [] },
+        { id: 'stance-revised', kind: 'revised', basisClaimIds: [] },
+        { id: 'stance-withdrawn', kind: 'withdrawn', at: '2019-03', basisClaimIds: [] },
+      ],
+    });
+
+    const [parsedHypothesis] = parseCase(toJsonData(caseData)).hypotheses;
+
+    expect(parsedHypothesis?.stanceChanges?.map((change) => change.id)).toEqual([
+      'stance-withdrawn',
+      'stance-reaffirmed',
+      'stance-revised',
+    ]);
+  });
+
   it('1つの仮説の中で、立場の変化のIDが重複している場合は拒否する', () => {
     const change = { id: 'stance-withdrawn', kind: 'withdrawn', basisClaimIds: [] };
     const caseData = buildCaseWithReplacedCaretakerHypothesis({ ...thirdPartyFields, stanceChanges: [change, change] });

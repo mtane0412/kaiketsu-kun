@@ -182,14 +182,21 @@ export function findHypothesesUsingClaim(target: Case, claimId: Id): HypothesisU
  * 主唱者の立場の変化 change を、時期の順の位置に加えた一覧を返します。
  *
  * 立場の変化は起きた順に並べて持ち、最後の要素を最新の立場として扱います（buildHypothesisList の latestStanceChange）。
- * 後から見つかった古い変化を記録しても順が崩れないよう、時期を持つ変化は、時期がそれより後の最初の変化の前に入れます。
- * 時期の同じ変化の間では、記録した順を保ちます。時期の分からない変化は、起きた順を決められないため末尾に加えます。
+ * 並びは compareTimeRef の順（時期の早い順。時期の分からない変化は末尾）で、時期の同じ変化の間では記録した順を保ちます。
+ * 後から見つかった古い変化を記録しても順が崩れないよう、比較してそれより後になる最初の変化の前に入れます。
+ * 読み込んだデータの並べ直し（sortStanceChanges）と同じ順になります。
  */
 export function insertStanceChange(changes: HypothesisStanceChange[], change: HypothesisStanceChange): HypothesisStanceChange[] {
-  const { at } = change;
-  const index =
-    at === undefined ? -1 : changes.findIndex((existing) => existing.at !== undefined && compareTimeRef(existing.at, at) > 0);
+  const index = changes.findIndex((existing) => compareTimeRef(existing.at, change.at) > 0);
   return index === -1 ? [...changes, change] : [...changes.slice(0, index), change, ...changes.slice(index)];
+}
+
+/**
+ * 主唱者の立場の変化を、起きた順（insertStanceChange と同じ順）に並べ直した一覧を返します。
+ * JSONを手で書いた場合など、時期の順に並んでいないデータを読み込むときに使います。並べ替えは安定で、時期の同じ変化の順は保ちます。
+ */
+export function sortStanceChanges(changes: HypothesisStanceChange[]): HypothesisStanceChange[] {
+  return [...changes].sort((a, b) => compareTimeRef(a.at, b.at));
 }
 
 /**

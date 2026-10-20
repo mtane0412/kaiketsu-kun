@@ -18,6 +18,7 @@
  * 照合（crossChecks）を持たない頃のデータは、照合を空として補います。
  * 仮説（hypotheses）を持たない頃のデータは、仮説を空として補います。
  * 主唱者・唱えた時期・立場の変化を持たない頃の仮説は、読み手自身の仮説として受け付けます。
+ * 時期の順に並んでいない立場の変化は、時期の順に並べ直して受け付けます（sortStanceChanges）。
  * 未了事項（tasks）を持たない頃のデータは、未了事項を空として補います。
  * 関係の期間（since・until）を持たない頃のデータは、期間を持たない（すべての時点で成り立つ）関係として受け付けます。
  * 人物の種別（kind）を持たない頃のデータは、すべての人物を個人（DEFAULT_PERSON_KIND）として補います。
@@ -31,6 +32,7 @@ import { INTERVIEW_GRADES } from './interview-grade';
 import { DEFAULT_PERSON_KIND, PERSON_KINDS } from './person-kind';
 import { isHttpUrl } from './transcript';
 import { isValidTimeRef, toInterval } from './time-ref';
+import { sortStanceChanges } from './hypotheses';
 import { settleTimelineItems } from './timeline-order';
 import { interviewIdsOf } from './claim-sources';
 import type { Case, ClaimSource, Id, Interview, Person, Speaker } from './types';
@@ -641,7 +643,10 @@ export function parseCase(data: unknown): Case {
     personLaneOrder,
     interviews: migrateLegacyInterviewSubjects(interviews, persons),
     crossChecks,
-    hypotheses,
+    // 立場の変化は、最後の要素を最新の立場として扱うため、時期の順に並べ直して受け付ける
+    hypotheses: hypotheses.map((hypothesis) =>
+      hypothesis.stanceChanges === undefined ? hypothesis : { ...hypothesis, stanceChanges: sortStanceChanges(hypothesis.stanceChanges) }
+    ),
     tasks,
     ...migrateLegacyEvents({ events, claims: legacyClaims, timelineOrder }),
   };
