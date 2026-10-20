@@ -1,12 +1,12 @@
 /**
  * 人物の詳細に並べる「供述の変遷」（その人物が発言者の証言を含む聴取の一覧・編集・削除と、聴取からの証言の書き足し・候補の抽出）のテスト
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim, Interview } from '@/domain/types';
-import { MAX_EXTRACTION_TEXT_LENGTH } from '@/lib/claim-extraction-api';
+import { MAX_EXTRACTION_NAMES, MAX_EXTRACTION_TEXT_LENGTH } from '@/lib/claim-extraction-api';
 import { OPENROUTER_MODELS_URL } from '@/lib/openrouter-models';
 import { placeVertically } from '@/test/layout';
 import { openedCase, openTestCase } from '@/test/open-case';
@@ -468,7 +468,37 @@ describe('InterviewSection（証言の候補の抽出）', () => {
 
     expect(extraction).toHaveTextContent(`本文の全文（${articleTranscript.length}文字）`);
     expect(extraction).toHaveTextContent('OpenRouter');
+    // 本文のほかに送るもの（人物・場所の名前と、既存の証言の要約）も、送る前に示す
+    expect(extraction).toHaveTextContent(/登録済みの人物・場所の名前と、関係しそうな既存の証言の要約（\d+件）も送ります/);
     expect(extractionCalls(fetchSpy)).toHaveLength(0);
+  });
+
+  it('登録済みの名前が上限を超える場合は、送らない名前の件数を送る前に示し、上限までの名前を送る', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = mockExtractionApi(200, { claims: [] });
+    // 前提: 本文に出てこない住民を上限より3人多く登録したケース
+    const base = withArticleInterview();
+    const residents = Array.from({ length: MAX_EXTRACTION_NAMES + 3 }, (_, index) => ({
+      id: `person-resident-${index + 1}`,
+      name: `無関係の住民${index + 1}`,
+      kind: 'individual' as const,
+    }));
+    await openTestCase({ ...base, persons: [...base.persons, ...residents] });
+    renderCaretakerStatementHistory();
+
+    const extraction = await openExtraction(user);
+    // 検証: 送らない名前の件数（登録済みの人物の名前と別名の数 - 上限）を示す
+    const registeredNameCount = base.persons.reduce((count, person) => count + 1 + (person.aliases?.length ?? 0), 0);
+    const omitted = registeredNameCount + residents.length - MAX_EXTRACTION_NAMES;
+    expect(extraction).toHaveTextContent(`登録済みの名前が多いため、本文に出てくる名前を優先し、${omitted}件の名前は送りません`);
+
+    await user.type(within(extraction).getByLabelText('OpenRouter の API キー'), 'sk-or-テスト用のキー');
+    await user.click(within(extraction).getByRole('button', { name: '本文を送って抽出する' }));
+    // 検証: 送った人物の名前は上限の件数に収まる
+    await waitFor(() => expect(extractionCalls(fetchSpy)).toHaveLength(1));
+    const [, init] = extractionCalls(fetchSpy)[0]!;
+    const body = JSON.parse(String(init?.body)) as { personNames: string[] };
+    expect(body.personNames).toHaveLength(MAX_EXTRACTION_NAMES);
   });
 
   it('API キーを入力していない場合は、送らずに理由を示す', async () => {

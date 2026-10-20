@@ -5,7 +5,14 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_EXISTING_CLAIM_SUMMARY_LENGTH, MAX_EXISTING_CLAIMS_FOR_EXTRACTION } from '@/domain/claim-extraction';
-import { ExtractionRequestSchema, MAX_EXTRACTION_TEXT_LENGTH, requestClaimExtraction, type ExtractionRequest } from './claim-extraction-api';
+import {
+  ExtractionRequestSchema,
+  MAX_EXTRACTION_NAMES,
+  MAX_EXTRACTION_TEXT_LENGTH,
+  requestClaimExtraction,
+  selectExtractionNames,
+  type ExtractionRequest,
+} from './claim-extraction-api';
 
 const request: ExtractionRequest = {
   text: '近くに住む山田花子さんは「庭に黒い車が止まっていた」と話した。',
@@ -79,5 +86,36 @@ describe('requestClaimExtraction', () => {
     const fetcher = fetchReturning(200, { claims: [{ content: '引用が無い' }] });
 
     await expect(requestClaimExtraction(request, fetcher)).rejects.toThrow('形式');
+  });
+});
+
+describe('selectExtractionNames', () => {
+  /** 本文に出てこない、登録済みの人物の名前を count 件作ります。 */
+  function unrelatedNames(count: number): string[] {
+    return Array.from({ length: count }, (_, index) => `無関係の住民${index + 1}`);
+  }
+
+  it('上限以内なら、重なる名前を1つにまとめて、すべて送る', () => {
+    const result = selectExtractionNames('山田花子さんは話した。', ['男'], ['山田 花子', '県警', '県警']);
+
+    expect(result).toEqual({ names: ['男', '山田 花子', '県警'], omittedCount: 0 });
+  });
+
+  it('上限を超える場合は、この資料での呼び方と本文に出てくる名前を優先し、送らない件数を返す', () => {
+    // 前提: 本文に出てこない名前が上限ちょうどあり、ほかに本文に出てくる「山田 花子」と、この資料での呼び方「男」がある
+    const others = [...unrelatedNames(MAX_EXTRACTION_NAMES), '山田 花子'];
+
+    const result = selectExtractionNames('山田花子さんは「男を見た」と話した。', ['男'], others);
+
+    // 検証: 優先する2件を先頭に置き、上限に収まらない2件を送らない
+    expect(result.names).toHaveLength(MAX_EXTRACTION_NAMES);
+    expect(result.names.slice(0, 2)).toEqual(['男', '山田 花子']);
+    expect(result.omittedCount).toBe(2);
+  });
+
+  it('上限の文字数を超える長い名前は送らず、送らない件数に数える', () => {
+    const result = selectExtractionNames('本文', [], ['県警', 'あ'.repeat(201)]);
+
+    expect(result).toEqual({ names: ['県警'], omittedCount: 1 });
   });
 });
