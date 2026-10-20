@@ -12,7 +12,7 @@
  * 食い違いを見比べるときは、述べている内容の時刻の順に並んでいる方が読みやすいためです。
  */
 import { buildTimeline, type ClaimView } from './case-views';
-import { formatInterviewSourceLabel } from './interviews';
+import { formatInterviewSourceLabel } from './interview-source-label';
 import { formatTimeRef } from './time-ref';
 import type { Case, ClaimQuote, Dispute, Id } from './types';
 
@@ -35,7 +35,7 @@ export type DisputeList = {
 export type DisputeSourceCell = {
   /** 出典の資料のIDです。資料にひもづかない出典（経由だけの出典）では undefined です。 */
   interviewId: Id | undefined;
-  /** 資料の短い表示（媒体・日付・資料の格）です（src/domain/interviews.ts の formatInterviewSourceLabel）。 */
+  /** 資料の短い表示（媒体・日付・資料の格）です（src/domain/interview-source-label.ts の formatInterviewSourceLabel）。 */
   interviewLabel: string | undefined;
   /** 経由した人物の名前を、伝えた順に「 → 」でつないだものです。経由が無い場合は空文字列です。 */
   viaLabel: string;

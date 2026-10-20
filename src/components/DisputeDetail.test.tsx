@@ -40,9 +40,9 @@ const caseWithSources: Case = {
   ),
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  openTestCase(caseWithSources);
+  await openTestCase(caseWithSources);
   resetMockNavigation('/cases/case-lakeside/disputes/dispute-villa-presence?tab=disputes');
 });
 
@@ -90,8 +90,8 @@ describe('DisputeDetail（見比べる表）', () => {
     expect(summary).toHaveTextContent('持ち主が車で別荘へ戻った（20:10）と読めば');
   });
 
-  it('束ねた証言が2件に満たない場合は、証言を束ねるよう案内する', () => {
-    openTestCase({
+  it('束ねた証言が2件に満たない場合は、証言を束ねるよう案内する', async () => {
+    await openTestCase({
       ...caseWithSources,
       disputes: [{ id: 'dispute-single', title: '連絡が取れなくなった日', claimIds: ['claim-report'], resolved: false }],
       tasks: caseWithSources.tasks.map((task) => ({ ...task, disputeIds: [] })),
