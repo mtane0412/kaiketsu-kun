@@ -1100,6 +1100,22 @@ describe('ClaimForm（聴取）', () => {
       expect(savedSources()).toEqual(claimInTwoSources.sources);
     });
 
+    it('誤りを示した後で出典の欄を直すと、誤りの表示を消す', async () => {
+      const user = userEvent.setup();
+      render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);
+
+      // 前提: 1つ目の出典と同じ資料を選んで保存し、2つ目の出典の資料の欄に誤りを示した
+      await user.selectOptions(screen.getByLabelText('資料（任意）'), newspaperInterview.id);
+      await user.click(screen.getByRole('button', { name: '証言を保存' }));
+      const interviewField = within(screen.getByRole('group', { name: '出典 2' })).getByLabelText('資料');
+      expect(interviewField).toHaveAttribute('aria-invalid', 'true');
+
+      await user.selectOptions(interviewField, bookInterview.id);
+
+      expect(interviewField).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByText('この資料は、前の出典ですでに選んでいます。別の資料を選ぶか、この出典を外してください')).not.toBeInTheDocument();
+    });
+
     it('引用の秒数が0以上の整数でない場合は、保存せずに秒数の欄に理由を示す', async () => {
       const user = userEvent.setup();
       render(<ClaimForm initial={claimInTwoSources} onDone={vi.fn()} />);

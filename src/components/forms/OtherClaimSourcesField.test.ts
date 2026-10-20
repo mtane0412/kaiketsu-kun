@@ -47,7 +47,19 @@ describe('toClaimSources', () => {
   });
 
   it('資料・経由・引用のどれも入力していない行は、出典にしない', () => {
-    expect(toClaimSources([row('row-empty'), row('row-blank-quote', { quoteText: '  \n ' })], undefined)).toEqual({ sources: [] });
+    expect(toClaimSources([row('row-empty')], undefined)).toEqual({ sources: [] });
+  });
+
+  it('空白だけの引用も、保存済みの原文を失わないよう、そのまま引用として持たせる', () => {
+    expect(toClaimSources([row('row-blank-quote', { quoteText: ' ', quoteSeconds: '12' })], undefined)).toEqual({
+      sources: [{ viaPersonIds: [], quote: { text: ' ', seconds: 12 } }],
+    });
+  });
+
+  it('全角数字の秒数は、半角に直して受け付ける', () => {
+    expect(toClaimSources([row('row-video', { quoteText: '明かりは消えていた', quoteSeconds: '９５' })], undefined)).toEqual({
+      sources: [{ viaPersonIds: [], quote: { text: '明かりは消えていた', seconds: 95 } }],
+    });
   });
 
   it('引用が空の行では、秒数を入力していても引用を持たせない', () => {
@@ -74,7 +86,7 @@ describe('toClaimSources', () => {
     });
   });
 
-  it.each(['1分35秒', '-1', '1.5'])('引用の秒数「%s」は、秒数の欄の誤りを返す', (quoteSeconds) => {
+  it.each(['1分35秒', '-1', '1.5', '99999999999999999999'])('引用の秒数「%s」は、秒数の欄の誤りを返す', (quoteSeconds) => {
     const result = toClaimSources([row('row-video', { quoteText: '明かりは消えていた', quoteSeconds })], undefined);
 
     expect(result).toEqual({ errors: { 'row-video': { seconds: '引用の位置は、0以上の整数の秒数で入力してください' } } });

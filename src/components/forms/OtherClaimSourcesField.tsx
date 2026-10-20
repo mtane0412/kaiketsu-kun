@@ -9,8 +9,9 @@
  * - 資料・経由・引用のどれも入力していない行は、無いものとして扱います（「出典を追加」を押しただけの行で保存を止めないためです）。
  * - 1つ目の出典や前の行と同じ資料を選んだ行は、資料の欄の誤りにします（1件の証言が同じ資料を2つの出典で参照しないためです。
  *   src/domain/case-schema.ts）。
- * - 引用は、本文と照らし合わせる原文のため、前後の空白も含めてそのまま保存します。空白だけの引用は、引用なしとして扱います。
- * - 引用の位置（秒）は、引用がある行でだけ入力でき、0以上の整数だけを受け付けます。空なら秒数を持たせません。
+ * - 引用は、本文と照らし合わせる原文のため、前後の空白も含めてそのまま保存します（空白だけの引用も、保存済みの原文を失わないよう残します）。
+ * - 引用の位置（秒）は、引用がある行でだけ入力でき、0以上の整数だけを受け付けます。全角数字は半角に直します。空なら秒数を持たせません。
+ *   整数でも、JavaScript で正確に扱えない大きさ（Number.MAX_SAFE_INTEGER を超える値）は、ケースの検証を通らないため受け付けません。
  * 発言者を選ばずに経由だけを指定した場合の誤りは、1つ目の出典の経由とあわせて、証言のフォームで確かめます。
  */
 'use client';
@@ -31,8 +32,8 @@ export type SourceRow = { key: string; interviewId: Id | ''; viaPersonIds: Id[];
 /** 行ごと（行の key ごと）の、欄の誤りの理由です。誤りの無い行は含めません。 */
 export type SourceRowErrors = Record<string, { interview?: string; seconds?: string }>;
 
-/** 資料を選ばない場合の、選択肢の値です。 */
-const NO_INTERVIEW = '';
+/** 資料を選ばない場合の、選択肢の値です。1つ目の出典の資料の欄（src/components/forms/ClaimForm.tsx）でも使います。 */
+export const NO_INTERVIEW = '';
 
 /** 引用の位置（秒）として受け付ける表記です（0以上の整数）。 */
 const SECONDS_PATTERN = /^\d+$/;
@@ -67,7 +68,7 @@ export function toClaimSources(rows: SourceRow[], primaryInterviewId: Id | undef
   const takenInterviewIds = new Set<Id>(primaryInterviewId === undefined ? [] : [primaryInterviewId]);
 
   for (const row of rows) {
-    const hasQuote = row.quoteText.trim() !== '';
+    const hasQuote = row.quoteText !== '';
     if (row.interviewId === NO_INTERVIEW && row.viaPersonIds.length === 0 && !hasQuote) continue;
 
     const rowErrors: SourceRowErrors[string] = {};
@@ -75,8 +76,11 @@ export function toClaimSources(rows: SourceRow[], primaryInterviewId: Id | undef
       if (takenInterviewIds.has(row.interviewId)) rowErrors.interview = DUPLICATE_INTERVIEW_MESSAGE;
       takenInterviewIds.add(row.interviewId);
     }
-    const seconds = row.quoteSeconds.trim();
-    if (hasQuote && seconds !== '' && !SECONDS_PATTERN.test(seconds)) rowErrors.seconds = INVALID_SECONDS_MESSAGE;
+    // 日本語入力の全角数字も受け付けるため、NFKC で半角に直してから確かめる
+    const seconds = row.quoteSeconds.normalize('NFKC').trim();
+    if (hasQuote && seconds !== '' && !(SECONDS_PATTERN.test(seconds) && Number.isSafeInteger(Number(seconds)))) {
+      rowErrors.seconds = INVALID_SECONDS_MESSAGE;
+    }
     if (rowErrors.interview !== undefined || rowErrors.seconds !== undefined) {
       errors[row.key] = rowErrors;
       continue;
@@ -156,7 +160,7 @@ export function OtherClaimSourcesField({ rows, onChange, errors, interviewOption
               onChange={(quoteText) => update(row.key, { quoteText })}
               placeholder="資料の本文から引いた原文（任意）"
             />
-            {row.quoteText.trim() !== '' && (
+            {row.quoteText !== '' && (
               <div>
                 <label htmlFor={secondsFieldId} className={LABEL_CLASS}>
                   引用の位置（秒）

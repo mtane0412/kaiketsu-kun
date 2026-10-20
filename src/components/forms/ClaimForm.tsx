@@ -16,6 +16,8 @@
  * 2つ目以降の出典（資料から抽出した候補を既存の証言に書き足したものなど。src/components/ClaimExtraction.tsx）は、
  * 「出典 2」「出典 3」…の欄で、出典ごとに資料・経由・引用を編集します（src/components/forms/OtherClaimSourcesField.tsx）。
  * 「出典を追加」で出典を足し、「出典 N を外す」で外せます。compact では、2つ目以降の出典を持たない限り、この欄を表示しません。
+ * 注意: 1つ目の出典を空のまま「出典 2」以降に入力して保存すると、出典を前に詰めて保存します（空の出典は持たないためです）。
+ * そのため、次に編集を開くと、その出典は「資料（任意）」の欄と「発言者」の経由に表示されます。
  * 資料も経由も引用も持たない場合は、1つ目の出典を作りません（出典の無い証言にします）。
  *
  * compact を指定すると、ボード上の入力欄として見出しと本文の欄・「発言者」・投稿ボタンだけを表示します（SNSに投稿する感覚で
@@ -65,7 +67,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { FormError, INPUT_CLASS, LABEL_CLASS, SubmitButton, TextField } from './fields';
 import { caseToCandidates, createEntry } from './mention-entries';
 import { MentionTextarea } from './MentionTextarea';
-import { OtherClaimSourcesField, toClaimSources, toSourceRows, type SourceRow, type SourceRowErrors } from './OtherClaimSourcesField';
+import { NO_INTERVIEW, OtherClaimSourcesField, toClaimSources, toSourceRows, type SourceRow, type SourceRowErrors } from './OtherClaimSourcesField';
 import { SpeakerPicker, speakerToDraft, toSpeaker, type SpeakerDraft, type SpeakerPersonOption } from './SpeakerPicker';
 
 /**
@@ -90,9 +92,6 @@ export type ClaimDefaults = {
   /** 本文の下書き・発言者・経由が参照する、まだ登録していないエンティティです。証言とあわせて保存します。 */
   newEntities?: NewEntity[];
 };
-
-/** 聴取を選ばない場合の、選択肢の値です。 */
-const NO_INTERVIEW = '';
 
 type ClaimFormProps = {
   initial?: Claim;
@@ -194,6 +193,7 @@ export function ClaimForm({
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
+    setOtherSourceErrors({});
 
     if (speakerRequiredMessage !== undefined && speaker.personIds.length === 0) {
       setError(speakerRequiredMessage);
@@ -211,7 +211,6 @@ export function ClaimForm({
       setOtherSourceErrors(otherSourcesResult.errors);
       return;
     }
-    setOtherSourceErrors({});
     // 未入力の任意項目はキーごと持たせない（JSONの書き出しと読み込みで形が変わらないようにするため）
     const hasEditedSource = interviewId !== NO_INTERVIEW || speaker.viaPersonIds.length > 0 || quote !== undefined;
     const source: ClaimSource = {
@@ -326,7 +325,11 @@ export function ClaimForm({
       {(!compact || otherSourceRows.length > 0) && (
         <OtherClaimSourcesField
           rows={otherSourceRows}
-          onChange={setOtherSourceRows}
+          onChange={(rows) => {
+            setOtherSourceRows(rows);
+            // 欄を直したら、直前の保存で示した誤りは古くなるため消す（次の保存で確かめ直す）
+            setOtherSourceErrors({});
+          }}
           errors={otherSourceErrors}
           interviewOptions={currentCase.interviews.map((interview) => ({ id: interview.id, label: formatInterviewLabel(currentCase, interview) }))}
           persons={speakerOptions}
