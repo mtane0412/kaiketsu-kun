@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
+import { listPersonReferences } from '@/domain/person-split';
 import type { Case, Claim, Interview, Person } from '@/domain/types';
 import { openDB } from 'idb';
 import { DATABASE_NAME, listCaseSummaries, loadCase, saveCase } from '@/lib/case-storage';
@@ -279,6 +280,31 @@ describe('mergePersons', () => {
   });
 });
 
+describe('splitPerson', () => {
+  it('選んだ参照だけを新しい人物に移し、新しい人物を足して保存する', async () => {
+    // 前提: 隣家の住人の証言のうち1件の発言者が、実は別の人物（隣家の息子）だと分かった（架空の例）
+    const reference = listPersonReferences(getOpenCase(), 'person-neighbor').find((item) => item.kind === 'claimSpeaker');
+    if (reference === undefined) throw new Error('隣家の住人が発言者の証言がありません');
+
+    useCaseStore.getState().splitPerson('person-neighbor', { id: 'person-neighbor-son', name: '隣家の息子', kind: 'individual' }, [reference.key]);
+
+    const split = getOpenCase();
+    expect(split.persons.map((person) => person.id)).toContain('person-neighbor-son');
+    expect(split.persons.map((person) => person.id)).toContain('person-neighbor');
+    const movedClaim = split.claims.find((claim) => reference.kind === 'claimSpeaker' && claim.id === reference.claimId);
+    expect(movedClaim?.speaker).toEqual({ kind: 'person', personIds: ['person-neighbor-son'] });
+    // 保存済みのケースにも、分けた結果が残る
+    expect(await loadSavedCase(sampleFictionalCase.id)).toEqual(split);
+  });
+
+  it('分けられない場合はエラーにし、ケースを変更しない', () => {
+    expect(() =>
+      useCaseStore.getState().splitPerson('person-neighbor', { id: 'person-caretaker', name: '管理人', kind: 'individual' }, [])
+    ).toThrow(/person-caretaker/);
+    expect(getOpenCase()).toEqual(sampleFictionalCase);
+  });
+});
+
 describe('照合', () => {
   it('2件の証言の間に、種類と理由をつけた照合を登録する', () => {
     useCaseStore.getState().upsert('crossChecks', {
@@ -390,6 +416,23 @@ describe('未了事項', () => {
     expect(() => useCaseStore.getState().remove('places', 'place-villa')).toThrow('他のデータから参照されているため削除できません');
 
     expect(getOpenCase().tasks.find((task) => task.id === 'task-weather')?.placeIds).toEqual(['place-villa']);
+  });
+
+  it('論点を削除すると、未了事項からその論点のひもづけを外し、未了事項は残す', () => {
+    // 前提: 「管理人への再聴取」の未了事項は、論点「12日夜、持ち主は別荘にいたか」をひもづけている
+    useCaseStore.getState().remove('disputes', 'dispute-villa-presence');
+
+    expect(getOpenCase().disputes).toEqual([]);
+    expect(getOpenCase().tasks.find((task) => task.id === 'task-caretaker')?.disputeIds).toEqual([]);
+  });
+});
+
+describe('論点', () => {
+  it('証言を削除すると、論点からその証言を外し、論点は残す', () => {
+    // 前提: 論点「12日夜、持ち主は別荘にいたか」は、管理人・防犯カメラ・隣家の住人の証言を束ねている
+    useCaseStore.getState().remove('claims', 'claim-police-camera');
+
+    expect(getOpenCase().disputes[0]?.claimIds).toEqual(['claim-caretaker', 'claim-neighbor']);
   });
 });
 

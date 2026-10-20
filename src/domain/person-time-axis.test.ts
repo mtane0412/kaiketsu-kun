@@ -32,6 +32,7 @@ function makeWalkCase(claims: Claim[]): Case {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
   };

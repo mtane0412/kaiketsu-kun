@@ -32,6 +32,7 @@ function createCase(overrides: Partial<Case> = {}): Case {
     crossChecks: [],
     hypotheses: [],
     tasks: [],
+    disputes: [],
     timelineOrder: [],
     personLaneOrder: [],
     ...overrides,

@@ -30,12 +30,16 @@ type TaskListViewProps = {
   target: Case;
 };
 
-/** ひもづけた対象を「証言1件・管理人・湖畔の別荘」の形の1行にまとめます。何もひもづけていない場合は空文字列を返します。 */
-function describeLinks({ claims, persons, places }: TaskListItem): string {
+/**
+ * ひもづけた対象を「証言1件・管理人・湖畔の別荘・論点「物損事故の時刻」」の形の1行にまとめます。何もひもづけていない場合は空文字列を返します。
+ * 論点の名前は文になりやすく、人物・場所の名前と見分けにくいため、「論点「…」」の形で添えます。
+ */
+function describeLinks({ claims, persons, places, disputes }: TaskListItem): string {
   return [
     ...(claims.length > 0 ? [`証言${claims.length}件`] : []),
     ...persons.map((person) => person.name),
     ...places.map((place) => place.name),
+    ...disputes.map((dispute) => `論点「${dispute.title}」`),
   ].join('・');
 }
 

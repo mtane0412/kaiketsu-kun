@@ -2,12 +2,13 @@
  * 型定義の書き心地を確かめるための架空のケースサンプル
  *
  * このファイルの人物・場所・資料はすべて架空です。
- * 次の5点が型で表現できることを確認する目的で作成しています。
+ * 次の6点が型で表現できることを確認する目的で作成しています。
  * - 同じ事柄について、2人の証言が述べる時刻が食い違うこと（食い違いは判定せず、時系列に並べて読み手が見比べます）
  * - 報道の地の文を、媒体（新聞）の発言として扱えること
  * - ユーザーの推測を人物の発言と区別し、関係の根拠として参照できること
  * - 組織（県警）・記録装置（防犯カメラ）・媒体（新聞、書籍）を、人物と同じく発言しうる主体として扱えること
  * - 伝聞の経路（防犯カメラの記録を、県警が発表し、新聞が報じた）を、出典の経由（ClaimSource.viaPersonIds）で表せること
+ * - 同じ事柄（12日夜に持ち主が別荘にいたか）を述べる3件の証言を、1つの論点（Dispute）に束ねて見比べられること
  *
  * 証言の本文（content）は、人物・場所・日時への参照を `@[表示名](種類:ID)` の形式で含みます。
  * 各証言の placeId・mentionedPersonIds・when は、本文からの導出結果（src/domain/mention.ts）と一致させています。
@@ -145,6 +146,7 @@ export const sampleFictionalCase: Case = {
       claimIds: ['claim-police-camera'],
       personIds: ['person-road-camera'],
       placeIds: [],
+      disputeIds: [],
     },
     {
       id: 'task-caretaker',
@@ -154,6 +156,7 @@ export const sampleFictionalCase: Case = {
       claimIds: ['claim-caretaker'],
       personIds: ['person-caretaker'],
       placeIds: ['place-villa'],
+      disputeIds: ['dispute-villa-presence'],
     },
     {
       id: 'task-weather',
@@ -163,6 +166,17 @@ export const sampleFictionalCase: Case = {
       claimIds: [],
       personIds: [],
       placeIds: ['place-villa'],
+      disputeIds: [],
+    },
+  ],
+  disputes: [
+    {
+      id: 'dispute-villa-presence',
+      title: '12日夜、持ち主は別荘にいたか',
+      claimIds: ['claim-caretaker', 'claim-police-camera', 'claim-neighbor'],
+      reconciliation:
+        '管理人が19:00に見回った後、持ち主が車で別荘へ戻った（20:10）と読めば、3件とも両立する。管理人の見回りの時刻が正しいかは、まだ確かめていない。',
+      resolved: false,
     },
   ],
   timelineOrder: [

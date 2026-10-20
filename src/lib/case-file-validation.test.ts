@@ -65,6 +65,37 @@ describe('validateCaseFile', () => {
     expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('tasks'));
   });
 
+  it('件数の要約に、論点の件数を含める', () => {
+    const result = validateCaseFile(toJsonText(sampleFictionalCase));
+
+    expect(result.ok && result.summary).toContain(`論点 ${sampleFictionalCase.disputes.length}件`);
+  });
+
+  it('論点の一覧（disputes）と未了事項の論点のひもづけ（disputeIds）の省略は、誤りとして返す', () => {
+    const { disputes: _disputes, ...caseWithoutDisputes } = sampleFictionalCase;
+    const caseData = {
+      ...caseWithoutDisputes,
+      tasks: sampleFictionalCase.tasks.map(({ disputeIds: _disputeIds, ...task }) => task),
+    };
+
+    const result = validateCaseFile(toJsonText(caseData));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('disputes'));
+    expect(!result.ok && result.errors).toContainEqual(expect.stringContaining('tasks.0.disputeIds'));
+  });
+
+  it('同じIDの論点が2件ある場合は、誤りとして返す', () => {
+    const caseData = { ...sampleFictionalCase, disputes: [...sampleFictionalCase.disputes, ...sampleFictionalCase.disputes] };
+
+    const result = validateCaseFile(toJsonText(caseData));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual(
+      expect.stringContaining('disputes: ID dispute-villa-presence が2回以上使われています')
+    );
+  });
+
   it('本文のメンションと食い違う言及・場所・日時は、アプリが保存しない状態のため誤りとして返す', () => {
     // 前提: 本文に人物のメンションが無いのに、言及している人物を持たせている
     const caseData = {

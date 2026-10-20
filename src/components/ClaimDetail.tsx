@@ -11,6 +11,8 @@
  * 仮説にひもづいた証言を削除すると、仮説からひもづけを外すため、確認の画面で仮説の件数を伝えます。
  * 読み手が他の証言と突き合わせた結果（照合）の一覧と登録・編集・削除は、CrossCheckSection が担います。
  * この証言を使っている仮説（支える・反する・対象の人物の動機・機会・手段）へのリンクは、HypothesisUsageSection が担います。
+ * この証言を束ねた論点の一覧・既存の論点への追加・この証言から論点を作る導線は、DisputeMembershipSection が担います。
+ * 論点に束ねた証言を削除すると、論点から証言を外すため、確認の画面で論点の件数を伝えます。
  * この証言をひもづけた未了事項の一覧と、未了事項を追加する導線は、TaskLinkSection が担います。
  * 未了事項にひもづいた証言を削除すると、未了事項からひもづけを外すため、確認の画面で未了事項の件数を伝えます。
  * あわせて、証言から連想して次の証言へ進めるよう、時系列の前後の証言と、
@@ -32,6 +34,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildClaimDetail, claimLabelOf, formatViaLabel, type ClaimView } from '@/domain/case-views';
+import { findDisputesWithClaim } from '@/domain/disputes';
 import { findHypothesesUsingClaim } from '@/domain/hypotheses';
 import { MENTION_KIND_LABELS } from '@/domain/labels';
 import { findTasksLinkedTo } from '@/domain/tasks';
@@ -44,6 +47,7 @@ import { ClaimContentSegments } from './ClaimContentSegments';
 import { ClaimLink } from './ClaimLink';
 import { CrossCheckSection } from './CrossCheckSection';
 import { DeleteConfirmButton } from './DeleteConfirmButton';
+import { DisputeMembershipSection } from './DisputeMembershipSection';
 import { HypothesisUsageSection } from './HypothesisUsageSection';
 import { SimilarClaimsSection } from './SimilarClaimsSection';
 import { SourcesSection } from './SourcesSection';
@@ -136,12 +140,14 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
   const crossCheckCount = currentCase.crossChecks.filter((crossCheck) => crossCheck.claimIds.includes(claimId)).length;
   const hypothesisCount = findHypothesesUsingClaim(currentCase, claimId).length;
   const taskCount = findTasksLinkedTo(currentCase, 'claim', claimId).length;
-  // 証言の削除は照合・仮説・未了事項も巻き込むため、消える照合と、ひもづけが外れる仮説・未了事項があることを確認の画面で伝える
+  const disputeCount = findDisputesWithClaim(currentCase, claimId).length;
+  // 証言の削除は照合・仮説・未了事項・論点も巻き込むため、消える照合と、ひもづけが外れる仮説・未了事項・論点があることを確認の画面で伝える
   const deleteDescription = [
     'この証言をケースから削除します。',
     ...(crossCheckCount > 0 ? [`この証言を含む照合${crossCheckCount}件も削除します。`] : []),
     ...(hypothesisCount > 0 ? [`この証言をひもづけた仮説${hypothesisCount}件から、ひもづけを外します。`] : []),
     ...(taskCount > 0 ? [`この証言をひもづけた未了事項${taskCount}件から、ひもづけを外します。`] : []),
+    ...(disputeCount > 0 ? [`この証言を束ねた論点${disputeCount}件から、この証言を外します。`] : []),
     'この操作は取り消せません。',
   ].join('');
 
@@ -234,6 +240,8 @@ export function ClaimDetail({ claimId }: { claimId: Id }) {
           </ul>
         </nav>
       )}
+
+      <DisputeMembershipSection claimId={claimId} tab={tab} />
 
       <HypothesisUsageSection claimId={claimId} tab={tab} />
 

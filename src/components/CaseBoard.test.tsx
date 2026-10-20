@@ -158,6 +158,19 @@ describe('CaseBoard', () => {
     );
   });
 
+  it('「論点」に切り替えると、論点の一覧を表示し、論点の詳細ページへのリンクを並べる', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    await switchView(user, '論点');
+
+    const list = await screen.findByRole('list', { name: '未解決の論点の一覧' });
+    expect(within(list).getByRole('link', { name: /12日夜、持ち主は別荘にいたか/ })).toHaveAttribute(
+      'href',
+      '/cases/case-lakeside/disputes/dispute-villa-presence?tab=disputes'
+    );
+  });
+
   describe('詳細を1カラムで表示する', () => {
     it('証言の詳細ページのURLでは、詳細だけを表示し、ボードは隠す', async () => {
       resetMockNavigation('/cases/case-lakeside/claims/claim-neighbor');

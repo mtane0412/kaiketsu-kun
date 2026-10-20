@@ -92,6 +92,25 @@ export function parseContent(content: string): ContentSegment[] {
 }
 
 /**
+ * 本文・メモの人物のメンションのうち、人物 fromId を指すものを人物 toId に付け替えた文字列を返します。
+ * 表記（「男」など、資料での書き方）はそのまま残します。人物をまとめる・分ける操作で使います。
+ */
+export function replacePersonMentions(content: string, fromId: Id, toId: Id): string {
+  return parseContent(content)
+    .map((segment) => {
+      if (segment.type !== 'mention') return segment.text;
+      const { kind, id, label } = segment;
+      return formatMention({ kind, id: kind === 'person' && id === fromId ? toId : id, label });
+    })
+    .join('');
+}
+
+/** 本文・メモが、人物 personId のメンションを含むかどうかを返します。 */
+export function hasPersonMention(content: string, personId: Id): boolean {
+  return parseContent(content).some((segment) => segment.type === 'mention' && segment.kind === 'person' && segment.id === personId);
+}
+
+/**
  * 時刻参照から、日時のメンションを作ります。
  * 表示名は、書かれた精度のままの日本語の表記です（1998-08-12T19:00 → 「1998年8月12日 19:00」）。
  */

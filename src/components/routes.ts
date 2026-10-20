@@ -7,14 +7,17 @@
  * 人物・場所を新しく登録するページは、それぞれの一覧の下（.../persons/new・.../places/new）に置きます。
  * 仮説の詳細（.../hypotheses/<ID>）と登録（.../hypotheses/new）、未了事項の詳細（.../tasks/<ID>）と登録（.../tasks/new）も、同じ形で置きます。
  * 資料（聴取）の詳細（.../interviews/<ID>）と登録（.../interviews/new）も、同じ形で置きます。
+ * 論点の詳細（.../disputes/<ID>）と登録（.../disputes/new）も、同じ形で置きます。
+ * 論点の登録ページは、最初から束ねる証言をクエリ（?claim=<ID>&claim=<ID>）で受け取ります。
+ * 証言の詳細の「論点を作る」や、照合の「この2件から論点を作る」から開いたときに、その証言を束ねた状態で始めるためです。
  * 未了事項の登録ページは、最初からひもづける証言・人物・場所をクエリ（?link=<種類>:<ID>）で受け取ります。
  * 証言・人物・場所の詳細から「未了事項を追加」で開いたときに、その対象をひもづけた状態で始めるためです。
- * 注意: IDがちょうど「new」の人物・場所・仮説・未了事項・資料は、登録のページに隠れて詳細を開けません。
+ * 注意: IDがちょうど「new」の人物・場所・仮説・未了事項・資料・論点は、登録のページに隠れて詳細を開けません。
  * Next.js が静的なセグメント（new）を動的なセグメント（[personId] など）より優先するためです。
  * アプリが振るID（nanoid）では起こらず、読み込んだJSONに「new」と書かれていた場合だけ起こりえます。
  * parseDetailKind も、URLの判定を Next.js の優先順位に合わせています。
  * ボード全体の検索結果は、検索語をクエリ（?q=）に持たせたページ（.../search）に置きます。
- * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」「未了事項」）はURLのクエリ（?tab=）に持たせます。
+ * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」「論点」「未了事項」）はURLのクエリ（?tab=）に持たせます。
  * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
  */
 import type { MentionKind } from '@/domain/mention';
@@ -28,6 +31,7 @@ export const TABS = [
   { key: 'lanes', label: '人物の動き' },
   { key: 'map', label: '地図' },
   { key: 'hypotheses', label: '仮説' },
+  { key: 'disputes', label: '論点' },
   { key: 'tasks', label: '未了事項' },
 ] as const;
 
@@ -117,6 +121,35 @@ export function newInterviewHref(caseId: Id, tab: TabKey): string {
   return `${caseBasePath(caseId)}/interviews/new${tabQuery(tab)}`;
 }
 
+/** 論点の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
+export function disputeHref(caseId: Id, disputeId: Id, tab: TabKey): string {
+  return `${caseBasePath(caseId)}/disputes/${encodeURIComponent(disputeId)}${tabQuery(tab)}`;
+}
+
+/** 論点の登録ページで、最初から束ねる証言を持たせるクエリの名前です。証言ごとに1つずつ並べます。 */
+export const DISPUTE_CLAIM_SEARCH_PARAM = 'claim';
+
+/**
+ * 論点を新しく登録するページのURLを返します。tab は「ボードに戻る」の戻り先です。
+ * claimIds を渡すと、その証言を束ねた状態で登録を始めます。
+ */
+export function newDisputeHref(caseId: Id, tab: TabKey, claimIds: Id[] = []): string {
+  const params = new URLSearchParams();
+  if (tab !== DEFAULT_TAB) params.set(TAB_SEARCH_PARAM, tab);
+  for (const claimId of claimIds) params.append(DISPUTE_CLAIM_SEARCH_PARAM, claimId);
+  const query = params.toString();
+  return `${caseBasePath(caseId)}/disputes/new${query === '' ? '' : `?${query}`}`;
+}
+
+/**
+ * URLの claim の値（複数）を、論点に最初から束ねる証言のIDとして読み取ります。
+ * 注意: URLはユーザーが自由に書き換えられるため、空の値と重複は例外にせず取り除きます。
+ * ケースに無い証言のIDは、呼び出し側でケースと照らし合わせて取り除いてください。
+ */
+export function parseDisputeClaimIds(values: string[]): Id[] {
+  return [...new Set(values.filter((value) => value !== ''))];
+}
+
 /** 未了事項の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */
 export function taskHref(caseId: Id, taskId: Id, tab: TabKey): string {
   return `${caseBasePath(caseId)}/tasks/${encodeURIComponent(taskId)}${tabQuery(tab)}`;
@@ -125,11 +158,11 @@ export function taskHref(caseId: Id, taskId: Id, tab: TabKey): string {
 /** 未了事項の登録ページで、最初からひもづける対象を持たせるクエリの名前です。 */
 export const TASK_LINK_SEARCH_PARAM = 'link';
 
-/** 未了事項に最初からひもづける対象（証言・人物・場所）です。 */
+/** 未了事項に最初からひもづける対象（証言・人物・場所・論点）です。 */
 export type TaskLinkTarget = { kind: TaskLinkKind; id: Id };
 
 /** 未了事項にひもづけられる対象の種類です。URLの値を見分けるために使います。 */
-const TASK_LINK_KINDS: readonly TaskLinkKind[] = ['claim', 'person', 'place'];
+const TASK_LINK_KINDS: readonly TaskLinkKind[] = ['claim', 'person', 'place', 'dispute'];
 
 /**
  * 未了事項を新しく登録するページのURLを返します。tab は「ボードに戻る」の戻り先です。
@@ -178,12 +211,14 @@ export type DetailKind =
   | 'hypothesis'
   | 'task'
   | 'interview'
+  | 'dispute'
   | 'search'
   | 'newPerson'
   | 'newPlace'
   | 'newHypothesis'
   | 'newTask'
-  | 'newInterview';
+  | 'newInterview'
+  | 'newDispute';
 
 /**
  * URLのパス（クエリを含まない部分）から、開いている詳細の種類を見分けるための形です。
@@ -195,12 +230,14 @@ const DETAIL_PATH_PATTERNS: { kind: DetailKind; pattern: RegExp }[] = [
   { kind: 'newHypothesis', pattern: /^\/cases\/[^/]+\/hypotheses\/new$/ },
   { kind: 'newTask', pattern: /^\/cases\/[^/]+\/tasks\/new$/ },
   { kind: 'newInterview', pattern: /^\/cases\/[^/]+\/interviews\/new$/ },
+  { kind: 'newDispute', pattern: /^\/cases\/[^/]+\/disputes\/new$/ },
   { kind: 'claim', pattern: /^\/cases\/[^/]+\/claims\/[^/]+$/ },
   { kind: 'person', pattern: /^\/cases\/[^/]+\/persons\/[^/]+$/ },
   { kind: 'place', pattern: /^\/cases\/[^/]+\/places\/[^/]+$/ },
   { kind: 'hypothesis', pattern: /^\/cases\/[^/]+\/hypotheses\/[^/]+$/ },
   { kind: 'task', pattern: /^\/cases\/[^/]+\/tasks\/[^/]+$/ },
   { kind: 'interview', pattern: /^\/cases\/[^/]+\/interviews\/[^/]+$/ },
+  { kind: 'dispute', pattern: /^\/cases\/[^/]+\/disputes\/[^/]+$/ },
   { kind: 'search', pattern: /^\/cases\/[^/]+\/search$/ },
 ];
 
