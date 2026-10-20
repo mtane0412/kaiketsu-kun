@@ -2,6 +2,7 @@
  * 列挙値の表示名
  * 入力フォームとビューの両方で同じ表示名を使うため、ここに集約します。
  */
+import type { BoardPersonRole } from './board-filter';
 import type { MentionKind } from './mention';
 import type { TaskLinkKind } from './tasks';
 import type {
@@ -102,4 +103,12 @@ export const TASK_LINK_KIND_LABELS: Record<TaskLinkKind, string> = {
   person: MENTION_KIND_LABELS.person,
   place: MENTION_KIND_LABELS.place,
   dispute: '論点',
+};
+
+/** ボードの絞り込みで、人物が証言にどう関わるかの表示名です。 */
+export const BOARD_PERSON_ROLE_LABELS: Record<BoardPersonRole, string> = {
+  any: 'いずれか',
+  speaker: '発言者',
+  via: '経由',
+  mentioned: '言及',
 };

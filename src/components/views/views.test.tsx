@@ -51,6 +51,25 @@ describe('TimelineView', () => {
     expect(within(timeline).getAllByText('1998年8月12日 19:00').length).toBeGreaterThan(0);
   });
 
+  it('表示する証言のIDを渡すと、それ以外の証言のカードと差し込み口を描かない', () => {
+    // 前提: ボードの絞り込みで、管理人の証言と隣家の住人の証言だけが残った
+    render(<TimelineView target={sampleFictionalCase} shownClaimIds={new Set(['claim-caretaker', 'claim-neighbor'])} />);
+
+    const timeline = screen.getByRole('list', { name: '時系列' });
+    const bodyOrder = within(timeline)
+      .getAllByText(/見回りをしたとき|車が別荘の方向へ走る|明かりがついていて|連絡が取れなくなっている|金銭の問題があった可能性/)
+      .map((element) => element.textContent);
+    expect(bodyOrder).toEqual([expect.stringContaining('見回りをしたとき'), expect.stringContaining('明かりがついていて')]);
+    expect(within(timeline).getAllByRole('button', { name: /の前に書き足す$/ })).toHaveLength(2);
+  });
+
+  it('絞り込みの条件に合う証言が1件も無い場合は、その旨を示す', () => {
+    render(<TimelineView target={sampleFictionalCase} shownClaimIds={new Set()} />);
+
+    expect(screen.getByText('絞り込みの条件に合う証言はありません。')).toBeInTheDocument();
+    expect(screen.queryByText('まだ何も書かれていません。「ボードに書き足す」から書き始めてください。')).not.toBeInTheDocument();
+  });
+
   it('照合を持つ証言のカードに、照合の件数を種類別に小さく示す', () => {
     // 前提: 隣家の住人の証言は、裏付ける照合1件と食い違う照合1件を持ち、ユーザーの推測は照合を持たない
     render(<TimelineView target={sampleFictionalCase} />);
@@ -302,6 +321,24 @@ describe('TimelineView への書き足し', () => {
       expect.stringContaining('見慣れない車'),
       expect.stringContaining('金銭の問題があった可能性'),
     ]);
+  });
+
+  it('絞り込んで一部の証言だけを表示していても、項目の前に書き足すと、絞り込む前の並びのその項目の直前に入る', async () => {
+    // 前提: 並びは 管理人 → 防犯カメラ → 隣家の住人 → …。絞り込みで、防犯カメラの証言は隠れている
+    const user = userEvent.setup();
+    function FilteredStoreBoard() {
+      return <TimelineView target={useCurrentCase()} shownClaimIds={new Set(['claim-caretaker', 'claim-neighbor'])} />;
+    }
+    render(<FilteredStoreBoard />);
+
+    await user.click(screen.getByRole('button', { name: /^「.*明かりがついていて.*」の前に書き足す$/ }));
+    await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+    await user.click(screen.getByRole('button', { name: '書き足す' }));
+
+    const order = openedCase().timelineOrder;
+    const addedKey = `claim:${openedCase().claims.at(-1)?.id}`;
+    // 検証: 隠れていた防犯カメラの証言の後、隣家の住人の証言の直前に入る
+    expect(order.slice(0, 4)).toEqual(['claim:claim-caretaker', 'claim:claim-police-camera', addedKey, 'claim:claim-neighbor']);
   });
 
   it('先頭の項目の前にも書き足せる', async () => {
@@ -607,12 +644,13 @@ describe('PersonLaneView の時刻軸', () => {
     expect(screen.getByText(/日時として解釈できません/)).toBeInTheDocument();
   });
 
-  it('表示する範囲を入力すると、範囲の外の帯を描かない', async () => {
+  it('ボードの絞り込みの日時の範囲を、時刻軸に表示する範囲にし、範囲の外の帯を描かない', async () => {
+    // 前提: 表示する範囲は、時刻軸の中ではなく、ボードの絞り込み（日時の範囲）で指定する
     const user = userEvent.setup();
-    render(<PersonLaneView target={sampleFictionalCase} />);
+    render(<PersonLaneView target={sampleFictionalCase} axisRange="1998-08-12T20:00/22:00" />);
     const timeAxis = await switchToTimeAxis(user);
 
-    await user.type(screen.getByLabelText('表示する範囲'), '1998年8月12日20時〜22時');
+    expect(screen.queryByLabelText('表示する範囲')).not.toBeInTheDocument();
 
     // 検証: 夜7時の管理人の帯は範囲の外のため描かず、夜9時の隣家の住人の帯は描く
     expect(within(within(timeAxis).getByRole('region', { name: '管理人' })).queryByRole('link')).not.toBeInTheDocument();

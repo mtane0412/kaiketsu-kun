@@ -19,8 +19,12 @@
  * ボード全体の検索結果は、検索語をクエリ（?q=）に持たせたページ（.../search）に置きます。
  * ボードの表示の切り替え（サイドバーの「時系列」「グラフ」「証言者別」「人物の動き」「地図」「仮説」「論点」「未了事項」）はURLのクエリ（?tab=）に持たせます。
  * 詳細ページからブラウザの「戻る」や「ボードに戻る」で、元の表示に戻れるようにするためです。詳細ページのURLにも同じクエリを引き継ぎます。
+ * ボードの絞り込みの条件（日時の範囲・人物・資料・論点）も、ボードのURLのクエリ（?when=・?person= など）に持たせます。
+ * 詳細ページのURLには引き継がず、ボード（CaseBoard）が覚えておいて、ボードに戻ったときにURLへ戻します。
  */
+import { BOARD_PERSON_ROLES, EMPTY_BOARD_FILTER, type BoardFilter } from '@/domain/board-filter';
 import type { MentionKind } from '@/domain/mention';
+import { isValidTimeRef } from '@/domain/time-ref';
 import type { TaskLinkKind } from '@/domain/tasks';
 import type { Id } from '@/domain/types';
 
@@ -66,9 +70,80 @@ export function casesHref(): string {
   return '/';
 }
 
-/** ケースのボードのURLを返します。 */
-export function boardHref(caseId: Id, tab: TabKey): string {
-  return `${caseBasePath(caseId)}${tabQuery(tab)}`;
+/**
+ * ボードの絞り込みの条件を持たせるクエリの名前です（src/domain/board-filter.ts）。
+ * 絞り込んだ表示を、URLで共有・再表示できるようにするために持たせます。
+ */
+const BOARD_FILTER_PARAMS = {
+  when: 'when',
+  includeUndated: 'undated',
+  personId: 'person',
+  personRole: 'role',
+  interviewId: 'interview',
+  disputeId: 'dispute',
+} as const satisfies Record<keyof BoardFilter, string>;
+
+/** 「日時の無い証言も含める」を指定したときの、クエリの値です。 */
+const INCLUDE_UNDATED_VALUE = '1';
+
+/** 絞り込みの条件を、クエリに書き込みます。既定値の条件（関わり方「いずれか」など）は書き込みません。URLを短く保つためです。 */
+function appendBoardFilter(params: URLSearchParams, filter: BoardFilter): void {
+  if (filter.when !== undefined) {
+    params.set(BOARD_FILTER_PARAMS.when, filter.when);
+    if (filter.includeUndated) params.set(BOARD_FILTER_PARAMS.includeUndated, INCLUDE_UNDATED_VALUE);
+  }
+  if (filter.personId !== undefined) {
+    params.set(BOARD_FILTER_PARAMS.personId, filter.personId);
+    if (filter.personRole !== EMPTY_BOARD_FILTER.personRole) params.set(BOARD_FILTER_PARAMS.personRole, filter.personRole);
+  }
+  if (filter.interviewId !== undefined) params.set(BOARD_FILTER_PARAMS.interviewId, filter.interviewId);
+  if (filter.disputeId !== undefined) params.set(BOARD_FILTER_PARAMS.disputeId, filter.disputeId);
+}
+
+/**
+ * URLのクエリから、ボードの絞り込みの条件を読み取ります。
+ * 注意: URLはユーザーが自由に書き換えられるため、日時として解釈できない値や知らない関わり方は、例外にせず、指定していないものとして扱います。
+ * ケースに無い人物・資料・論点のIDは、ここでは残します。ケースと照らし合わせて外すのは resolveBoardFilter です。
+ */
+export function parseBoardFilter(params: Pick<URLSearchParams, 'get'>): BoardFilter {
+  const filter: BoardFilter = { ...EMPTY_BOARD_FILTER };
+  const when = params.get(BOARD_FILTER_PARAMS.when);
+  if (when !== null && isValidTimeRef(when)) {
+    filter.when = when;
+    filter.includeUndated = params.get(BOARD_FILTER_PARAMS.includeUndated) === INCLUDE_UNDATED_VALUE;
+  }
+  const personId = params.get(BOARD_FILTER_PARAMS.personId);
+  if (personId) {
+    filter.personId = personId;
+    filter.personRole = BOARD_PERSON_ROLES.find((role) => role === params.get(BOARD_FILTER_PARAMS.personRole)) ?? EMPTY_BOARD_FILTER.personRole;
+  }
+  const interviewId = params.get(BOARD_FILTER_PARAMS.interviewId);
+  if (interviewId) filter.interviewId = interviewId;
+  const disputeId = params.get(BOARD_FILTER_PARAMS.disputeId);
+  if (disputeId) filter.disputeId = disputeId;
+  return filter;
+}
+
+/**
+ * 絞り込みの条件だけを、URLのクエリの文字列（先頭の「?」を含まない）にします。条件が無い場合は空文字列です。
+ * 同じ条件からは同じ文字列ができるため、条件どうしが等しいかの比較にも使えます。
+ */
+export function boardFilterQuery(filter: BoardFilter): string {
+  const params = new URLSearchParams();
+  appendBoardFilter(params, filter);
+  return params.toString();
+}
+
+/**
+ * ケースのボードのURLを返します。
+ * filter を渡すと、絞り込みの条件もクエリに持たせます。
+ */
+export function boardHref(caseId: Id, tab: TabKey, filter: BoardFilter = EMPTY_BOARD_FILTER): string {
+  const params = new URLSearchParams();
+  if (tab !== DEFAULT_TAB) params.set(TAB_SEARCH_PARAM, tab);
+  appendBoardFilter(params, filter);
+  const query = params.toString();
+  return `${caseBasePath(caseId)}${query === '' ? '' : `?${query}`}`;
 }
 
 /** 証言の詳細ページのURLを返します。tab は「ボードに戻る」の戻り先です。 */

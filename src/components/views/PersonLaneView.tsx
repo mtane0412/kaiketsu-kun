@@ -14,6 +14,7 @@
  * 表の上の「証言の順」「時刻軸」のボタンで、行を証言の順に並べる表と、縦軸を時刻に取った時刻軸（PersonTimeAxisView.tsx）を切り替えます。
  * 証言の順の表は、行の高さが時間の長さを表さないため、所在の分からない時間帯（アリバイの穴）を見るには時刻軸を使います。
  * 切り替えも表示の都合のため、ケースには保存しません。
+ * 時刻軸に表示する範囲は、ボードの絞り込みの日時の範囲（axisRange）を使います。
  *
  * 注意: 列は人物の数だけ増えるため、表は枠の中で縦横にスクロールします。見出しの行（人物）と列（日時）は、
  * スクロールしても見えるよう枠に貼り付けます。枠の高さを画面に収めているのは、縦にスクロールしたときにも人物の見出しを残すためです。
@@ -40,7 +41,7 @@ import { buildPersonLanes, type PersonLane, type PersonLaneRow } from '@/domain/
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
 import { formatTimeRef } from '@/domain/time-ref';
-import type { Case, PersonKind } from '@/domain/types';
+import type { Case, PersonKind, TimeRef } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { EntityAvatar } from '../EntityAvatar';
 import { ClaimCard } from './ClaimCard';
@@ -68,6 +69,8 @@ const UNKNOWN_WHEN_LABEL = '日時不明';
 
 type PersonLaneViewProps = {
   target: Case;
+  /** 時刻軸に表示する範囲です。ボードの絞り込みの日時の範囲（src/domain/board-filter.ts）を渡します。 */
+  axisRange?: TimeRef;
 };
 
 /** ドラッグで動かせる、列の見出し（人物）です。つまみだけがドラッグの起点になります。 */
@@ -108,7 +111,7 @@ function SortableLaneHeader({ lane }: { lane: PersonLane }) {
   );
 }
 
-export function PersonLaneView({ target }: PersonLaneViewProps) {
+export function PersonLaneView({ target, axisRange }: PersonLaneViewProps) {
   const [shownKinds, setShownKinds] = useState<ReadonlySet<PersonKind>>(() => new Set(PERSON_KINDS));
   const [layout, setLayout] = useState<LaneLayout>('order');
   const { lanes, rows } = useMemo(() => buildPersonLanes(target, shownKinds), [target, shownKinds]);
@@ -144,7 +147,7 @@ export function PersonLaneView({ target }: PersonLaneViewProps) {
       ) : layout === 'order' ? (
         <PersonLaneTable lanes={lanes} rows={rows} />
       ) : (
-        <PersonTimeAxisView target={target} shownKinds={shownKinds} />
+        <PersonTimeAxisView target={target} shownKinds={shownKinds} axisRange={axisRange} />
       )}
     </div>
   );

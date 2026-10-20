@@ -11,8 +11,10 @@ import {
   ExtractionResultSchema,
   MAX_EXISTING_CLAIM_SUMMARY_LENGTH,
   MAX_EXISTING_CLAIMS_FOR_EXTRACTION,
+  compactForSearch,
   type ExtractedClaim,
 } from '@/domain/claim-extraction';
+import { normalizeName } from '@/domain/person-names';
 
 /**
  * 1回の抽出で LLM に送る本文の上限の文字数です。
@@ -28,6 +30,41 @@ const MAX_NAME_LENGTH = 200;
 
 /** プロンプトに含める資料の名前の上限の文字数です。資料の名前は、タイトルやURLを含むため、人物・場所の名前より長くとります。 */
 export const MAX_SOURCE_NAME_LENGTH = 500;
+
+/**
+ * プロンプトに含める名前を、上限の件数（MAX_EXTRACTION_NAMES）に収まるように選びます。
+ *
+ * - 正規化して同じになる名前は1つにまとめます。
+ * - 上限を超える場合は、preferred（この資料での呼び方など）→ 本文 text に出てくる名前 → それ以外 の順に優先します。
+ * - 上限の文字数を超える長い名前は送りません。
+ * - 空文字・空白だけの名前は、名前ではないため送らず、送らない件数にも数えません。
+ *
+ * 送らなかった名前の件数を omittedCount で返します。呼び出し側は、送る前の確認でこの件数を示してください
+ * （名前は LLM に表記を揃えさせる手がかりで、送らなくても抽出の結果はケースの全員と照らし合わせますが、黙って減らさないためです）。
+ */
+export function selectExtractionNames(text: string, preferred: string[], others: string[]): { names: string[]; omittedCount: number } {
+  const compactText = compactForSearch(text);
+  // 本文に出てくる名前と、出てこない名前に1回の走査で振り分ける
+  const inText: string[] = [];
+  const notInText: string[] = [];
+  for (const name of others) {
+    const compactName = compactForSearch(name);
+    if (compactName === '') continue;
+    (compactText.includes(compactName) ? inText : notInText).push(name);
+  }
+  const ordered = [...preferred.filter((name) => compactForSearch(name) !== ''), ...inText, ...notInText];
+
+  const seen = new Set<string>();
+  const unique = ordered.filter((name) => {
+    const key = normalizeName(name);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const sendable = unique.filter((name) => name.length <= MAX_NAME_LENGTH);
+  const names = sendable.slice(0, MAX_EXTRACTION_NAMES);
+  return { names, omittedCount: unique.length - names.length };
+}
 
 /** 空白だけではない文字列です。 */
 const nonBlank = z.string().refine((value) => value.trim() !== '');

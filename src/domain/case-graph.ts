@@ -191,3 +191,21 @@ export function buildCaseGraph(target: Case): CaseGraph {
     edges: [...edges, ...relationshipEdgesOf(target)],
   };
 }
+
+/**
+ * 証言につながらない人物のノードを除いたグラフを返します。
+ *
+ * buildCaseGraph は、証言に1度も登場しない人物も孤立したノードとして残します（登録済みかどうかを図で分かるようにするためです）。
+ * ボードの絞り込み（src/domain/board-filter.ts）で証言を減らしたときは、残った証言に関わらない人物が大量に孤立して並び、
+ * 図が読めなくなるため、この関数で除きます。人物は、発言・経由・言及のどれかの線で証言につながる場合だけ残します。
+ * 関係の線（relates）は証言を経由しないため、人物を残す理由にはしません。除いた人物に張られた関係の線は、あわせて除きます。
+ */
+export function dropPersonsWithoutClaims(graph: CaseGraph): CaseGraph {
+  const linkedNodeIds = new Set(
+    graph.edges.filter((edge) => edge.kind !== 'relates').flatMap((edge) => [edge.sourceId, edge.targetId])
+  );
+  const nodes = graph.nodes.filter((node) => node.kind !== 'person' || linkedNodeIds.has(node.id));
+  const keptNodeIds = new Set(nodes.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => keptNodeIds.has(edge.sourceId) && keptNodeIds.has(edge.targetId));
+  return { nodes, edges };
+}
