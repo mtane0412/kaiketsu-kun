@@ -199,6 +199,53 @@ describe('InterviewForm の入力', () => {
   });
 });
 
+describe('InterviewForm の、この資料での呼び方', () => {
+  it('呼び方と、それが指す人物・同一人物とした根拠・確認した人を入力して保存できる', async () => {
+    // 前提: 記事は管理人を「男」と書いている。年齢と勤務先が一致することを、調べた山田さんが確かめた
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '架空日報の記事');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.click(screen.getByRole('button', { name: '呼び方を追加' }));
+    await user.type(screen.getByLabelText('呼び方 1'), ' 男 ');
+    await user.selectOptions(screen.getByLabelText('呼び方 1 が指す人物'), '管理人');
+    await user.type(screen.getByLabelText('同一人物とした根拠 1（任意）'), '年齢と勤務先が一致する');
+    await user.type(screen.getByLabelText('確認した人 1（任意）'), '山田');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(openedCase().interviews[0]?.personNames).toEqual([
+      { name: '男', personId: 'person-caretaker', basis: '年齢と勤務先が一致する', confirmedBy: '山田' },
+    ]);
+  });
+
+  it('呼び方が指す人物を選んでいない場合は、エラーを示して保存しない', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('タイトル（任意）'), '架空日報の記事');
+    await user.click(screen.getByRole('button', { name: '日時・媒体などを入力する' }));
+    await user.click(screen.getByRole('button', { name: '呼び方を追加' }));
+    await user.type(screen.getByLabelText('呼び方 1'), '男');
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(screen.getByText('呼び方「男」が指す人物を選んでください')).toBeInTheDocument();
+    expect(openedCase().interviews).toEqual([]);
+  });
+
+  it('編集では、登録済みの呼び方を示して開き、削除して保存すると呼び方を持たない資料に戻す', async () => {
+    const user = userEvent.setup();
+    const article: Interview = { id: 'interview-article', title: '架空日報の記事', personNames: [{ name: '男', personId: 'person-caretaker' }] };
+    renderForm(article);
+
+    expect(screen.getByLabelText('呼び方 1')).toHaveValue('男');
+    await user.click(screen.getByRole('button', { name: '呼び方 1 を削除' }));
+    await user.click(screen.getByRole('button', { name: '資料を保存' }));
+
+    expect(openedCase().interviews[0]).toEqual({ id: 'interview-article', title: '架空日報の記事' });
+  });
+});
+
 describe('InterviewForm の本文の取得', () => {
   it('記事のURLから取得した本文を本文の欄に、公開日時を日時の欄に入れ、保存はしない', async () => {
     const fetchSpy = mockFetchArticleApi(200, fetchedArticle);

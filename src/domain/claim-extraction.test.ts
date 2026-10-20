@@ -4,10 +4,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildClaimCandidates,
+  ambiguousNamesOf,
   candidateToClaimDraft,
+  chooseAmbiguousPerson,
   ExtractionResultSchema,
   MAX_EXISTING_CLAIMS_FOR_EXTRACTION,
-  normalizeName,
   selectExistingClaimsForExtraction,
   type ExtractedClaim,
 } from './claim-extraction';
@@ -61,12 +62,26 @@ function extracted(overrides: Partial<ExtractedClaim>): ExtractedClaim {
   };
 }
 
-describe('normalizeName', () => {
-  it('前後の空白を除き、全角と連続の空白を半角1つにし、大文字小文字を区別しない', () => {
-    expect(normalizeName('  山田　 花子 ')).toBe('山田 花子');
-    expect(normalizeName('Lake Villa')).toBe(normalizeName('lake villa'));
-  });
-});
+/** 県警の広報担当が、山田花子さんと同姓同名（別名「山田 花子」）であるケースです。 */
+function caseWithNamesake(): Case {
+  const base = createCase();
+  return {
+    ...base,
+    persons: [...base.persons, { id: 'person-hanako-police', name: '県警の広報担当', kind: 'individual', aliases: ['山田 花子'] }],
+  };
+}
+
+/** 「山田 花子」が2人に一致して、どちらか決められない名前です。 */
+function ambiguousHanako(name: string) {
+  return {
+    status: 'ambiguous',
+    name,
+    matches: [
+      { id: 'person-hanako', name: '山田 花子' },
+      { id: 'person-hanako-police', name: '県警の広報担当' },
+    ],
+  };
+}
 
 describe('ExtractionResultSchema', () => {
   it('形式に合う出力を受け付ける', () => {
@@ -128,6 +143,38 @@ describe('buildClaimCandidates', () => {
       { status: 'new', name: '別荘の所有者' },
       { status: 'new', name: '湖畔の別荘' },
     ]);
+  });
+
+  it('この資料での呼び方を、人物の名前・別名より優先して照らし合わせる', () => {
+    // 前提: この記事は山田花子さんを「近所の女性」と書き、「県警」という呼び方は湖の管理事務所を指す（架空の例）
+    const base = createCase();
+    const target: Case = {
+      ...base,
+      persons: [...base.persons, { id: 'person-office', name: '湖の管理事務所', kind: 'organization' }],
+      interviews: base.interviews.map((interview) => ({
+        ...interview,
+        personNames: [
+          { name: '近所の女性', personId: 'person-hanako' },
+          { name: '県警', personId: 'person-office' },
+        ],
+      })),
+    };
+
+    const [candidate] = buildClaimCandidates(target, 'interview-article', [
+      extracted({ speakerName: '近所の女性', viaNames: ['県警'] }),
+    ]).candidates;
+
+    expect(candidate?.speaker).toEqual({ status: 'registered', id: 'person-hanako', name: '山田 花子' });
+    expect(candidate?.via).toEqual([{ status: 'registered', id: 'person-office', name: '湖の管理事務所' }]);
+  });
+
+  it('名前・別名が2人以上に一致した場合は、1人に決めず、一致した人物を候補として示す（同姓同名で別人に結び付けないため）', () => {
+    const [candidate] = buildClaimCandidates(caseWithNamesake(), 'interview-article', [
+      extracted({ speakerName: '山田 花子', mentionedPersonNames: ['山田　花子'] }),
+    ]).candidates;
+
+    expect(candidate?.speaker).toEqual(ambiguousHanako('山田 花子'));
+    expect(candidate?.mentioned).toEqual([ambiguousHanako('山田　花子')]);
   });
 
   it('日時は本文のメンションと同じ表記で解釈し、解釈できない日時は時刻参照を持たない', () => {
@@ -198,6 +245,35 @@ describe('buildClaimCandidates', () => {
   it('本文の無い聴取は照らし合わせられないため、エラーにする', () => {
     const target = createCase({ interviews: [{ id: 'interview-empty' }] });
     expect(() => buildClaimCandidates(target, 'interview-empty', [])).toThrow('本文');
+  });
+});
+
+describe('ambiguousNamesOf と chooseAmbiguousPerson', () => {
+  /** 発言者と言及の両方に、決められない「山田 花子」が現れる候補です。 */
+  function ambiguousCandidate() {
+    const [candidate] = buildClaimCandidates(caseWithNamesake(), 'interview-article', [
+      extracted({ speakerName: '山田 花子', viaNames: ['県警'], mentionedPersonNames: ['山田　花子'] }),
+    ]).candidates;
+    if (candidate === undefined) throw new Error('前提: 候補が1件ある');
+    return candidate;
+  }
+
+  it('決められない名前を、正規化した名前ごとに1件ずつ、一致した人物とともに返す', () => {
+    expect(ambiguousNamesOf(ambiguousCandidate())).toEqual([ambiguousHanako('山田 花子')]);
+  });
+
+  it('ユーザーが選んだ人物を、同じ名前（正規化後）のすべての位置に当てはめる', () => {
+    const chosen = chooseAmbiguousPerson(ambiguousCandidate(), '山田 花子', 'person-hanako-police');
+
+    const policeSpokesperson = { status: 'registered', id: 'person-hanako-police', name: '県警の広報担当' };
+    expect(chosen.speaker).toEqual(policeSpokesperson);
+    expect(chosen.mentioned).toEqual([policeSpokesperson]);
+    expect(chosen.via).toEqual([{ status: 'registered', id: 'person-police', name: '県警' }]);
+    expect(ambiguousNamesOf(chosen)).toEqual([]);
+  });
+
+  it('一致した人物に含まれない人物は選べない', () => {
+    expect(() => chooseAmbiguousPerson(ambiguousCandidate(), '山田 花子', 'person-police')).toThrow(/person-police/);
   });
 });
 
@@ -351,6 +427,13 @@ describe('candidateToClaimDraft', () => {
     expect(result.draft.text).toBe('@別荘の管理人は@湖畔ホテルに泊まっていた');
   });
 
+  it('決められない名前が残っている候補は、入力欄の初期値にせずエラーにする（ユーザーが人物を選んでから保存するため）', () => {
+    const [candidate] = buildClaimCandidates(caseWithNamesake(), 'interview-article', [extracted({ speakerName: '山田 花子' })]).candidates;
+    if (candidate === undefined) throw new Error('前提: 候補が1件ある');
+
+    expect(() => candidateToClaimDraft(caseWithNamesake(), 'interview-article', candidate, sequentialIds())).toThrow(/山田 花子/);
+  });
+
   it('見出しは前後の空白を除き、空の見出しは持たない', () => {
     const target = createCase();
     const [titled, untitled] = buildClaimCandidates(target, 'interview-article', [
@@ -394,6 +477,22 @@ describe('selectExistingClaimsForExtraction', () => {
 
     // 検証: 要約は改行を含めず、発言者と経由・見出し・本文を1行にまとめる
     expect(result).toEqual([{ id: 'claim-hanako', summary: '山田 花子（湖畔新聞 による）: 黒い車 — 湖畔の別荘の庭に黒い車が止まっていた （2行目）' }]);
+  });
+
+  it('この資料での呼び方が本文に出てくる人物にも、触れる証言を返す', () => {
+    // 前提: 本文の「近くに住む」の人物を、この資料での呼び方「近くに住む女性」として湖の管理事務所に結び付けた（架空の例）
+    const base = caseWith([unrelatedClaim]);
+    const target: Case = {
+      ...base,
+      interviews: base.interviews.map((interview) => ({
+        ...interview,
+        personNames: [{ name: '近くに住む', personId: 'person-unrelated' }],
+      })),
+    };
+
+    expect(selectExistingClaimsForExtraction(target, 'interview-article', articleTranscript).map((claim) => claim.id)).toEqual([
+      'claim-unrelated',
+    ]);
   });
 
   it('この資料をすでに出典に持つ証言は返さない（同じ資料の重なりは、書き起こし済みの印で示すため）', () => {

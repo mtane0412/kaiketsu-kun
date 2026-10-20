@@ -400,3 +400,42 @@ describe('resolveContent', () => {
     expect(segments[2]).toEqual({ type: 'mention', kind: 'place', id: 'place-villa', label: '湖畔の別荘' });
   });
 });
+
+describe('資料での表記（別名・資料ごとの呼び方）で書いたメンション', () => {
+  /** 管理人を、ある書籍は「おじさん」と書き、管理人には別名「管理のおじさん」がある（架空の例）ケースです。 */
+  const caseWithSourceNames = {
+    ...sampleFictionalCase,
+    persons: sampleFictionalCase.persons.map((person) =>
+      person.id === 'person-caretaker' ? { ...person, aliases: ['管理のおじさん'] } : person
+    ),
+    interviews: [{ id: 'interview-book', personNames: [{ name: 'おじさん', personId: 'person-caretaker' }] }],
+  };
+  const content = '@[おじさん](person:person-caretaker)と@[管理のおじさん](person:person-caretaker)が見回った。';
+
+  it('resolveContent は、資料での表記（sourceLabel）と、それが誰か（現在の名前）の両方を載せる', () => {
+    const segments = resolveContent(content, caseWithSourceNames);
+
+    expect(segments[0]).toMatchObject({ type: 'mention', label: '管理人', sourceLabel: 'おじさん' });
+    expect(segments[2]).toMatchObject({ type: 'mention', label: '管理人', sourceLabel: '管理のおじさん' });
+  });
+
+  it('登録されていない古い表示名には、資料での表記を載せない（改名前の名前を、資料での表記と取り違えないため）', () => {
+    const [segment] = resolveContent('@[管理人さん](person:person-caretaker)', caseWithSourceNames);
+
+    expect(segment).not.toHaveProperty('sourceLabel');
+  });
+
+  it('contentToPlainText は、資料での表記に現在の名前を添える（どちらの名前でも検索できるようにするため）', () => {
+    expect(contentToPlainText(content, caseWithSourceNames)).toBe('@おじさん（＝管理人）と@管理のおじさん（＝管理人）が見回った。');
+  });
+
+  it('contentToDraft は、資料での表記のまま下書きにする（編集して保存しても、資料での表記を失わないため）', () => {
+    expect(contentToDraft(content, caseWithSourceNames)).toEqual({
+      text: '@おじさんと@管理のおじさんが見回った。',
+      mentions: [
+        { kind: 'person', id: 'person-caretaker', label: 'おじさん' },
+        { kind: 'person', id: 'person-caretaker', label: '管理のおじさん' },
+      ],
+    });
+  });
+});

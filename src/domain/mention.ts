@@ -19,11 +19,16 @@
  * 以前の版では、本文の先頭を「@人物:」と書くとその人物を発言者として導出していました。
  * その頃に保存した本文に残っている発言者の記法は、読み込み時に stripLegacySpeakerPrefix で取り除きます。
  *
+ * 人物のメンションの表示名は、ふだんは人物の現在の名前に更新して示します。ただし、トークンに控えた表示名が
+ * 資料での表記（人物の別名か、いずれかの資料での呼び方。src/domain/person-names.ts の isSourceNameOf）の場合は、
+ * 資料での表記（sourceLabel）と現在の名前の両方を示します。資料が誰をどう呼んでいたかを、画面から読み取れるようにするためです。
+ *
  * 入力欄（textarea）では、トークンの代わりに `@表示名` の素の文字列を表示します。
  * この入力欄の状態を「下書き（ClaimDraft）」と呼び、保存時に draftToContent で本文に変換します。
  * 注意: 下書きの型は名前に Claim を含みますが、メモの入力欄でも同じ型を使用します。
  */
 import { personIconText } from './person-icon';
+import { isSourceNameOf } from './person-names';
 import { formatTimeRef, isValidTimeRef } from './time-ref';
 import type { Case, Claim, Id, Speaker, TimeRef } from './types';
 
@@ -45,8 +50,10 @@ export type ContentSegment =
   /**
    * imageDataUrl と iconText は、ケースを参照して解決した場合（resolveContent）にだけ載ります。
    * iconText は、画像が無い場合にアイコンへ表示する1文字で、人物のメンションにだけ載ります。
+   * sourceLabel は、トークンに控えた表示名が資料での表記（別名・資料ごとの呼び方）の場合の、その表記です。
+   * このとき label は人物の現在の名前です。
    */
-  | { type: 'mention'; kind: SegmentKind; id: Id; label: string; imageDataUrl?: string; iconText?: string };
+  | { type: 'mention'; kind: SegmentKind; id: Id; label: string; imageDataUrl?: string; iconText?: string; sourceLabel?: string };
 
 /** 下書きの中で「@表示名」として書かれているメンションです。日時のメンションでは、id が時刻参照そのものです。 */
 export type DraftMention = { kind: SegmentKind; id: Id; label: string };
@@ -127,17 +134,30 @@ export function resolveContent(content: string, target: Case): ContentSegment[] 
     if (segment.kind === 'date') return isValidTimeRef(segment.id) ? dateMentionSegment(segment.id) : segment;
     const entity = findEntity(target, segment.kind, segment.id);
     if (!entity) return segment;
-    const resolved = { ...segment, label: entity.name };
+    const resolved: ContentSegment = { ...segment, label: entity.name };
     if (entity.imageDataUrl !== undefined) resolved.imageDataUrl = entity.imageDataUrl;
-    if (segment.kind === 'person') resolved.iconText = personIconText(entity);
+    if (segment.kind === 'person') {
+      resolved.iconText = personIconText(entity);
+      if (isSourceNameOf(target, segment.id, segment.label)) resolved.sourceLabel = segment.label;
+    }
     return resolved;
   });
 }
 
-/** 本文のメンションを「@現在の名前」に置き換えた文字列を返します。一覧表示や入力欄で使用します。 */
+/**
+ * 解決済みのメンションを画面に示す名前です。資料での表記で書いたメンションは「資料での表記（＝現在の名前）」にします。
+ */
+export function displayLabelOf(segment: Extract<ContentSegment, { type: 'mention' }>): string {
+  return segment.sourceLabel === undefined ? segment.label : `${segment.sourceLabel}（＝${segment.label}）`;
+}
+
+/**
+ * 本文のメンションを「@現在の名前」に置き換えた文字列を返します。検索で使用します。
+ * 資料での表記で書いたメンションは「@資料での表記（＝現在の名前）」にし、どちらの名前でも見つかるようにします。
+ */
 export function contentToPlainText(content: string, target: Case): string {
   return resolveContent(content, target)
-    .map((segment) => (segment.type === 'mention' ? `@${segment.label}` : segment.text))
+    .map((segment) => (segment.type === 'mention' ? `@${displayLabelOf(segment)}` : segment.text))
     .join('');
 }
 
@@ -215,13 +235,22 @@ export function draftToContent(draft: ClaimDraft): string {
 
 /**
  * メンションを含む保存済みの文章（証言の本文、エンティティのメモ）を下書きに変換します。
- * メンションの表示名は、エンティティの現在の名前に更新します。
+ * メンションの表示名は、エンティティの現在の名前に更新します。ただし、資料での表記で書いたメンションは、その表記のままにします
+ * （編集して保存しても、資料が誰をどう呼んでいたかを失わないためです）。
  */
 export function contentToDraft(content: string, target: Case): ClaimDraft {
-  const mentions: DraftMention[] = resolveContent(content, target)
-    .filter((segment) => segment.type === 'mention')
-    .map(({ kind, id, label }) => ({ kind, id, label }));
-  return { text: contentToPlainText(content, target), mentions };
+  const mentions: DraftMention[] = [];
+  let text = '';
+  for (const segment of resolveContent(content, target)) {
+    if (segment.type !== 'mention') {
+      text += segment.text;
+      continue;
+    }
+    const label = segment.sourceLabel ?? segment.label;
+    mentions.push({ kind: segment.kind, id: segment.id, label });
+    text += `@${label}`;
+  }
+  return { text, mentions };
 }
 
 /**

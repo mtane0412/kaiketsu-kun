@@ -8,6 +8,9 @@
  * 2. 抽出: 抽出 API（src/lib/claim-extraction-api.ts）を呼びます。失敗した場合は理由を示し、ケースを変えません。
  * 3. 候補の一覧: LLM の出力を原文とケースに照らし合わせ（src/domain/claim-extraction.ts の buildClaimCandidates）、
  *    引用が本文にある候補だけを示し、捨てた件数を示します。人物・場所の名前には、登録済みか新規かを添えます。
+ *    人物の名前は、この資料での呼び方（Interview.personNames）を優先して照らし合わせます。
+ *    名前が2人以上に一致した場合（同姓同名など）は、1人に決めず、一致した人物から選ぶ欄を示します。
+ *    選ぶまでは、採用も出典の書き足しもできません（黙って別人に結び付けないためです）。
  *    照らし合わせは描画のたびにケースの現在の状態に対して行うため、候補から人物を新規作成した後の候補では、その人物が登録済みになります。
  * 4. 採用: 候補を入力済みにした証言の入力欄（ClaimForm）を候補の下に開き、ユーザーが確かめてから保存します。保存した候補は一覧から外します。
  *    破棄: ケースを変えずに、候補を一覧から外します。
@@ -31,17 +34,21 @@ import { nanoid } from 'nanoid';
 import { useId, useState, type FormEvent } from 'react';
 import { buildTimeline, claimLabelOf, describeClaimAttribution } from '@/domain/case-views';
 import {
+  ambiguousNamesOf,
   buildClaimCandidates,
   candidateToClaimDraft,
+  chooseAmbiguousPerson,
   selectExistingClaimsForExtraction,
   type ClaimCandidate,
   type ExtractedClaim,
+  type AmbiguousName,
   type ResolvedName,
 } from '@/domain/claim-extraction';
 import { addClaimSource, sourceForInterview } from '@/domain/claim-sources';
 import { CROSS_CHECK_KINDS } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_LABELS } from '@/domain/labels';
 import { formatInterviewLabel } from '@/domain/interviews';
+import { normalizeName } from '@/domain/person-names';
 import { formatTimeRef } from '@/domain/time-ref';
 import { formatQuoteSeconds, stripTimestampLines } from '@/domain/transcript';
 import type { CrossCheckKind, Id } from '@/domain/types';
@@ -72,6 +79,12 @@ type Phase =
  */
 type Adopting = { key: string; defaults: ClaimDefaults; crossCheckKinds: Partial<Record<Id, CrossCheckKind>> };
 
+/** 候補ごと（候補のキー）の、決められない名前（正規化後）ごとに選んだ人物です。 */
+type PersonChoices = Readonly<Record<string, Readonly<Record<string, Id>>>>;
+
+/** 人物を選んでいない場合の、選択肢の値です。 */
+const NO_PERSON = '';
+
 /** 照合を作らない場合の、選択肢の値です。 */
 const NO_CROSS_CHECK = '';
 
@@ -82,9 +95,32 @@ type ClaimExtractionProps = {
   onClose: () => void;
 };
 
-/** 名前に、登録済みか新規作成の候補かを添えます。 */
+/** 名前に、登録済みか・新規作成の候補か・決められないかを添えます。 */
 function nameWithStatus(name: ResolvedName): string {
-  return `${name.name}（${name.status === 'registered' ? '登録済み' : '新規'}）`;
+  switch (name.status) {
+    case 'registered':
+      return `${name.name}（登録済み）`;
+    case 'new':
+      return `${name.name}（新規）`;
+    case 'ambiguous':
+      return `${name.name}（${name.matches.length}人に一致。人物を選んでください）`;
+    default: {
+      const exhaustive: never = name;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * 候補に、ユーザーが選んだ人物を当てはめます。
+ * 選んだ人物が、いまのケースでは一致した人物に含まれない場合（選んだ後に人物を削除した場合など）は当てはめず、選び直してもらいます。
+ */
+function applyPersonChoices(candidate: ClaimCandidate, choices: Readonly<Record<string, Id>> | undefined): ClaimCandidate {
+  return ambiguousNamesOf(candidate).reduce((current, ambiguous) => {
+    const chosen = choices?.[normalizeName(ambiguous.name)];
+    const isMatch = ambiguous.matches.some((match) => match.id === chosen);
+    return chosen !== undefined && isMatch ? chooseAmbiguousPerson(current, ambiguous.name, chosen) : current;
+  }, candidate);
 }
 
 /**
@@ -121,6 +157,7 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
   const [phase, setPhase] = useState<Phase>({ kind: 'confirm' });
   const [error, setError] = useState<string | null>(null);
   const [adopting, setAdopting] = useState<Adopting | null>(null);
+  const [personChoices, setPersonChoices] = useState<PersonChoices>({});
   const upsertMany = useCaseStore((state) => state.upsertMany);
 
   const interview = currentCase.interviews.find((item) => item.id === interviewId);
@@ -151,7 +188,11 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
       const extracted = await requestClaimExtraction({
         text: source.text,
         sourceName,
-        personNames: currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
+        // この資料での呼び方も人物の名前として伝え、LLM が資料の表記のまま名前を出せるようにする
+        personNames: [
+          ...currentCase.persons.flatMap((person) => [person.name, ...(person.aliases ?? [])]),
+          ...(interview.personNames ?? []).map((personName) => personName.name),
+        ],
         placeNames: currentCase.places.map((place) => place.name),
         existingClaims: selectExistingClaimsForExtraction(currentCase, interviewId, source.text),
         ...trimmed,
@@ -201,6 +242,14 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
     }
     setError(null);
     settle(candidate.key);
+  };
+
+  /** 候補 key の決められない名前 name に、人物 personId を選びます。personId が undefined の場合は選び直す前の状態に戻します。 */
+  const choosePerson = (key: string, name: string, personId: Id | undefined) => {
+    setPersonChoices((current) => {
+      const { [normalizeName(name)]: _previous, ...others } = current[key] ?? {};
+      return { ...current, [key]: personId === undefined ? others : { ...others, [normalizeName(name)]: personId } };
+    });
   };
 
   /** 採用中の候補で、既存の証言 claimId との照合の種類を選び直します。kind が undefined の場合は照合を作りません。 */
@@ -256,6 +305,8 @@ export function ClaimExtraction({ interviewId, source, onClose }: ClaimExtractio
           settledKeys={phase.settledKeys}
           mediaName={mediaName}
           adopting={adopting}
+          personChoices={personChoices}
+          onChoosePerson={choosePerson}
           onAdopt={adopt}
           onCancelAdopt={() => setAdopting(null)}
           onSettle={settle}
@@ -274,6 +325,9 @@ type CandidateListProps = {
   /** 資料の媒体の名前です。媒体の無い資料では undefined です。 */
   mediaName: string | undefined;
   adopting: Adopting | null;
+  personChoices: PersonChoices;
+  /** 候補 key の決められない名前 name に、人物を選びます（undefined は選んでいない状態）。 */
+  onChoosePerson: (key: string, name: string, personId: Id | undefined) => void;
   onAdopt: (candidate: ClaimCandidate) => void;
   onCancelAdopt: () => void;
   onSettle: (key: string) => void;
@@ -290,6 +344,8 @@ function CandidateList({
   settledKeys,
   mediaName,
   adopting,
+  personChoices,
+  onChoosePerson,
   onAdopt,
   onCancelAdopt,
   onSettle,
@@ -297,7 +353,9 @@ function CandidateList({
   onChooseCrossCheck,
 }: CandidateListProps) {
   const currentCase = useCurrentCase();
-  const { candidates, discardedCount } = buildClaimCandidates(currentCase, interviewId, extracted);
+  const built = buildClaimCandidates(currentCase, interviewId, extracted);
+  const { discardedCount } = built;
+  const candidates = built.candidates.map((candidate) => applyPersonChoices(candidate, personChoices[candidate.key]));
   const remaining = candidates.filter((candidate) => !settledKeys.has(candidate.key));
   const claimViewById = new Map(buildTimeline(currentCase).items.map(({ view }) => [view.claim.id, view]));
   /** 既存の証言を、「発言者（経由）: 証言の名前」の1行で示します。 */
@@ -317,94 +375,111 @@ function CandidateList({
         <p className="text-xs">{candidates.length === 0 ? '証言の候補は見つかりませんでした。' : '候補をすべて確かめました。'}</p>
       ) : (
         <ul aria-label="証言の候補" className="space-y-2">
-          {remaining.map((candidate) => (
-            <li key={candidate.key} className="space-y-2 rounded-md border bg-background p-2 text-sm">
-              {candidate.title && <p className="font-medium">{candidate.title}</p>}
-              <p>{candidate.content}</p>
-              <blockquote className="border-l-2 pl-2 text-xs text-muted-foreground">
-                {candidate.quote.seconds !== undefined && <span className="mr-1">{formatQuoteSeconds(candidate.quote.seconds)}</span>}
-                {stripTimestampLines(candidate.quote.text)}
-              </blockquote>
-              <dl className="grid gap-0.5 text-xs">
-                {describeCandidate(candidate, mediaName).map(({ term, description }) => (
-                  <div key={term} className="flex gap-1">
-                    <dt className="shrink-0 text-muted-foreground">{`${term}: `}</dt>
-                    <dd>{description}</dd>
-                  </div>
-                ))}
-              </dl>
-              {candidate.overlapsTranscribed && (
-                <p className="text-xs text-amber-700 dark:text-amber-400">書き起こし済みの範囲と重なります。同じ証言を二重に登録しないよう確かめてください。</p>
-              )}
-              {candidate.sameClaimIds.length > 0 && (
-                <div className="space-y-1 rounded bg-muted/40 px-2 py-1.5 text-xs">
-                  <p className="text-muted-foreground">
-                    次の既存の証言と同じかもしれません。同じ発言が別の資料にも載ったものなら、新しい証言にせず出典を書き足してください。
-                  </p>
-                  <ul aria-label="同じかもしれない既存の証言" className="space-y-1">
-                    {candidate.sameClaimIds.map((claimId) => {
-                      const label = sameClaimLabelOf(claimId);
-                      const claim = claimViewById.get(claimId)?.claim;
-                      const alreadySourced = claim !== undefined && sourceForInterview(claim, interviewId) !== undefined;
-                      return (
-                        <li key={claimId} className="flex items-start justify-between gap-2">
-                          <span>{label}</span>
-                          {alreadySourced ? (
-                            <span className="shrink-0 text-muted-foreground">この資料をすでに出典に持っています</span>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              aria-label={`この証言に出典を書き足す: ${label}`}
-                              onClick={() => onAddSource(candidate, claimId)}
-                              className="shrink-0"
-                            >
-                              この証言に出典を書き足す
-                            </Button>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-
-              {adopting?.key === candidate.key ? (
-                <section aria-label="候補からの証言の書き足し" className="space-y-2 border-t pt-2">
-                  {candidate.sameClaimIds.map((claimId) => (
-                    <CrossCheckChoice
-                      key={claimId}
-                      label={sameClaimLabelOf(claimId)}
-                      value={adopting.crossCheckKinds[claimId]}
-                      onChange={(kind) => onChooseCrossCheck(claimId, kind)}
-                    />
+          {remaining.map((candidate) => {
+            const unresolved = ambiguousNamesOf(candidate);
+            const builtCandidate = built.candidates.find((item) => item.key === candidate.key);
+            if (builtCandidate === undefined) throw new Error(`候補が見つかりません: ${candidate.key}`);
+            return (
+              <li key={candidate.key} className="space-y-2 rounded-md border bg-background p-2 text-sm">
+                {candidate.title && <p className="font-medium">{candidate.title}</p>}
+                <p>{candidate.content}</p>
+                <blockquote className="border-l-2 pl-2 text-xs text-muted-foreground">
+                  {candidate.quote.seconds !== undefined && <span className="mr-1">{formatQuoteSeconds(candidate.quote.seconds)}</span>}
+                  {stripTimestampLines(candidate.quote.text)}
+                </blockquote>
+                <dl className="grid gap-0.5 text-xs">
+                  {describeCandidate(candidate, mediaName).map(({ term, description }) => (
+                    <div key={term} className="flex gap-1">
+                      <dt className="shrink-0 text-muted-foreground">{`${term}: `}</dt>
+                      <dd>{description}</dd>
+                    </div>
                   ))}
-                  <ClaimForm
-                    defaults={adopting.defaults}
-                    withEntries={(claimId) => crossCheckEntriesOf(claimId, adopting.crossCheckKinds)}
-                    onDone={() => onSettle(candidate.key)}
-                    autoFocus
-                    compact
-                    actions={
-                      <button type="button" onClick={onCancelAdopt} className="text-xs text-muted-foreground hover:underline">
-                        やめる
-                      </button>
-                    }
+                </dl>
+                {ambiguousNamesOf(builtCandidate).map((ambiguous) => (
+                  <PersonChoice
+                    key={normalizeName(ambiguous.name)}
+                    ambiguous={ambiguous}
+                    value={personChoices[candidate.key]?.[normalizeName(ambiguous.name)]}
+                    onChange={(personId) => onChoosePerson(candidate.key, ambiguous.name, personId)}
                   />
-                </section>
-              ) : (
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => onSettle(candidate.key)}>
-                    破棄
-                  </Button>
-                  <Button type="button" size="sm" onClick={() => onAdopt(candidate)}>
-                    採用
-                  </Button>
-                </div>
-              )}
-            </li>
-          ))}
+                ))}
+                {unresolved.length > 0 && (
+                  <p className="text-xs text-muted-foreground">人物を選ぶと、採用・出典の書き足しができます。</p>
+                )}
+                {candidate.overlapsTranscribed && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">書き起こし済みの範囲と重なります。同じ証言を二重に登録しないよう確かめてください。</p>
+                )}
+                {candidate.sameClaimIds.length > 0 && (
+                  <div className="space-y-1 rounded bg-muted/40 px-2 py-1.5 text-xs">
+                    <p className="text-muted-foreground">
+                      次の既存の証言と同じかもしれません。同じ発言が別の資料にも載ったものなら、新しい証言にせず出典を書き足してください。
+                    </p>
+                    <ul aria-label="同じかもしれない既存の証言" className="space-y-1">
+                      {candidate.sameClaimIds.map((claimId) => {
+                        const label = sameClaimLabelOf(claimId);
+                        const claim = claimViewById.get(claimId)?.claim;
+                        const alreadySourced = claim !== undefined && sourceForInterview(claim, interviewId) !== undefined;
+                        return (
+                          <li key={claimId} className="flex items-start justify-between gap-2">
+                            <span>{label}</span>
+                            {alreadySourced ? (
+                              <span className="shrink-0 text-muted-foreground">この資料をすでに出典に持っています</span>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                aria-label={`この証言に出典を書き足す: ${label}`}
+                                onClick={() => onAddSource(candidate, claimId)}
+                                disabled={unresolved.length > 0}
+                                className="shrink-0"
+                              >
+                                この証言に出典を書き足す
+                              </Button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {adopting?.key === candidate.key ? (
+                  <section aria-label="候補からの証言の書き足し" className="space-y-2 border-t pt-2">
+                    {candidate.sameClaimIds.map((claimId) => (
+                      <CrossCheckChoice
+                        key={claimId}
+                        label={sameClaimLabelOf(claimId)}
+                        value={adopting.crossCheckKinds[claimId]}
+                        onChange={(kind) => onChooseCrossCheck(claimId, kind)}
+                      />
+                    ))}
+                    <ClaimForm
+                      defaults={adopting.defaults}
+                      withEntries={(claimId) => crossCheckEntriesOf(claimId, adopting.crossCheckKinds)}
+                      onDone={() => onSettle(candidate.key)}
+                      autoFocus
+                      compact
+                      actions={
+                        <button type="button" onClick={onCancelAdopt} className="text-xs text-muted-foreground hover:underline">
+                          やめる
+                        </button>
+                      }
+                    />
+                  </section>
+                ) : (
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => onSettle(candidate.key)}>
+                      破棄
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => onAdopt(candidate)} disabled={unresolved.length > 0}>
+                      採用
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -418,6 +493,38 @@ function CandidateList({
 function crossCheckEntriesOf(claimId: Id, crossCheckKinds: Adopting['crossCheckKinds']): UpsertEntry[] {
   return Object.entries(crossCheckKinds).flatMap(([existingClaimId, kind]): UpsertEntry[] =>
     kind === undefined ? [] : [{ key: 'crossChecks', entity: { id: nanoid(), claimIds: [claimId, existingClaimId], kind } }]
+  );
+}
+
+type PersonChoiceProps = {
+  ambiguous: AmbiguousName;
+  /** 選んだ人物です。選んでいない場合は undefined です。 */
+  value: Id | undefined;
+  onChange: (personId: Id | undefined) => void;
+};
+
+/** 2人以上に一致した名前が、どの人物かを選ぶ欄です。既定は「選んでいない」で、黙って1人に決めません。 */
+function PersonChoice({ ambiguous, value, onChange }: PersonChoiceProps) {
+  const fieldId = useId();
+  return (
+    <div className="text-xs">
+      <label htmlFor={fieldId} className={LABEL_CLASS}>
+        「{ambiguous.name}」はどの人物か
+      </label>
+      <select
+        id={fieldId}
+        value={value ?? NO_PERSON}
+        onChange={(event) => onChange(ambiguous.matches.find((match) => match.id === event.target.value)?.id)}
+        className={INPUT_CLASS}
+      >
+        <option value={NO_PERSON}>選んでください</option>
+        {ambiguous.matches.map((match) => (
+          <option key={match.id} value={match.id}>
+            {match.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
