@@ -9,6 +9,8 @@
  * 地図を主役にするため、地図は受け取った領域いっぱいに広げ、それ以外の要素（絞り込みの欄・人物の選択・選択中の証言・一覧）は
  * 地図の左上に重ねる操作のパネルにまとめます。パネルは隠せるため、地図だけを広く見ることもできます。
  * 地図の高さは親の高さに合わせるため、親（CaseBoard）で高さを決めてください。
+ * ピンがパネルの裏に隠れないよう、パネルが地図を覆う幅を測り（src/lib/map-obscured-inset.ts）、地図に渡します。
+ * 地図は作るときにすべてのピンを収める表示にするため、最初に測り終えるまで、地図を描画しません。
  * 絞り込みの欄（BoardFilterPanel）はボード全体の部品ですが、地図の上に別の段を作らないよう、受け取ってパネルの中に置きます。
  *
  * 人物を1人選ぶと、その人物が発言者か言及された証言のうち、日時と座標のある証言だけを日時の順にたどり、
@@ -19,11 +21,12 @@
 
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { buildMapTrail, buildPersonLanes, groupStopsByPlace, type ClaimView, type MapPin } from '@/domain/case-views';
 import { buildPersonTravel, TRAVELING_PERSON_KINDS, type TravelExcludedReason } from '@/domain/travel-check';
 import type { Case, Id } from '@/domain/types';
+import { obscuredInset, type ObscuredInset } from '@/lib/map-obscured-inset';
 import { INPUT_CLASS, LABEL_CLASS } from '../forms/fields';
 import { ClaimCard } from './ClaimCard';
 import { TravelLegList } from './TravelLegList';
@@ -56,6 +59,28 @@ type MapViewProps = {
 export function MapView({ target, filterPanel }: MapViewProps) {
   const personFieldId = useId();
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  /** パネルが地図を覆う幅です。測り終えるまでは undefined です。 */
+  const [obscured, setObscured] = useState<ObscuredInset>();
+
+  // パネルの開閉と、地図・パネルの大きさの変化（画面の幅・パネルの中身の増減）のたびに、覆う幅を測り直す。
+  // 描画の前に測るため、useLayoutEffect を使う
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const panel = panelRef.current;
+    const measure = () => {
+      const next = obscuredInset(container.getBoundingClientRect(), panel?.getBoundingClientRect());
+      // 同じ幅なら状態を変えず、地図の位置合わせをやり直さないようにする
+      setObscured((current) => (current?.left === next.left && current.top === next.top ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    if (panel) observer.observe(panel);
+    return () => observer.disconnect();
+  }, [isPanelOpen]);
   const [personId, setPersonId] = useState<Id>(NO_PERSON);
   // 選べる人物は、いずれかの証言に発言者か言及された人物として登場する、個人と物です（TRAVELING_PERSON_KINDS）
   const persons = useMemo(() => buildPersonLanes(target, TRAVELING_PERSON_KINDS).lanes, [target]);
@@ -91,9 +116,11 @@ export function MapView({ target, filterPanel }: MapViewProps) {
   return (
     // 地図は広げた領域の背面に置き、パネルはその上に重ねる。
     // 地図の側を z-0 で1つの重なりの単位にし、Leaflet の内部の重なり順（ピンや操作ボタン）がパネルより手前に出ないようにする
-    <div className="relative h-full overflow-hidden">
+    <div ref={containerRef} className="relative h-full overflow-hidden">
       <div className="absolute inset-0 z-0 bg-muted">
-        {activeStop && <TrailMap pins={pins} path={path} activeOrder={activeStop.order} onSelectPin={selectPin} />}
+        {activeStop && obscured && (
+          <TrailMap pins={pins} path={path} activeOrder={activeStop.order} onSelectPin={selectPin} obscured={obscured} />
+        )}
       </div>
 
       {/* パネルの外側の余白では、地図をそのまま操作できるよう、クリックを地図へ通す */}
@@ -113,6 +140,7 @@ export function MapView({ target, filterPanel }: MapViewProps) {
         {isPanelOpen && (
           // 画面の狭い端末では、パネルが地図を覆い尽くさないよう、高さを地図の半分までにする
           <section
+            ref={panelRef}
             aria-label="地図の操作"
             className="pointer-events-auto flex max-h-[50%] min-h-0 w-full max-w-md md:max-h-full flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
           >

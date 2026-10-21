@@ -5,6 +5,7 @@
  * 地図の画像（OpenStreetMap）は MapTileLayer.tsx が表示します。
  * ピンは場所ごとに1つで、その場所を述べる証言の順番（例「1・3」）を表示します。選択中の証言のピンは赤で示します。
  * 拡大・縮小のボタンは、地図の左上に重ねる操作のパネル（MapView.tsx）と重ならないよう、右上に置きます。
+ * ピンがそのパネルの裏に隠れないよう、すべてのピンを収める表示と、選択中のピンへ移る処理では、パネルが覆う幅（obscured）を除いた領域を使います。
  * 注意: Leaflet の既定のピン画像はバンドラー経由では読み込めないため、画像を使わない divIcon でピンを描きます。
  */
 'use client';
@@ -15,15 +16,18 @@ import { useEffect } from 'react';
 import { MapContainer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet';
 import type { MapPin } from '@/domain/case-views';
 import type { Coordinates } from '@/domain/types';
+import type { ObscuredInset } from '@/lib/map-obscured-inset';
 import { MAX_ZOOM, MIN_ZOOM } from '@/lib/map-tiles';
 import { MapTileLayer } from '../MapTileLayer';
 
-/** 最初にすべてのピンが収まる範囲を表示するときの余白（px）と、拡大の上限（地点が1つだけの場合に拡大しすぎないため）です。 */
-const FIT_PADDING: [number, number] = [40, 40];
-const FIT_MAX_ZOOM = 16;
+/**
+ * ピンを地図の端に寄せすぎないための余白（px）です。最初にすべてのピンを収めるときと、選択中のピンへ移るときに使います。
+ * パネルが覆う側は、パネルが覆う幅にこの余白を足します。
+ */
+const EDGE_PADDING = 40;
 
-/** 選択中の地点が、表示範囲をこの割合だけ内側に縮めた範囲から外れている場合に、その地点へ地図を移します。 */
-const VISIBLE_AREA_SHRINK_RATIO = -0.1;
+/** 最初にすべてのピンを収めるときの、拡大の上限です（地点が1つだけの場合に拡大しすぎないため）。 */
+const FIT_MAX_ZOOM = 16;
 
 const PATH_STYLE = { color: '#0284c7', weight: 3, opacity: 0.7, dashArray: '6 6' };
 
@@ -42,10 +46,20 @@ type TrailMapProps = {
   activeOrder: number;
   /** ピンが選ばれたときに呼び出します。 */
   onSelectPin: (pin: MapPin) => void;
+  /** 地図に重ねたパネルが地図を覆う幅です。ピンをこの部分に置かないようにします。 */
+  obscured: ObscuredInset;
 };
 
 function toLatLng(coordinates: Coordinates): LatLngTuple {
   return [coordinates.latitude, coordinates.longitude];
+}
+
+/** パネルが覆う部分と端の余白を除いた領域に収めるための、Leaflet の余白の指定を返します。 */
+function paddingOptions(obscured: ObscuredInset) {
+  return {
+    paddingTopLeft: [obscured.left + EDGE_PADDING, obscured.top + EDGE_PADDING] satisfies [number, number],
+    paddingBottomRight: [EDGE_PADDING, EDGE_PADDING] satisfies [number, number],
+  };
 }
 
 /** ピンの見た目を作ります。ラベルの幅が番号の数で変わるため、大きさ0の基準点の中央にラベルを重ねます。 */
@@ -58,13 +72,14 @@ function pinIcon(pin: MapPin, isActive: boolean) {
   });
 }
 
-export default function TrailMap({ pins, path, activeOrder, onSelectPin }: TrailMapProps) {
+export default function TrailMap({ pins, path, activeOrder, onSelectPin, obscured }: TrailMapProps) {
   const activePin = pins.find((pin) => pin.orders.includes(activeOrder));
 
   return (
     <MapContainer
       bounds={latLngBounds(pins.map((pin) => toLatLng(pin.coordinates)))}
-      boundsOptions={{ padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM }}
+      // 注意: bounds は地図を作るときにだけ使われるため、パネルが覆う幅は、地図を作る前に測っておく（MapView）
+      boundsOptions={{ ...paddingOptions(obscured), maxZoom: FIT_MAX_ZOOM }}
       minZoom={MIN_ZOOM}
       maxZoom={MAX_ZOOM}
       zoomControl={false}
@@ -84,18 +99,19 @@ export default function TrailMap({ pins, path, activeOrder, onSelectPin }: Trail
           eventHandlers={{ click: () => onSelectPin(pin) }}
         />
       ))}
-      {activePin && <FocusOnActive coordinates={activePin.coordinates} />}
+      {activePin && <FocusOnActive coordinates={activePin.coordinates} obscured={obscured} />}
     </MapContainer>
   );
 }
 
-/** 選択中の地点が表示範囲の端または外にある場合に、縮尺を変えずにその地点へ地図を移します。 */
-function FocusOnActive({ coordinates }: { coordinates: Coordinates }) {
+/**
+ * 選択中の地点が、パネルが覆う部分と端の余白を除いた領域の外にある場合に、縮尺を変えずに、その領域に入るまで地図を移します。
+ * パネルを開いたり大きさが変わったりして、選択中の地点がパネルの裏に入った場合も移します。
+ */
+function FocusOnActive({ coordinates, obscured }: { coordinates: Coordinates; obscured: ObscuredInset }) {
   const map = useMap();
   useEffect(() => {
-    const point: LatLngTuple = [coordinates.latitude, coordinates.longitude];
-    if (map.getBounds().pad(VISIBLE_AREA_SHRINK_RATIO).contains(point)) return;
-    map.panTo(point);
-  }, [map, coordinates.latitude, coordinates.longitude]);
+    map.panInside([coordinates.latitude, coordinates.longitude], paddingOptions(obscured));
+  }, [map, coordinates.latitude, coordinates.longitude, obscured]);
   return null;
 }
