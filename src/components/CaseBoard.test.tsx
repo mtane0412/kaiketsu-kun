@@ -61,6 +61,16 @@ describe('CaseBoard', () => {
     expect(await screen.findByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
   });
 
+  it('地図の表示では、絞り込みの欄を地図に重ねるパネルの中に置く', async () => {
+    resetMockNavigation('/cases/case-lakeside?tab=map');
+    await renderBoard();
+
+    // 地図を広く見せるため、絞り込みの欄は地図の上ではなく、地図に重ねるパネルに入る
+    const panel = within(await screen.findByRole('region', { name: '地図の操作' }));
+    expect(panel.getByRole('region', { name: '証言の絞り込み' })).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: '証言の絞り込み' })).toHaveLength(1);
+  });
+
   it('「人物の動き」に切り替えると、人物ごとの列に証言を並べた表を表示する', async () => {
     const user = userEvent.setup();
     await renderBoard();

@@ -23,6 +23,8 @@
  * 再マウントされないため、証言を開閉しても、入力中の内容を保ちます。
  * 保存済みのケースの復元は CaseGate が担います。このコンポーネントは CaseGate の中に置いてください。
  * 人物の動きのビューは人物の数だけ列が増えるため、そのタブのときだけボードの幅の上限を外します。
+ * 地図のビューは地図を主役にするため、余白と幅の上限を外し、見出しの下の画面いっぱいに広げます。
+ * 地図の表示では、絞り込みの欄を地図の上の段に置かず、地図に重ねる操作のパネルの中に置きます（MapView）。
  * 論点の詳細は、束ねた証言を6列の表で見比べるため、他の詳細より幅の上限を広げます。
  * useSearchParams・usePathname を使うため、ページでは Suspense の中に置いてください。
  *
@@ -78,6 +80,15 @@ const DETAIL_LABELS: Record<DetailKind, string> = {
 
 /** 絞り込みの欄を置く表示です。証言を並べる表示だけで絞り込みます。 */
 const FILTERABLE_TABS: ReadonlySet<TabKey> = new Set<TabKey>(['timeline', 'graph', 'speaker', 'lanes', 'map']);
+
+/**
+ * 表示ごとの、ボードの大きさです。ここに無い表示は、読みやすい幅（max-w-4xl）に収めます。
+ * 地図の高さは、画面の高さから見出し（header の h-14 = 3.5rem）を引いた残りです。見出しの高さを変える場合は、ここも合わせて変えてください。
+ */
+const BOARD_SIZE_CLASSES: Partial<Record<TabKey, string>> = {
+  lanes: 'max-w-none',
+  map: 'h-[calc(100svh-3.5rem)] max-w-none',
+};
 
 /** 「本文へ移動」のリンクの移り先となる、メインの領域のIDです。 */
 const BOARD_MAIN_ID = 'board-main';
@@ -147,6 +158,18 @@ export function CaseBoard({ children }: CaseBoardProps) {
   const [requestedFilter, setFilter] = useBoardFilter(currentCase.id, activeTab, detailKind === undefined);
   const filterResult = useMemo(() => applyBoardFilter(currentCase, requestedFilter), [currentCase, requestedFilter]);
   const { filter, target: filteredCase } = filterResult;
+  /** 地図の表示を開いているかどうかです。詳細を開いている間は、詳細を読みやすいよう、ふだんの余白に戻します。 */
+  const isMapBoardShown = activeTab === 'map' && detailKind === undefined;
+  const filterPanel = FILTERABLE_TABS.has(activeTab) && (
+    <BoardFilterPanel
+      target={currentCase}
+      filter={filter}
+      result={filterResult}
+      onChange={setFilter}
+      // 地図では操作のパネルの中に置くため、ボードの本文との間の余白（既定）を付けない
+      className={activeTab === 'map' ? '' : undefined}
+    />
+  );
 
   return (
     <SidebarProvider>
@@ -175,23 +198,21 @@ export function CaseBoard({ children }: CaseBoardProps) {
         </header>
 
         {/* 「本文へ移動」のリンクでフォーカスを受け取れるよう、tabIndex を -1 にする */}
-        <div id={BOARD_MAIN_ID} tabIndex={-1} className="flex-1 p-4 outline-none">
+        <div id={BOARD_MAIN_ID} tabIndex={-1} className={`flex-1 outline-none ${isMapBoardShown ? '' : 'p-4'}`}>
           {/* 詳細を開いても再マウントされないよう、ボードは常に同じ位置の要素に描画し、隠すだけにする */}
           <div
             ref={boardRef}
-            className={`mx-auto min-w-0 ${activeTab === 'lanes' ? 'max-w-none' : 'max-w-4xl'}`}
+            className={`mx-auto min-w-0 ${BOARD_SIZE_CLASSES[activeTab] ?? 'max-w-4xl'}`}
             hidden={detailKind !== undefined}
           >
-            {FILTERABLE_TABS.has(activeTab) && (
-              <BoardFilterPanel target={currentCase} filter={filter} result={filterResult} onChange={setFilter} />
-            )}
+            {activeTab !== 'map' && filterPanel}
             {activeTab === 'timeline' && (
               <TimelineView target={currentCase} shownClaimIds={filterResult.shownClaimIds} />
             )}
             {activeTab === 'graph' && <GraphView target={filteredCase} dropPersonsWithoutClaims={isBoardFilterActive(filter)} />}
             {activeTab === 'speaker' && <SpeakerView target={filteredCase} />}
             {activeTab === 'lanes' && <PersonLaneView target={filteredCase} axisRange={filter.when} />}
-            {activeTab === 'map' && <MapView target={filteredCase} />}
+            {activeTab === 'map' && <MapView target={filteredCase} filterPanel={filterPanel} />}
             {activeTab === 'hypotheses' && <HypothesisListView target={currentCase} />}
             {activeTab === 'disputes' && <DisputeListView target={currentCase} />}
             {activeTab === 'tasks' && <TaskListView target={currentCase} />}

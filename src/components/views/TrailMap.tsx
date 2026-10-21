@@ -4,6 +4,7 @@
  * Leaflet は window を前提にしているため、この部品は next/dynamic の ssr: false で読み込みます（MapView.tsx）。
  * 地図の画像（OpenStreetMap）は MapTileLayer.tsx が表示します。
  * ピンは場所ごとに1つで、その場所を述べる証言の順番（例「1・3」）を表示します。選択中の証言のピンは赤で示します。
+ * 拡大・縮小のボタンは、地図の左上に重ねる操作のパネル（MapView.tsx）と重ならないよう、右上に置きます。
  * 注意: Leaflet の既定のピン画像はバンドラー経由では読み込めないため、画像を使わない divIcon でピンを描きます。
  */
 'use client';
@@ -11,7 +12,7 @@
 import 'leaflet/dist/leaflet.css';
 import { divIcon, latLngBounds, type LatLngTuple } from 'leaflet';
 import { useEffect } from 'react';
-import { MapContainer, Marker, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet';
 import type { MapPin } from '@/domain/case-views';
 import type { Coordinates } from '@/domain/types';
 import { MAX_ZOOM, MIN_ZOOM } from '@/lib/map-tiles';
@@ -66,8 +67,10 @@ export default function TrailMap({ pins, path, activeOrder, onSelectPin }: Trail
       boundsOptions={{ padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM }}
       minZoom={MIN_ZOOM}
       maxZoom={MAX_ZOOM}
+      zoomControl={false}
       className="h-full w-full"
     >
+      <ZoomControl position="topright" />
       <MapTileLayer />
       <Polyline positions={path.map(toLatLng)} pathOptions={PATH_STYLE} />
       {pins.map((pin) => (

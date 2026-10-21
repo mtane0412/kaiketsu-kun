@@ -119,6 +119,29 @@ describe('MapView', () => {
     expect(screen.getByText('1 / 3 湖畔の別荘')).toBeInTheDocument();
   });
 
+  it('受け取った絞り込みの欄を、地図に重ねるパネルの中に表示する', () => {
+    render(<MapView target={caseWithCoordinates} filterPanel={<section aria-label="証言の絞り込み" />} />);
+
+    const panel = within(screen.getByRole('region', { name: '地図の操作' }));
+    expect(panel.getByRole('region', { name: '証言の絞り込み' })).toBeInTheDocument();
+    expect(panel.getByLabelText('移動を確かめる人物')).toBeInTheDocument();
+    expect(panel.getByRole('list', { name: '選択中の証言' })).toBeInTheDocument();
+  });
+
+  it('「パネルを隠す」で地図に重ねたパネルを隠し、「パネルを表示」で戻す', async () => {
+    const user = userEvent.setup();
+    render(<MapView target={caseWithCoordinates} />);
+
+    await user.click(screen.getByRole('button', { name: 'パネルを隠す' }));
+    // パネルを隠している間も、地図は表示したままにする
+    expect(screen.queryByRole('region', { name: '地図の操作' })).not.toBeInTheDocument();
+    expect(screen.getByText('地図で選択中の番号: 1')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'パネルを表示' }));
+    expect(screen.getByRole('region', { name: '地図の操作' })).toBeInTheDocument();
+    expect(screen.getByText('1 / 3 湖畔の別荘')).toBeInTheDocument();
+  });
+
   it('地図に表示できない証言を、理由ごとに分けて一覧にする', () => {
     const caseWithoutIntersectionCoordinates: Case = {
       ...caseWithCoordinates,
