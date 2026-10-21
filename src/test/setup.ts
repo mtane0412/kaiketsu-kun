@@ -6,6 +6,7 @@
  * jsdom には scrollIntoView が無いため、何もしない代役を用意します（開いている証言のカードへのスクロールで使用します）。
  * jsdom には matchMedia も無いため、常に「一致しない」を返す代役を用意します。
  * サイドバー（src/components/ui/sidebar.tsx）が画面幅の判定に使うため、テストでは常に広い画面として扱われます。
+ * jsdom には ResizeObserver も無いため、大きさの変化を通知しない代役を用意します（地図に重ねたパネルの大きさの計測で使用します）。
  * サーバー側の処理のテスト（先頭に `// @vitest-environment node` を書いたもの）には DOM が無いため、DOM の準備をしません。
  */
 import '@testing-library/jest-dom/vitest';
@@ -32,6 +33,12 @@ if (hasDom) {
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
   }));
+
+  globalThis.ResizeObserver = class {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  };
 
   // fake-indexeddb は最初の読み書きに時間がかかるため、テストの時間に含めないよう、先に1回読み書きしておく
   beforeAll(async () => {

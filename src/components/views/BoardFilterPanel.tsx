@@ -50,6 +50,8 @@ type BoardFilterPanelProps = {
   /** いまの条件で絞り込んだ結果です。件数を示すために使います。 */
   result: BoardFilterResult;
   onChange: (next: BoardFilter) => void;
+  /** 欄の外側の余白です。既定はボードの本文との間の余白で、地図に重ねるパネルの中に置く場合などに差し替えます。 */
+  className?: string;
 };
 
 /** 選択欄の値を、IDか「指定しない」に直します。 */
@@ -250,13 +252,13 @@ function FilterForm({ target, filter, id, onSubmit }: FilterFormProps) {
   );
 }
 
-export function BoardFilterPanel({ target, filter, result, onChange }: BoardFilterPanelProps) {
+export function BoardFilterPanel({ target, filter, result, onChange, className = 'mb-4' }: BoardFilterPanelProps) {
   const formId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const isActive = isBoardFilterActive(filter);
 
   return (
-    <section aria-label="証言の絞り込み" className="mb-4 rounded-lg border px-3 py-2 text-sm">
+    <section aria-label="証言の絞り込み" className={`${className} rounded-lg border px-3 py-2 text-sm`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button
           type="button"
