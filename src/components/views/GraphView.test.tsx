@@ -3,13 +3,28 @@
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
+import { requestGraphLayout } from '@/lib/graph-layout-request';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { GraphView } from './GraphView';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+// jsdom には Web Worker が無いため、配置の計算を Worker に頼む処理を、同じ計算をその場で行う処理に差し替える
+vi.mock('@/lib/graph-layout-request', async () => {
+  const { layoutGraph } = await import('@/lib/graph-layout');
+  return { requestGraphLayout: vi.fn(async (graph: Parameters<typeof layoutGraph>[0]) => layoutGraph(graph)) };
+});
+
+/** グラフビューを描画し、配置の計算が終わって図が現れるまで待ちます。 */
+async function renderGraph(ui: ReactElement) {
+  const result = render(ui);
+  await screen.findByRole('group', { name: '人物と証言のつながり' });
+  return result;
+}
 
 beforeEach(() => {
   // ノードのリンク先の組み立てにケースのIDをURLから読み取るため、ケースのボードのURLから始める
@@ -35,41 +50,41 @@ function giveDiagramSize() {
 }
 
 describe('GraphView', () => {
-  it('人物のノードを、その人物の詳細ページへのリンクとして描く', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('人物のノードを、その人物の詳細ページへのリンクとして描く', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     const caretaker = screen.getByRole('link', { name: '人物: 管理人' });
     expect(caretaker).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/persons/person-caretaker?tab=graph`);
   });
 
-  it('証言のノードを、その証言の詳細ページへのリンクとして描く', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('証言のノードを、その証言の詳細ページへのリンクとして描く', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     const caretakerClaim = screen.getByRole('link', { name: /^証言: .*見回りをしたとき/ });
     expect(caretakerClaim).toHaveAttribute('href', `/cases/${sampleFictionalCase.id}/claims/claim-caretaker?tab=graph`);
   });
 
-  it('証言につながらない人物を除く指定をすると、残った証言に関わる人物だけを描く', () => {
+  it('証言につながらない人物を除く指定をすると、残った証言に関わる人物だけを描く', async () => {
     // 前提: ボードの絞り込みで、管理人の証言だけが残った。管理人の証言は、管理人が述べ、別荘の持ち主に言及する
     const onlyCaretakerClaim: Case = {
       ...sampleFictionalCase,
       claims: sampleFictionalCase.claims.filter((claim) => claim.id === 'claim-caretaker'),
     };
-    render(<GraphView target={onlyCaretakerClaim} dropPersonsWithoutClaims />);
+    await renderGraph(<GraphView target={onlyCaretakerClaim} dropPersonsWithoutClaims />);
 
     expect(screen.getByRole('link', { name: '人物: 管理人' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '人物: 隣家の住人' })).not.toBeInTheDocument();
   });
 
-  it('ユーザーの推測のノードは、開く先の詳細が無いためリンクにしない', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('ユーザーの推測のノードは、開く先の詳細が無いためリンクにしない', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     expect(screen.getByText('ユーザーの推測')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'ユーザーの推測' })).not.toBeInTheDocument();
   });
 
-  it('エッジの種類の読み方を、凡例で示す', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('エッジの種類の読み方を、凡例で示す', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     const legend = screen.getByRole('list', { name: '線の見方' });
     expect(within(legend).getByText('発言')).toBeInTheDocument();
@@ -77,14 +92,14 @@ describe('GraphView', () => {
     expect(within(legend).getByText('言及')).toBeInTheDocument();
   });
 
-  it('人物ではない種別のノードは、読み上げの名前に種別を付ける', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('人物ではない種別のノードは、読み上げの名前に種別を付ける', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     expect(screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '組織: 県警' })).toBeInTheDocument();
   });
 
-  it('画像を登録した人物ではない種別のノードは、画像の上に種別の色の縁取りを描く', () => {
+  it('画像を登録した人物ではない種別のノードは、画像の上に種別の色の縁取りを描く', async () => {
     // 前提: 防犯カメラに画像を登録すると、丸の塗り（種別の色）は画像に覆われて見えなくなる
     const caseData: Case = {
       ...sampleFictionalCase,
@@ -92,7 +107,7 @@ describe('GraphView', () => {
         person.id === 'person-road-camera' ? { ...person, imageDataUrl: 'data:image/jpeg;base64,AAAA' } : person
       ),
     };
-    render(<GraphView target={caseData} />);
+    await renderGraph(<GraphView target={caseData} />);
 
     const securityCamera = screen.getByRole('link', { name: '記録・媒体: 県道の防犯カメラ' });
     expect(securityCamera.querySelector('[data-person-kind-outline="record"]')).not.toBeNull();
@@ -103,7 +118,7 @@ describe('GraphView', () => {
 
   it('人物の種別のチェックを外すと、その種別のノードを描かない', async () => {
     const user = userEvent.setup();
-    render(<GraphView target={sampleFictionalCase} />);
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     const kindFilter = screen.getByRole('group', { name: '表示する人物の種別' });
     await user.click(within(kindFilter).getByRole('checkbox', { name: '記録・媒体' }));
@@ -114,7 +129,7 @@ describe('GraphView', () => {
     expect(screen.getByRole('link', { name: '組織: 県警' })).toBeInTheDocument();
   });
 
-  it('人物も証言も登録されていないケースでは、書き足しを促す案内を出す', () => {
+  it('人物も証言も登録されていないケースでは、書き足しを促す案内を出す', async () => {
     const emptyCase: Case = { ...sampleFictionalCase, persons: [], places: [], claims: [], relationships: [], timelineOrder: [] };
 
     render(<GraphView target={emptyCase} />);
@@ -125,9 +140,43 @@ describe('GraphView', () => {
     expect(screen.queryByRole('group', { name: '人物と証言のつながり' })).not.toBeInTheDocument();
   });
 
-  it('図全体に、何を表した図かが分かる名前を付ける', () => {
-    // 前提: 図の中身（SVG）は読み上げでたどれないため、図そのものに名前を付け、ノードのリンクで中身をたどれるようにする
+  it('配置を計算している間は、計算中であることを示し、図を描かない', () => {
+    // 前提: 証言が多いケースでは、配置の計算（Web Worker）に時間がかかり、まだ終わっていない
+    vi.mocked(requestGraphLayout).mockReturnValueOnce(new Promise(() => {}));
+
     render(<GraphView target={sampleFictionalCase} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('人物と証言の配置を計算しています…');
+    expect(screen.queryByRole('group', { name: '人物と証言のつながり' })).not.toBeInTheDocument();
+  });
+
+  it('ケースが変わって配置を計算し直している間は、前の図を残したまま、計算し直していることを示す', async () => {
+    // 前提: 図を拡大して見ている。そこへ証言の保存などでケースが変わり、配置の計算（Web Worker）がまだ終わっていない
+    const user = userEvent.setup();
+    const { rerender } = await renderGraph(<GraphView target={sampleFictionalCase} />);
+    await user.click(screen.getByRole('button', { name: '拡大' }));
+    const zoomedViewBox = screen.getByRole('group', { name: '人物と証言のつながり' }).getAttribute('viewBox');
+    vi.mocked(requestGraphLayout).mockReturnValueOnce(new Promise(() => {}));
+
+    rerender(<GraphView target={{ ...sampleFictionalCase, relationships: [] }} />);
+
+    // 検証: 図は消さず、拡大した表示範囲のまま残す
+    expect(screen.getByRole('status')).toHaveTextContent('人物と証言の配置を計算し直しています…');
+    expect(screen.getByRole('group', { name: '人物と証言のつながり' })).toHaveAttribute('viewBox', zoomedViewBox);
+  });
+
+  it('配置の計算に失敗した場合は、図を描かずに、失敗したことと理由を示す', async () => {
+    vi.mocked(requestGraphLayout).mockRejectedValueOnce(new Error('グラフの配置を計算できませんでした: ノードの座標が決まりませんでした'));
+
+    render(<GraphView target={sampleFictionalCase} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('グラフの配置を計算できませんでした: ノードの座標が決まりませんでした');
+    expect(screen.queryByRole('group', { name: '人物と証言のつながり' })).not.toBeInTheDocument();
+  });
+
+  it('図全体に、何を表した図かが分かる名前を付ける', async () => {
+    // 前提: 図の中身（SVG）は読み上げでたどれないため、図そのものに名前を付け、ノードのリンクで中身をたどれるようにする
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     expect(screen.getByRole('group', { name: '人物と証言のつながり' })).toBeInTheDocument();
   });
@@ -173,31 +222,31 @@ describe('GraphView（人物どうしの関係）', () => {
     return { x: Number(match[1]), y: Number(match[2]) };
   }
 
-  it('登録された関係を、人物と人物を結ぶ線として描く', () => {
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+  it('登録された関係を、人物と人物を結ぶ線として描く', async () => {
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     expect(getLine(container, 'relates')).toHaveLength(2);
   });
 
-  it('片方向の関係には矢印を付け、双方向の関係には付けない', () => {
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+  it('片方向の関係には矢印を付け、双方向の関係には付けない', async () => {
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     const [employer, acquainted] = getLine(container, 'relates');
     expect(employer?.getAttribute('marker-end')).toMatch(/^url\(#/);
     expect(acquainted?.getAttribute('marker-end')).toBeNull();
   });
 
-  it('根拠の証言が登録されていない関係を、根拠のある関係とは違う線で描く', () => {
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+  it('根拠の証言が登録されていない関係を、根拠のある関係とは違う線で描く', async () => {
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     const [employer, acquainted] = getLine(container, 'relates');
     expect(employer?.getAttribute('stroke-dasharray')).toBeNull();
     expect(acquainted?.getAttribute('stroke-dasharray')).not.toBeNull();
   });
 
-  it('同じ2人の間に複数の関係があっても、線が重ならないよう、関係は弧で描く', () => {
+  it('同じ2人の間に複数の関係があっても、線が重ならないよう、関係は弧で描く', async () => {
     // 前提: サンプルのケースは、別荘の持ち主と管理人の間に「雇用主」と「金銭トラブル？」の2件の関係を持つ
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     const relationshipLine = getLine(container, 'relates');
     expect(relationshipLine).toHaveLength(2);
@@ -249,31 +298,31 @@ describe('GraphView（人物どうしの関係）', () => {
     return Math.min(...distance);
   }
 
-  it('矢印を付けない双方向の関係は、線をノードの縁まで届かせる', () => {
+  it('矢印を付けない双方向の関係は、線をノードの縁まで届かせる', async () => {
     // 前提: 人物のノードの半径は26px。矢印のぶんの余白は、矢印を付ける線にだけ空ける
-    const { container } = render(<GraphView target={buildCaseWithOneRelationship(false)} />);
+    const { container } = await renderGraph(<GraphView target={buildCaseWithOneRelationship(false)} />);
 
     const [relationshipLine] = getLine(container, 'relates');
     expect(measureEndpointToNodeDistance(container, relationshipLine!)).toBeCloseTo(26, 5);
   });
 
-  it('矢印を付ける片方向の関係は、矢印の先端がノードの縁に触れる位置で線を止める', () => {
-    const { container } = render(<GraphView target={buildCaseWithOneRelationship(true)} />);
+  it('矢印を付ける片方向の関係は、矢印の先端がノードの縁に触れる位置で線を止める', async () => {
+    const { container } = await renderGraph(<GraphView target={buildCaseWithOneRelationship(true)} />);
 
     const [relationshipLine] = getLine(container, 'relates');
     expect(measureEndpointToNodeDistance(container, relationshipLine!)).toBeCloseTo(30, 5);
   });
 
-  it('関係の線に、関係の名前と根拠の有無を、読み上げとマウスの重ねで伝える名前を付ける', () => {
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+  it('関係の線に、関係の名前と根拠の有無を、読み上げとマウスの重ねで伝える名前を付ける', async () => {
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     const [employer, acquainted] = getLine(container, 'relates');
     expect(employer?.querySelector('title')?.textContent).toBe('雇用主');
     expect(acquainted?.querySelector('title')?.textContent).toBe('面識がある（根拠未登録）');
   });
 
-  it('関係の線の読み方を、凡例で示す', () => {
-    render(<GraphView target={caseWithTwoRelationships} />);
+  it('関係の線の読み方を、凡例で示す', async () => {
+    await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     const legend = screen.getByRole('list', { name: '線の見方' });
     expect(within(legend).getByText('関係')).toBeInTheDocument();
@@ -282,7 +331,7 @@ describe('GraphView（人物どうしの関係）', () => {
 
   it('「関係を表示」を外すと、関係の線と、その凡例を消す', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     await user.click(screen.getByRole('checkbox', { name: '関係を表示' }));
 
@@ -302,7 +351,7 @@ describe('GraphView（人物どうしの関係）', () => {
         { ...caseWithTwoRelationships.relationships[1]!, until: '1998-05' },
       ],
     };
-    const { container } = render(<GraphView target={caseWithPeriods} />);
+    const { container } = await renderGraph(<GraphView target={caseWithPeriods} />);
 
     await user.type(screen.getByLabelText('時点'), '1998年8月12日');
 
@@ -317,7 +366,7 @@ describe('GraphView（人物どうしの関係）', () => {
       ...caseWithTwoRelationships,
       relationships: [caseWithTwoRelationships.relationships[0]!, { ...caseWithTwoRelationships.relationships[1]!, until: '1998-05' }],
     };
-    const { container } = render(<GraphView target={caseWithPeriods} />);
+    const { container } = await renderGraph(<GraphView target={caseWithPeriods} />);
 
     await user.type(screen.getByLabelText('時点'), '1998-08-12');
     await user.clear(screen.getByLabelText('時点'));
@@ -327,7 +376,7 @@ describe('GraphView（人物どうしの関係）', () => {
 
   it('解釈できない時点を入力すると、その旨を示し、関係の線は絞り込まない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
 
     await user.type(screen.getByLabelText('時点'), '事件の日');
 
@@ -337,7 +386,7 @@ describe('GraphView（人物どうしの関係）', () => {
 
   it('関係を消しても、ノードの配置は変えない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={caseWithTwoRelationships} />);
+    const { container } = await renderGraph(<GraphView target={caseWithTwoRelationships} />);
     const readLayout = () =>
       Array.from(container.querySelectorAll<SVGCircleElement>('circle')).map((circle) => circle.getAttribute('cx'));
 
@@ -379,7 +428,7 @@ describe('GraphView（拡大縮小と移動）', () => {
 
   it('「拡大」を押すと、表示範囲が狭くなる', async () => {
     const user = userEvent.setup();
-    render(<GraphView target={sampleFictionalCase} />);
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeZoomIn = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
@@ -389,7 +438,7 @@ describe('GraphView（拡大縮小と移動）', () => {
 
   it('「縮小」を押すと、表示範囲が広くなる', async () => {
     const user = userEvent.setup();
-    render(<GraphView target={sampleFictionalCase} />);
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeZoomOut = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '縮小' }));
@@ -399,7 +448,7 @@ describe('GraphView（拡大縮小と移動）', () => {
 
   it('拡大しても、ノードの配置は計算し直さない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const positionBeforeZoom = readNodePosition(container);
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
@@ -409,7 +458,7 @@ describe('GraphView（拡大縮小と移動）', () => {
 
   it('いまの倍率を数字で示す', async () => {
     const user = userEvent.setup();
-    render(<GraphView target={sampleFictionalCase} />);
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     expect(screen.getByText('100%')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
@@ -419,7 +468,7 @@ describe('GraphView（拡大縮小と移動）', () => {
 
   it('「表示を戻す」を押すと、図の全体が収まる表示範囲に戻す', async () => {
     const user = userEvent.setup();
-    render(<GraphView target={sampleFictionalCase} />);
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const originalViewBox = readViewBox();
 
     await user.click(screen.getByRole('button', { name: '拡大' }));
@@ -428,8 +477,8 @@ describe('GraphView（拡大縮小と移動）', () => {
     expect(readViewBox()).toEqual(originalViewBox);
   });
 
-  it('マウスホイールを上に回すと拡大する', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('マウスホイールを上に回すと拡大する', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeZoomIn = readViewBox();
 
     fireEvent.wheel(getDiagram(), { deltaY: -100, clientX: 300, clientY: 150 });
@@ -437,8 +486,8 @@ describe('GraphView（拡大縮小と移動）', () => {
     expect(readViewBox().width).toBeLessThan(beforeZoomIn.width);
   });
 
-  it('マウスホイールを下に回すと縮小する', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('マウスホイールを下に回すと縮小する', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeZoomOut = readViewBox();
 
     fireEvent.wheel(getDiagram(), { deltaY: 100, clientX: 300, clientY: 150 });
@@ -446,8 +495,8 @@ describe('GraphView（拡大縮小と移動）', () => {
     expect(readViewBox().width).toBeGreaterThan(beforeZoomOut.width);
   });
 
-  it('図の背景をドラッグすると、表示範囲が動く', () => {
-    render(<GraphView target={sampleFictionalCase} />);
+  it('図の背景をドラッグすると、表示範囲が動く', async () => {
+    await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeMove = readViewBox();
 
     fireEvent.pointerDown(getDiagram(), { clientX: 300, clientY: 150, button: 0, pointerId: 1 });
@@ -489,8 +538,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     vi.restoreAllMocks();
   });
 
-  it('ノードをドラッグすると、そのノードが動く', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('ノードをドラッグすると、そのノードが動く', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
     drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
@@ -500,8 +549,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     expect(afterDrag.y).toBeGreaterThan(beforeDrag.y);
   });
 
-  it('ノードをドラッグしても、他のノードは動かさない', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('ノードをドラッグしても、他のノードは動かさない', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeDrag = readCircleCenter(container, 'person:person-owner');
 
     drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
@@ -527,8 +576,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     return prevented;
   }
 
-  it('ノードをドラッグしたときは、そのノードの詳細ページを開かない', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('ノードをドラッグしたときは、そのノードの詳細ページを開かない', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const node = getNode(container, 'person:person-caretaker');
 
     drag(node, { x: 60, y: 30 });
@@ -537,8 +586,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     expect(isClickDefaultPrevented(node, { detail: 1 })).toBe(true);
   });
 
-  it('動かさずに押した場合は、詳細ページへのリンクをそのまま働かせる', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('動かさずに押した場合は、詳細ページへのリンクをそのまま働かせる', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const node = getNode(container, 'person:person-caretaker');
 
     fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
@@ -547,9 +596,9 @@ describe('GraphView（ノードを手で動かす）', () => {
     expect(isClickDefaultPrevented(node, { detail: 1 })).toBe(false);
   });
 
-  it('ドラッグの後でも、キーボードで開いたリンクは打ち消さない', () => {
+  it('ドラッグの後でも、キーボードで開いたリンクは打ち消さない', async () => {
     // 前提: キーボード（Enter・Space）で押したときのクリックは、マウスの押し下げを伴わないため detail が 0 になる
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
 
@@ -557,8 +606,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     expect(isClickDefaultPrevented(otherNode, { detail: 0 })).toBe(false);
   });
 
-  it('2本目の指で触れても、1本目の指のドラッグを乱さない', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('2本目の指で触れても、1本目の指のドラッグを乱さない', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const node = getNode(container, 'person:person-caretaker');
 
     fireEvent.pointerDown(node, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
@@ -569,8 +618,8 @@ describe('GraphView（ノードを手で動かす）', () => {
     expect(readCircleCenter(container, 'person:person-caretaker')).toEqual(positionRightAfterGrab);
   });
 
-  it('2本目の指を離しても、1本目の指のドラッグは続く', () => {
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+  it('2本目の指を離しても、1本目の指のドラッグは続く', async () => {
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const node = getNode(container, 'person:person-caretaker');
     const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
@@ -583,7 +632,7 @@ describe('GraphView（ノードを手で動かす）', () => {
 
   it('「表示を戻す」を押すと、手で動かしたノードももとの位置に戻す', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeDrag = readCircleCenter(container, 'person:person-caretaker');
 
     drag(getNode(container, 'person:person-caretaker'), { x: 60, y: 30 });
@@ -603,7 +652,7 @@ describe('GraphView（つながりの強調）', () => {
 
   it('ノードにマウスを重ねると、つながっていないノードを薄くする', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
 
@@ -614,7 +663,7 @@ describe('GraphView（つながりの強調）', () => {
 
   it('マウスを重ねたノードにつながる線は、薄くしない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     await user.hover(container.querySelector('[data-node-id="person:person-caretaker"]')!);
 
@@ -624,7 +673,7 @@ describe('GraphView（つながりの強調）', () => {
 
   it('マウスを離すと、薄い表示を元に戻す', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const node = container.querySelector<SVGElement>('[data-node-id="person:person-caretaker"]')!;
 
     await user.hover(node);
@@ -637,7 +686,7 @@ describe('GraphView（つながりの強調）', () => {
 describe('GraphView（表示するものの絞り込み）', () => {
   it('「証言を表示」を外すと、証言のノードを描かない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     expect(container.querySelector('[data-node-id^="claim:"]')).not.toBeNull();
 
     await user.click(screen.getByRole('checkbox', { name: '証言を表示' }));
@@ -648,7 +697,7 @@ describe('GraphView（表示するものの絞り込み）', () => {
 
   it('「人物を表示」を外すと、人物のノードを描かない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
 
     await user.click(screen.getByRole('checkbox', { name: '人物を表示' }));
 
@@ -658,7 +707,7 @@ describe('GraphView（表示するものの絞り込み）', () => {
 
   it('絞り込んでも、残ったノードの位置は変えない', async () => {
     const user = userEvent.setup();
-    const { container } = render(<GraphView target={sampleFictionalCase} />);
+    const { container } = await renderGraph(<GraphView target={sampleFictionalCase} />);
     const beforeFilter = container.querySelector('[data-node-id="person:person-caretaker"] circle')?.getAttribute('cx');
 
     await user.click(screen.getByRole('checkbox', { name: '証言を表示' }));
