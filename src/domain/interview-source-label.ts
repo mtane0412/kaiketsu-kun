@@ -9,6 +9,7 @@
  * ここに置かないと循環して import することになります）。
  * 注意: 参照先の人物が見つからない場合は、データ破損として例外を投げます（case-views.ts と同じ扱いです）。
  */
+import { entityById } from './entity-index';
 import { INTERVIEW_GRADE_LABELS } from './labels';
 import { formatTimeRef } from './time-ref';
 import type { Case, Id, Interview, Person } from './types';
@@ -21,7 +22,7 @@ export const REPRINT_LABEL = '転載';
 
 /** IDから人物を引きます。見つからない場合はデータ破損として例外を投げます。 */
 function personOf(target: Case, personId: Id): Person {
-  const person = target.persons.find((candidate) => candidate.id === personId);
+  const person = entityById(target.persons).get(personId);
   if (!person) throw new Error(`資料が存在しない人物を参照しています: ${personId}`);
   return person;
 }

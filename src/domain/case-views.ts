@@ -1,7 +1,9 @@
 /**
  * ケースデータから時系列ビュー・証言者別ビュー・エンティティ同士の関連を導出するロジック
  *
- * ビューは一次データ（Case）から毎回計算する派生物であり、保存しません。
+ * ビューは一次データ（Case）から計算する派生物であり、保存しません。
+ * 時系列ビューだけは、同じケースのオブジェクトに対しては計算した結果を使い回します（buildTimeline）。多くの画面が同じケースの時系列ビューを求めるためです。
+ * 人物・場所・資料は ID の索引（src/domain/entity-index.ts）で引きます。証言1件ごとに一覧を先頭から探すと、時間が件数の2乗で増えるためです。
  * 時系列ボードには証言だけを並べます。ボード上の位置はケースの並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
  * 人物の動きビューは、時系列の並び順の行 × 人物の列に、各人物が発言・言及された証言を配置します（buildPersonLanes）。
@@ -15,6 +17,7 @@
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { interviewIdsOf, viaChainsOf, viaPersonIdsOf } from './claim-sources';
+import { entityById } from './entity-index';
 import { formatInterviewSourceLabel } from './interview-source-label';
 import { parseContent, resolveContent, type ContentSegment, type MentionKind } from './mention';
 import { personIconText } from './person-icon';
@@ -82,7 +85,7 @@ export const USER_SPEAKER_LABEL = 'ユーザーの推測';
 
 /** IDで要素を探し、見つからない場合は例外を投げます。 */
 function findOrThrow<T extends { id: Id }>(items: T[], id: Id, entityName: string): T {
-  const found = items.find((item) => item.id === id);
+  const found = entityById(items).get(id);
   if (!found) {
     throw new Error(`${entityName}が見つかりません: ${id}`);
   }
@@ -184,18 +187,27 @@ export function claimLabelOf(view: ClaimView): string {
  */
 const LEADING_DATE_PARTICLES = /^\s*(?:ごろ|頃)?(?:には|に|、|。|,|，|\s)*/;
 
+/** ケースごとに組み立てた時系列ビューです。ケースが使われなくなれば、ビューも一緒に破棄されます。 */
+const timelines = new WeakMap<Case, Timeline>();
+
 /**
- * 証言を、時系列ボードの並び順（resolveTimelineOrder）で並べます。
- * 証言者別ビューの中の順番を、時系列ビューで見える順番と一致させるためです。
+ * 時系列ビューを組み立てます。証言を、ケースの並び順（resolveTimelineOrder）のとおりに並べます。
+ *
+ * サイドバー・ボード・詳細などが同じケースの時系列ビューをそれぞれ求めるため、同じケースに対しては、
+ * 2回目以降は組み立て直さずに同じビューを返します。
+ * 注意: ケースは変更のたびに新しいオブジェクトへ置き換える前提です（src/stores/useCaseStore.ts）。
+ * ケースをその場で書き換えると、古いビューを返してしまうため、書き換えないでください。返したビューも書き換えないでください。
  */
-function sortByTimelineOrder(target: Case, claims: ClaimView[]): ClaimView[] {
-  const indexByKey = new Map(resolveTimelineOrder(target).map((key, index) => [key, index]));
-  const indexOf = (view: ClaimView) => indexByKey.get(timelineKeyOf(view.claim.id)) ?? Number.MAX_SAFE_INTEGER;
-  return [...claims].sort((a, b) => indexOf(a) - indexOf(b));
+export function buildTimeline(target: Case): Timeline {
+  const cached = timelines.get(target);
+  if (cached !== undefined) return cached;
+  const timeline = composeTimeline(target);
+  timelines.set(target, timeline);
+  return timeline;
 }
 
-/** 時系列ビューを組み立てます。証言を、ケースの並び順（resolveTimelineOrder）のとおりに並べます。 */
-export function buildTimeline(target: Case): Timeline {
+/** 時系列ビューを、使い回さずに組み立てます。 */
+function composeTimeline(target: Case): Timeline {
   const itemByKey = new Map(
     target.claims.map((claim): [TimelineKey, TimelineItem] => {
       const key = timelineKeyOf(claim.id);
@@ -213,7 +225,21 @@ export function buildTimeline(target: Case): Timeline {
  * グループの中の証言は、時系列ボードの並び順で並べます。
  */
 export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
-  const claimViews = target.claims.map((claim) => toClaimView(target, claim));
+  // 時系列ビューの順に1回だけたどって発言者ごとに振り分けるため、各グループの中は時系列ボードの並び順になる
+  const claimsByPersonId = new Map<Id, ClaimView[]>();
+  const userClaims: ClaimView[] = [];
+  for (const { view } of buildTimeline(target).items) {
+    if (view.claim.speaker.kind === 'user') {
+      userClaims.push(view);
+      continue;
+    }
+    // 同じ人物が発言者に重ねて書かれていても、グループには1回だけ入れる
+    for (const personId of new Set(view.claim.speaker.personIds)) {
+      const claims = claimsByPersonId.get(personId);
+      if (claims === undefined) claimsByPersonId.set(personId, [view]);
+      else claims.push(view);
+    }
+  }
 
   const personGroups: SpeakerGroup[] = target.persons.map((person) => ({
     key: `person:${person.id}`,
@@ -221,21 +247,17 @@ export function groupClaimsBySpeaker(target: Case): SpeakerGroup[] {
     label: person.name,
     imageDataUrl: person.imageDataUrl,
     iconText: personIconText(person),
-    claims: claimViews.filter(
-      (view) => view.claim.speaker.kind === 'person' && view.claim.speaker.personIds.includes(person.id)
-    ),
+    claims: claimsByPersonId.get(person.id) ?? [],
   }));
 
   const userGroup: SpeakerGroup = {
     key: 'user',
     kind: 'user',
     label: USER_SPEAKER_LABEL,
-    claims: claimViews.filter((view) => view.claim.speaker.kind === 'user'),
+    claims: userClaims,
   };
 
-  return [...personGroups, userGroup]
-    .filter((group) => group.claims.length > 0)
-    .map((group) => ({ ...group, claims: sortByTimelineOrder(target, group.claims) }));
+  return [...personGroups, userGroup].filter((group) => group.claims.length > 0);
 }
 
 /** 人物の動きビューで、証言がその人物にとって何であるかです。speaker は本人の発言、mentioned は本文で言及されたことを表します。 */
