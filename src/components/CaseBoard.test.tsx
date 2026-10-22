@@ -6,7 +6,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import { saveCase } from '@/lib/case-storage';
 import { mockRouter, resetMockNavigation } from '@/test/mock-navigation';
@@ -14,6 +14,24 @@ import { CaseBoard } from './CaseBoard';
 import { CaseGate } from './CaseGate';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
+
+// jsdom には Web Worker が無いため、グラフの配置の計算を Worker に頼む処理を、同じ計算をその場で行う処理に差し替える
+vi.mock('@/lib/graph-layout-request', async () => {
+  const { layoutGraph } = await import('@/lib/graph-layout');
+  return { requestGraphLayout: async (graph: Parameters<typeof layoutGraph>[0]) => layoutGraph(graph) };
+});
+
+/** テストで与える、地図に重ねるパネルの高さ（px）です。 */
+const MAP_PANEL_HEIGHT = 800;
+
+/**
+ * 地図に重ねるパネルに、高さを与えます。テストが終わると元に戻します。
+ * jsdom の要素の高さは 0 です。地図に表示できない証言の一覧は、パネルに見える分の証言だけを描画するため、高さが無いと何も描画しません。
+ */
+function giveMapPanelHeight() {
+  const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(MAP_PANEL_HEIGHT);
+  onTestFinished(() => clientHeight.mockRestore());
+}
 
 /** サンプルのケースを保存済みの状態にして、ボードを描画します。detail は、ボードの横に並べる証言の詳細です。 */
 async function renderBoard(detail?: ReactNode) {
@@ -56,6 +74,7 @@ describe('CaseBoard', () => {
 
   it('URLに tab=map を指定して開くと、地図の表示を最初に表示する', async () => {
     resetMockNavigation('/cases/case-lakeside?tab=map');
+    giveMapPanelHeight();
     await renderBoard();
 
     expect(await screen.findByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
@@ -63,6 +82,7 @@ describe('CaseBoard', () => {
 
   it('地図の表示では、絞り込みの欄を地図に重ねるパネルの中に置く', async () => {
     resetMockNavigation('/cases/case-lakeside?tab=map');
+    giveMapPanelHeight();
     await renderBoard();
 
     // 地図を広く見せるため、絞り込みの欄は地図の上ではなく、地図に重ねるパネルに入る
@@ -86,7 +106,7 @@ describe('CaseBoard', () => {
 
     await switchView(user, 'グラフ');
 
-    const diagram = screen.getByRole('group', { name: '人物と証言のつながり' });
+    const diagram = await screen.findByRole('group', { name: '人物と証言のつながり' });
     expect(within(diagram).getByRole('link', { name: '人物: 管理人' })).toHaveAttribute(
       'href',
       '/cases/case-lakeside/persons/person-caretaker?tab=graph'
@@ -95,6 +115,7 @@ describe('CaseBoard', () => {
 
   it('「地図」に切り替えると地図ビューを表示し、証言のメンションが場所の詳細ページへのリンクになる', async () => {
     const user = userEvent.setup();
+    giveMapPanelHeight();
     await renderBoard();
 
     await switchView(user, '地図');
@@ -132,6 +153,7 @@ describe('CaseBoard', () => {
 
   it('地図の表示の証言のカードは、戻り先の表示を引き継いだURLへのリンクになる', async () => {
     resetMockNavigation('/cases/case-lakeside?tab=map');
+    giveMapPanelHeight();
     await renderBoard();
 
     const list = await screen.findByRole('region', { name: '地図に表示できない証言' });

@@ -5,6 +5,7 @@
  * これに加えて、ユーザーが証言から導いた結論である人物どうしの関係（Relationship）を、人物と人物を結ぶ線で重ねます。
  * ノードとエッジの導出は src/domain/case-graph.ts、配置の計算は src/lib/graph-layout.ts が担い、
  * このコンポーネントは受け取った座標をSVGに描くことと、図に対する操作を受け付けることに徹します。
+ * 配置の計算は、画面が固まらないよう Web Worker で行います（src/lib/graph-layout-request.ts）。計算が終わるまでは図を描きません。
  *
  * 図は次のように操作できます。ノードが増えると図が細かくなり、そのままでは名前も線もたどれないためです。
  * 操作しても配置（src/lib/graph-layout.ts の計算結果）はやり直しません。操作のたびに図の形が変わると、
@@ -42,13 +43,14 @@
 import { cn } from 'cn';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { buildCaseGraph, dropPersonsWithoutClaims } from '@/domain/case-graph';
+import { buildCaseGraph, dropPersonsWithoutClaims, type CaseGraph } from '@/domain/case-graph';
 import { parseDateInput } from '@/domain/date-input';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
 import type { Case } from '@/domain/types';
 import { filterGraph, moveNodes, neighborhoodOf, personKindOf, type GraphFilter } from '@/lib/graph-display';
-import { layoutGraph, NODE_RADIUS, shortLabelOf, type PositionedGraphEdge, type PositionedGraphNode } from '@/lib/graph-layout';
+import { NODE_RADIUS, shortLabelOf, type GraphLayout, type PositionedGraphEdge, type PositionedGraphNode } from '@/lib/graph-layout';
+import { requestGraphLayout } from '@/lib/graph-layout-request';
 import {
   clientToSvgPoint,
   panViewBox,
@@ -294,14 +296,72 @@ type GraphViewProps = {
   dropPersonsWithoutClaims?: boolean;
 };
 
+/**
+ * 配置の計算の結果です。どのグラフについての結果かを持ち、計算中にグラフが変わったことを見分けられるようにします。
+ * 計算に失敗した場合は、理由（message）を持ちます。
+ */
+type LayoutResult = { graph: CaseGraph } & ({ kind: 'done'; layout: GraphLayout } | { kind: 'failed'; message: string });
+
+/**
+ * ケースからグラフを組み立て、配置を Web Worker で計算します（src/lib/graph-layout-request.ts）。
+ *
+ * 証言が多いケースでは配置の計算に10秒以上かかるため、計算の間も画面を操作できるよう、メインスレッドでは計算しません（#127）。
+ * 計算が終わるまでは計算中であることを示し、計算に失敗した場合は理由を示します。
+ * 計算し直している間（証言の保存や絞り込みでケースが変わった場合）は、計算し直していることを示しつつ、前の配置の図を残します。
+ * 図を消すと、拡大率・位置・手で動かしたノードが失われ、ケースを少し変えるたびに見ていた場所を見失うためです。
+ */
 export function GraphView({ target, dropPersonsWithoutClaims: shouldDropPersons = false }: GraphViewProps) {
+  const graph = useMemo(() => {
+    const built = buildCaseGraph(target);
+    return shouldDropPersons ? dropPersonsWithoutClaims(built) : built;
+  }, [target, shouldDropPersons]);
+  /** 最後に終わった配置の計算の結果です。計算し直している間は、前のグラフについての結果を指します。 */
+  const [result, setResult] = useState<LayoutResult>();
+
+  useEffect(() => {
+    if (graph.nodes.length === 0) return;
+    const controller = new AbortController();
+    requestGraphLayout(graph, controller.signal).then(
+      (layout) => setResult({ graph, kind: 'done', layout }),
+      (error: unknown) => {
+        // グラフが変わって中断した計算の失敗は、次の計算が引き継ぐため、結果にしない
+        if (controller.signal.aborted) return;
+        setResult({ graph, kind: 'failed', message: error instanceof Error ? error.message : String(error) });
+      }
+    );
+    return () => controller.abort();
+  }, [graph]);
+
+  if (graph.nodes.length === 0) {
+    return <BoardEmptyState message="人物も証言もまだ登録されていません。時系列のボードから書き足してください。" />;
+  }
+  const isRecomputing = result?.graph !== graph;
+  if (result?.kind === 'failed' && !isRecomputing) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {result.message}
+      </p>
+    );
+  }
+  const status = (
+    <p role="status" className="text-sm text-muted-foreground">
+      {result?.kind === 'done' ? '人物と証言の配置を計算し直しています…' : '人物と証言の配置を計算しています…'}
+    </p>
+  );
+  if (result?.kind !== 'done') return status;
+  return (
+    <div className="space-y-3">
+      {isRecomputing && status}
+      <GraphDiagram layout={result.layout} />
+    </div>
+  );
+}
+
+/** 配置を計算し終えたグラフを描き、図に対する操作（拡大縮小・平行移動・ノードの移動・強調・絞り込み）を受け付けます。 */
+function GraphDiagram({ layout }: { layout: GraphLayout }) {
   const caseId = useCaseId();
   const idPrefix = useId();
   const svgRef = useRef<SVGSVGElement>(null);
-  const layout = useMemo(() => {
-    const graph = buildCaseGraph(target);
-    return layoutGraph(shouldDropPersons ? dropPersonsWithoutClaims(graph) : graph);
-  }, [target, shouldDropPersons]);
 
   const [filter, setFilter] = useState<GraphFilter>(DEFAULT_FILTER);
   /** 関係の線を絞り込む時点の、入力中の文字列です。空欄の間は絞り込みません。 */
@@ -407,10 +467,6 @@ export function GraphView({ target, dropPersonsWithoutClaims: shouldDropPersons 
     setViewBox(null);
     setPositions(new Map());
   };
-
-  if (layout.nodes.length === 0) {
-    return <BoardEmptyState message="人物も証言もまだ登録されていません。時系列のボードから書き足してください。" />;
-  }
 
   const arrowMarkerId = `${idPrefix}-arrow`;
   const relationsAt = timePointText.trim() ? parseDateInput(timePointText) : undefined;

@@ -1,18 +1,32 @@
 /**
  * 地図ビュー（時系列の並び順を地図上でたどる表示）のテスト
  */
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { MapPin } from '@/domain/case-views';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case } from '@/domain/types';
+import { buildLargeCase } from '@/test/large-case';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { MapView } from './MapView';
 
 vi.mock('next/navigation', () => import('@/test/mock-navigation'));
 
+/** テストで与える、地図に重ねるパネルの高さ（px）です。 */
+const PANEL_VIEWPORT_HEIGHT = 800;
+
+/**
+ * 地図に重ねるパネルに、高さを与えます。テストが終わると元に戻します。
+ * jsdom はレイアウトを計算せず、要素の高さはすべて 0 になります。一覧はパネルに見える分の証言だけを描画するため、高さが無いと描画する範囲を決められません。
+ */
+function givePanelViewportHeight() {
+  const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(PANEL_VIEWPORT_HEIGHT);
+  onTestFinished(() => clientHeight.mockRestore());
+}
+
 beforeEach(() => {
+  givePanelViewportHeight();
   // 証言のカードは、リンク先のURLの組み立てにケースのIDをURLから読み取るため、ケースのボードのURLから始める
   resetMockNavigation(`/cases/${sampleFictionalCase.id}`);
 });
@@ -270,6 +284,43 @@ describe('MapView', () => {
       expect(screen.getByText('1 / 3 湖畔の別荘')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: '移動の確認' })).not.toBeInTheDocument();
       expect(screen.getByRole('region', { name: '地図に表示できない証言' })).toBeInTheDocument();
+    });
+  });
+
+  describe('証言が多いケース', () => {
+    /** 証言が1,000件あり、どの場所にも座標が無い（すべての証言を地図に表示できない）ケースです。 */
+    function buildUnmappedLargeCase(): Case {
+      const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+      return { ...largeCase, places: largeCase.places.map(({ id, name }) => ({ id, name })) };
+    }
+
+    it('地図に表示できない証言の一覧は、パネルに見える分の証言だけを描画する', () => {
+      // 前提: 地図に表示できない証言が1,000件ある。すべてを描くと DOM が大きくなり、地図を開くたびに画面が固まる
+      render(<MapView target={buildUnmappedLargeCase()} />);
+
+      const list = screen.getByRole('list', { name: '場所に座標が登録されていない証言' });
+      const items = within(list).getAllByRole('listitem');
+      // 検証: 先頭の証言は描画し、パネルの外の証言は描画しない。件数の見出しは全件の数を示す
+      expect(items.length).toBeGreaterThan(0);
+      expect(items.length).toBeLessThan(100);
+      expect(within(list).getByText(/（証言0）/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '地図に表示できない証言（1000件）' })).toBeInTheDocument();
+    });
+
+    it('パネルを末尾までスクロールすると、一覧の末尾の証言を描画する', () => {
+      // 前提: 地図に表示できない証言が1,000件あり、時系列の並び順の最後は「証言999」
+      render(<MapView target={buildUnmappedLargeCase()} />);
+      const panel = screen.getByRole('region', { name: '地図の操作' });
+
+      act(() => {
+        panel.scrollTop = 10_000_000;
+        panel.dispatchEvent(new Event('scroll'));
+      });
+
+      // 検証: 末尾の証言を描画し、先頭の証言は描画しない
+      const list = screen.getByRole('list', { name: '場所に座標が登録されていない証言' });
+      expect(within(list).getByText(/（証言999）/)).toBeInTheDocument();
+      expect(within(list).queryByText(/（証言0）/)).not.toBeInTheDocument();
     });
   });
 });

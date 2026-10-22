@@ -5,6 +5,8 @@
  * 地図には場所ごとの番号付きのピンと、地点を順に結ぶ線を表示し、「前へ」「次へ」またはピンの選択で、証言を切り替えます。
  * 同じ場所に複数の証言がある場合は、ピンを選ぶたびに、その場所の証言を順に切り替えます。
  * 地図に表示できない証言（場所を述べていない・場所に座標が無い）は、見落とさないよう、パネルの中に理由ごとに一覧にします。
+ * この一覧は、パネルのスクロールに合わせて、パネルに見える分の証言だけを描画します。証言が1万件近いケースでは、
+ * 地図に表示できない証言も数千件になり、すべてを描画すると地図を開くたびに画面が数秒固まるためです（#127）。
  *
  * 地図を主役にするため、地図は受け取った領域いっぱいに広げ、それ以外の要素（絞り込みの欄・人物の選択・選択中の証言・一覧）は
  * 地図の左上に重ねる操作のパネルにまとめます。パネルは隠せるため、地図だけを広く見ることもできます。
@@ -21,7 +23,8 @@
 
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { buildMapTrail, buildPersonLanes, groupStopsByPlace, type ClaimView, type MapPin } from '@/domain/case-views';
 import { buildPersonTravel, TRAVELING_PERSON_KINDS, type TravelExcludedReason } from '@/domain/travel-check';
@@ -30,6 +33,7 @@ import { obscuredInset, type ObscuredInset } from '@/lib/map-obscured-inset';
 import { INPUT_CLASS, LABEL_CLASS } from '../forms/fields';
 import { ClaimCard } from './ClaimCard';
 import { TravelLegList } from './TravelLegList';
+import { measureRenderedElement, OVERSCAN } from './useWindowListVirtualizer';
 
 // Leaflet は window を前提にしているため、サーバー側では描画しない
 const TrailMap = dynamic(() => import('./TrailMap'), {
@@ -46,6 +50,12 @@ const UNMAPPED_REASONS: { reason: TravelExcludedReason; label: string }[] = [
   { reason: 'no-place', label: '場所を述べていない証言' },
   { reason: 'no-when', label: '日時が無い証言' },
 ];
+
+/** 一覧の証言のカードの間の余白（px）です。 */
+const CARD_GAP = 8;
+
+/** 一覧の証言のカードの高さの見積もり（px）です。まだ描画していないカードの位置の計算に使います。 */
+const CARD_SIZE_ESTIMATE = 130;
 
 /** 人物を選ばない（すべての証言を時系列の並び順にたどる）ことを表す、選択肢の値です。 */
 const NO_PERSON = '';
@@ -97,6 +107,16 @@ export function MapView({ target, filterPanel }: MapViewProps) {
     ? travel.excluded
     : trail.unmapped;
   const unmappedLabel = travel ? TRAVEL_EXCLUDED_LABEL : UNMAPPED_LABEL;
+  // 理由ごとの証言の一覧です。一覧の仮想化が描画のたびに全件の位置を計算し直さないよう、証言が変わるまで同じ配列を使う
+  const unmappedGroups = useMemo(
+    () =>
+      UNMAPPED_REASONS.map(({ reason, label }) => ({
+        reason,
+        label,
+        views: unmapped.filter((item) => item.reason === reason).map((item) => item.view),
+      })).filter((group) => group.views.length > 0),
+    [unmapped]
+  );
   const pins = useMemo(() => groupStopsByPlace(stops), [stops]);
   const path = useMemo(() => stops.map((stop) => stop.coordinates), [stops]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -212,25 +232,75 @@ export function MapView({ target, filterPanel }: MapViewProps) {
                 <h3 className="text-sm font-semibold text-foreground">
                   {unmappedLabel}（{unmapped.length}件）
                 </h3>
-                {UNMAPPED_REASONS.map(({ reason, label }) => {
-                  const items = unmapped.filter((item) => item.reason === reason);
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={reason} className="mt-2">
-                      <h4 className="mb-1 text-xs font-medium text-muted-foreground">{label}</h4>
-                      <ul aria-label={label} className="space-y-2">
-                        {items.map((item) => (
-                          <ClaimCard key={item.view.claim.id} view={item.view} showSpeaker tab="map" />
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
+                {unmappedGroups.map(({ reason, label, views }) => (
+                  <div key={reason} className="mt-2">
+                    <h4 className="mb-1 text-xs font-medium text-muted-foreground">{label}</h4>
+                    <PanelClaimList label={label} views={views} scrollRef={panelRef} />
+                  </div>
+                ))}
               </section>
             )}
           </section>
         )}
       </div>
     </div>
+  );
+}
+
+type PanelClaimListProps = {
+  /** 一覧の名前（読み上げ用）です。 */
+  label: string;
+  views: ClaimView[];
+  /** 一覧を含み、スクロールする要素（地図に重ねるパネル）です。 */
+  scrollRef: RefObject<HTMLElement | null>;
+};
+
+/**
+ * 証言のカードの一覧のうち、スクロールする要素（パネル）に見える分だけを描画します。
+ *
+ * パネルの中では、一覧の上に別の要素（絞り込みの欄・選択中の証言など）が並びます。一覧の位置を見える範囲の計算に含めるよう、
+ * パネルの中身の先頭から一覧の先頭までの距離を scrollMargin として渡します。この距離は一覧の上の要素の高さで変わるため、
+ * 依存を指定せず描画のたびに測り直し、値が変わったときだけ状態を更新します。
+ * 詳細を開いている間、ボードは hidden で隠れます（src/components/CaseBoard.tsx）。隠れている間は距離を測り直さず、カードの高さ0も覚えません。
+ */
+function PanelClaimList({ label, views, scrollRef }: PanelClaimListProps) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const scrollElement = scrollRef.current;
+    if (list === null || scrollElement === null || list.getClientRects().length === 0) return;
+    const top = Math.round(list.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop);
+    if (top !== scrollMargin) setScrollMargin(top);
+  });
+  const getItemKey = useCallback((index: number) => views[index]!.claim.id, [views]);
+  const virtualizer = useVirtualizer({
+    count: views.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => CARD_SIZE_ESTIMATE,
+    getItemKey,
+    gap: CARD_GAP,
+    overscan: OVERSCAN,
+    scrollMargin,
+    measureElement: measureRenderedElement,
+  });
+
+  return (
+    <ul ref={listRef} aria-label={label} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+      {virtualizer.getVirtualItems().map((item) => (
+        <li
+          key={item.key}
+          ref={virtualizer.measureElement}
+          data-index={item.index}
+          className="absolute inset-x-0"
+          // 項目の位置（start）は scrollMargin を含むため、一覧の中の位置に直す
+          style={{ top: item.start - scrollMargin }}
+        >
+          <ul>
+            <ClaimCard view={views[item.index]!} showSpeaker tab="map" />
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }
