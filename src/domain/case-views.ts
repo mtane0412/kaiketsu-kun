@@ -210,13 +210,23 @@ export function buildTimeline(target: Case): Timeline {
 
 /** 時系列ビューを、使い回さずに組み立てます。 */
 function composeTimeline(target: Case): Timeline {
-  const itemByKey = new Map(
-    target.claims.map((claim): [TimelineKey, TimelineItem] => {
-      const key = timelineKeyOf(claim.id);
-      return [key, { key, view: toClaimView(target, claim) }];
-    })
-  );
-  return { items: resolveTimelineOrder(target).flatMap((key) => itemByKey.get(key) ?? []) };
+  // JSON の読み込みは証言の ID の重複を拒否しないため、同じキーの証言も捨てずに、登録順にすべて並べる
+  const itemsByKey = new Map<TimelineKey, TimelineItem[]>();
+  for (const claim of target.claims) {
+    const key = timelineKeyOf(claim.id);
+    const item: TimelineItem = { key, view: toClaimView(target, claim) };
+    const items = itemsByKey.get(key);
+    if (items === undefined) itemsByKey.set(key, [item]);
+    else items.push(item);
+  }
+  // 重複したキーは並び順にも2回以上現れうるため、並べ終えたキーは取り除き、同じ証言を2回並べないようにする
+  return {
+    items: resolveTimelineOrder(target).flatMap((key) => {
+      const items = itemsByKey.get(key) ?? [];
+      itemsByKey.delete(key);
+      return items;
+    }),
+  };
 }
 
 /**
