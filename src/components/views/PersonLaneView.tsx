@@ -19,6 +19,10 @@
  * 注意: 列は人物の数だけ増えるため、表は枠の中で縦横にスクロールします。見出しの行（人物）と列（日時）は、
  * スクロールしても見えるよう枠に貼り付けます。枠の高さを画面に収めているのは、縦にスクロールしたときにも人物の見出しを残すためです。
  * ドラッグ中に動くのは見出しだけで、列のカードは置いたときに移ります。
+ * 証言が1万件近いケースでも固まらないよう、行（証言）は枠に見える分だけを描画します（@tanstack/react-virtual、#126）。
+ * 描画しない行の高さは、表の上下に置く空の行で埋め、スクロールの長さを保ちます。行を通常の流れのまま置くのは、
+ * 列の幅と、左端に貼り付けた日時の見出しを、表のレイアウトに任せるためです。列（人物）は仮想化しません。
+ * 見出しをすべて描画しておくことで、列の並べ替え（ドラッグ）が、画面の外の列へもこれまでどおり動くようにするためです。
  */
 'use client';
 
@@ -36,7 +40,8 @@ import {
 import { horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildPersonLanes, type PersonLane, type PersonLaneRow } from '@/domain/case-views';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
@@ -49,6 +54,7 @@ import { ROLE_LABELS, ROLE_STYLES } from './lane-role-style';
 import { PersonTimeAxisView } from './PersonTimeAxisView';
 import { PersonKindFilter } from './PersonKindFilter';
 import { BoardEmptyState } from './BoardEmptyState';
+import { measureRenderedElement, OVERSCAN } from './useWindowListVirtualizer';
 
 const DRAG_INSTRUCTIONS =
   '列を動かすには、スペースキーで持ち上げ、左右の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -63,6 +69,15 @@ const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから�
 type LaneLayout = 'order' | 'timeAxis';
 
 const LANE_LAYOUT_LABELS: Record<LaneLayout, string> = { order: '証言の順', timeAxis: '時刻軸' };
+
+/**
+ * 行（証言1件）の高さの見積もり（px）です。まだ描画していない行の位置の計算に使います。
+ * 証言9,374件の実データで測った行の高さ（カード1枚と役割の印）の、おおよその平均です。
+ */
+const ROW_SIZE_ESTIMATE = 230;
+
+/** 行の高さの見積もりを返します。行の中身によらず同じ値です。 */
+const estimateRowSize = () => ROW_SIZE_ESTIMATE;
 
 /** 日時を述べない証言の、行の見出しです。 */
 const UNKNOWN_WHEN_LABEL = '日時不明';
@@ -174,6 +189,36 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
     movePersonLane(String(active.id), String(over.id));
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLTableSectionElement>(null);
+  // 枠のスクロールの位置は、列の見出し（thead）の高さを含む。行の位置を見出しの下から数えるよう、見出しの高さを scrollMargin として渡す。
+  // 見出しの高さは人物の種別の表示などで変わりうるため、依存を指定せず描画のたびに測り直し、値が変わったときだけ状態を更新する。
+  // 隠れている間（高さ0）は測り直さない
+  const [headHeight, setHeadHeight] = useState(0);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (head === null || head.getClientRects().length === 0) return;
+    const height = Math.round(head.getBoundingClientRect().height);
+    if (height !== headHeight) setHeadHeight(height);
+  });
+  const getRowKey = useCallback((index: number) => rows[index]!.key, [rows]);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: estimateRowSize,
+    getItemKey: getRowKey,
+    overscan: OVERSCAN,
+    scrollMargin: headHeight,
+    // 詳細を開いている間、ボードは hidden で隠れる（src/components/CaseBoard.tsx）。隠れた行の高さ0を覚えないようにする
+    measureElement: measureRenderedElement,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  // 描画しない行の高さの合計です。表の上下の空の行の高さにして、スクロールの長さと描画する行の位置を保つ。
+  // 行の位置（start・end）は scrollMargin を含み、行全体の高さ（getTotalSize）は含まないため、行の位置から差し引く
+  const totalSize = rowVirtualizer.getTotalSize();
+  const paddingTop = (virtualRows[0]?.start ?? headHeight) - headHeight;
+  const paddingBottom = totalSize - ((virtualRows.at(-1)?.end ?? headHeight) - headHeight);
+
   const announcements: Announcements = {
     onDragStart: ({ active }) => `「${labelOfId(active.id)}」の列を持ち上げました。`,
     onDragOver: ({ active, over }) =>
@@ -195,11 +240,12 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
       onDragEnd={handleDragEnd}
     >
       {/* ヘッダー（h-14）・種別の絞り込み・余白のぶんを除いた高さに収め、見出しを枠の上端・左端に貼り付ける */}
-      <div className="max-h-[calc(100svh-8rem)] overflow-auto rounded-lg border">
-        <table aria-label="人物の動き" className="border-separate border-spacing-0 text-left">
-          <thead>
+      <div ref={scrollRef} className="max-h-[calc(100svh-8rem)] overflow-auto rounded-lg border">
+        {/* 画面の外の行は描画しないため、読み上げに、見出しの行を含めた全体の行数と、各行の位置（aria-rowindex）を伝える */}
+        <table aria-label="人物の動き" aria-rowcount={rows.length + 1} className="border-separate border-spacing-0 text-left">
+          <thead ref={headRef}>
             <SortableContext items={lanes.map((lane) => lane.personId)} strategy={horizontalListSortingStrategy}>
-              <tr>
+              <tr aria-rowindex={1}>
                 <th scope="col" className="sticky left-0 top-0 z-30 border-b border-r bg-muted p-2 text-xs font-medium">
                   日時
                 </th>
@@ -210,36 +256,55 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
             </SortableContext>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <th
-                  scope="row"
-                  className="sticky left-0 z-10 w-28 min-w-28 border-b border-r bg-background p-2 align-top text-xs font-medium text-muted-foreground"
+            {paddingTop > 0 && <SpacerRow height={paddingTop} columnCount={lanes.length + 1} />}
+            {virtualRows.map((virtualRow) => {
+              const row = rows[virtualRow.index]!;
+              return (
+                <tr
+                  key={row.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  aria-rowindex={virtualRow.index + 2}
                 >
-                  {row.view.claim.when ? formatTimeRef(row.view.claim.when) : UNKNOWN_WHEN_LABEL}
-                </th>
-                {lanes.map((lane) => {
-                  const role = row.roles[lane.personId];
-                  return (
-                    <td key={lane.personId} className="border-b p-2 align-top">
-                      {role && (
-                        <>
-                          <span className={`mb-1 inline-block rounded px-1.5 py-0.5 text-xs ${ROLE_STYLES[role]}`}>
-                            {ROLE_LABELS[role]}
-                          </span>
-                          <ul>
-                            <ClaimCard view={row.view} showSpeaker={role === 'mentioned'} tab="lanes" emphasizePlace />
-                          </ul>
-                        </>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 w-28 min-w-28 border-b border-r bg-background p-2 align-top text-xs font-medium text-muted-foreground"
+                  >
+                    {row.view.claim.when ? formatTimeRef(row.view.claim.when) : UNKNOWN_WHEN_LABEL}
+                  </th>
+                  {lanes.map((lane) => {
+                    const role = row.roles[lane.personId];
+                    return (
+                      <td key={lane.personId} className="border-b p-2 align-top">
+                        {role && (
+                          <>
+                            <span className={`mb-1 inline-block rounded px-1.5 py-0.5 text-xs ${ROLE_STYLES[role]}`}>
+                              {ROLE_LABELS[role]}
+                            </span>
+                            <ul>
+                              <ClaimCard view={row.view} showSpeaker={role === 'mentioned'} tab="lanes" emphasizePlace />
+                            </ul>
+                          </>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {paddingBottom > 0 && <SpacerRow height={paddingBottom} columnCount={lanes.length + 1} />}
           </tbody>
         </table>
       </div>
     </DndContext>
+  );
+}
+
+/** 描画しない行の代わりに、その高さだけを占める空の行です。読み上げには届けません。 */
+function SpacerRow({ height, columnCount }: { height: number; columnCount: number }) {
+  return (
+    <tr aria-hidden="true">
+      <td colSpan={columnCount} style={{ height }} className="p-0" />
+    </tr>
   );
 }

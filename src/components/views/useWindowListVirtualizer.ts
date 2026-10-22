@@ -23,8 +23,11 @@
 import { useWindowVirtualizer, type Range, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 
-/** 画面の外に、上下それぞれ余分に描画しておく項目の数です。速くスクロールしたときに空白が見えにくくします。 */
-const OVERSCAN = 6;
+/**
+ * 画面の外に、上下それぞれ余分に描画しておく項目の数です。速くスクロールしたときに空白が見えにくくします。
+ * 人物の動きの表（PersonLaneView）の行の仮想化でも、同じ値を使います。
+ */
+export const OVERSCAN = 6;
 
 type WindowListVirtualizerOptions = {
   /** 項目の数です。 */
@@ -47,11 +50,12 @@ function isRendered(element: Element): boolean {
 /**
  * 項目の高さを測ります。描画されていない項目は測らず、前に測った高さ（無ければ見積もり）を返します。
  * 前に測った高さは、仮想化のキャッシュ（itemSizeCache）から引きます。
+ * 枠の中でスクロールする表（PersonLaneView の人物の動きの表）の仮想化でも、同じ理由で使います。
  */
-function measureRenderedElement(
+export function measureRenderedElement<TScrollElement extends Element | Window>(
   element: Element,
   entry: ResizeObserverEntry | undefined,
-  instance: Virtualizer<Window, Element>
+  instance: Virtualizer<TScrollElement, Element>
 ): number {
   if (isRendered(element)) {
     const box = entry?.borderBoxSize?.[0];
