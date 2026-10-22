@@ -13,7 +13,7 @@
  */
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { groupClaimsBySpeaker, type ClaimView, type SpeakerGroup } from '@/domain/case-views';
 import type { Case } from '@/domain/types';
 import { EntityAvatar } from '../EntityAvatar';
@@ -72,10 +72,16 @@ export function SpeakerView({ target }: SpeakerViewProps) {
       ]),
     [target]
   );
+  // 関数が描画のたびに変わると、仮想化のライブラリが全行の位置を計算し直すため、行が変わるまで同じ関数を渡す
+  const estimateSize = useCallback(
+    (index: number) => (rows[index]!.kind === 'heading' ? HEADING_SIZE_ESTIMATE : CARD_SIZE_ESTIMATE),
+    [rows]
+  );
+  const getItemKey = useCallback((index: number) => rows[index]!.key, [rows]);
   const { listRef, virtualizer, virtualItemStyle } = useWindowListVirtualizer<HTMLOListElement>({
     count: rows.length,
-    estimateSize: (index) => (rows[index]!.kind === 'heading' ? HEADING_SIZE_ESTIMATE : CARD_SIZE_ESTIMATE),
-    getItemKey: (index) => rows[index]!.key,
+    estimateSize,
+    getItemKey,
     gap: ROW_GAP,
   });
 

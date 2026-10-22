@@ -256,13 +256,19 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
     (range: Range) => [...new Set([...defaultRangeExtractor(range), ...pinnedIndexes])].sort((a, b) => a - b),
     [pinnedIndexes]
   );
-  const { listRef, virtualizer, virtualItemStyle } = useWindowListVirtualizer<HTMLOListElement>({
-    count: shownEntries.length * 2,
-    estimateSize: (index) => (isSlotIndex(index) ? SLOT_SIZE_ESTIMATE : CARD_SIZE_ESTIMATE),
-    getItemKey: (index) => {
+  // 関数が描画のたびに変わると、仮想化のライブラリが全項目の位置を計算し直すため、並びが変わるまで同じ関数を渡す
+  const estimateSize = useCallback((index: number) => (isSlotIndex(index) ? SLOT_SIZE_ESTIMATE : CARD_SIZE_ESTIMATE), []);
+  const getItemKey = useCallback(
+    (index: number) => {
       const key = shownKeys[entryIndexOf(index)]!;
       return isSlotIndex(index) ? `slot:${key}` : key;
     },
+    [shownKeys]
+  );
+  const { listRef, virtualizer, virtualItemStyle } = useWindowListVirtualizer<HTMLOListElement>({
+    count: shownEntries.length * 2,
+    estimateSize,
+    getItemKey,
     gap: ITEM_GAP,
     rangeExtractor,
   });
