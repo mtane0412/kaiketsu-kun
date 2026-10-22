@@ -27,6 +27,7 @@
  * この入力欄の状態を「下書き（ClaimDraft）」と呼び、保存時に draftToContent で本文に変換します。
  * 注意: 下書きの型は名前に Claim を含みますが、メモの入力欄でも同じ型を使用します。
  */
+import { entityById } from './entity-index';
 import { personIconText } from './person-icon';
 import { isSourceNameOf } from './person-names';
 import { formatTimeRef, isValidTimeRef } from './time-ref';
@@ -126,9 +127,9 @@ function findEntity(
 ): { name: string; imageDataUrl?: string; iconText?: string } | undefined {
   switch (kind) {
     case 'person':
-      return target.persons.find((person) => person.id === id);
+      return entityById(target.persons).get(id);
     case 'place':
-      return target.places.find((place) => place.id === id);
+      return entityById(target.places).get(id);
   }
 }
 

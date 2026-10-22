@@ -7,6 +7,7 @@
  * 矛盾の定義: 前にある項目の日時の区間が、後ろにある項目の区間より完全に後であること。
  * 区間が重なる項目同士は、どちらの順でも矛盾としません。日時を持たない項目は、どこにでも置けます。
  */
+import { entityById } from './entity-index';
 import { toInterval, type Interval } from './time-ref';
 import type { Case, Id } from './types';
 
@@ -16,9 +17,12 @@ import type { Case, Id } from './types';
  */
 export type TimelineKey = string;
 
+/** 証言のボード上のキーの接頭辞です。 */
+const CLAIM_KEY_PREFIX = 'claim:';
+
 /** 証言のボード上のキーを作ります。 */
 export function timelineKeyOf(claimId: Id): TimelineKey {
-  return `claim:${claimId}`;
+  return `${CLAIM_KEY_PREFIX}${claimId}`;
 }
 
 /** ボードの項目のキーを、ケースへの登録順で返します。 */
@@ -49,7 +53,8 @@ function assertOnBoard(order: TimelineKey[], key: TimelineKey): void {
 
 /** ボードの項目が持つ日時の区間を返します。日時を持たない項目は null を返します。 */
 function intervalOf(target: Case, key: TimelineKey): Interval | null {
-  const when = target.claims.find((claim) => timelineKeyOf(claim.id) === key)?.when;
+  // 項目ごとに証言の一覧を先頭から探すと、並び順の整理の時間が証言の件数の2乗で増えるため、ID の索引で引く
+  const when = key.startsWith(CLAIM_KEY_PREFIX) ? entityById(target.claims).get(key.slice(CLAIM_KEY_PREFIX.length))?.when : undefined;
   return when ? toInterval(when) : null;
 }
 

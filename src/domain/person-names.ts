@@ -9,7 +9,8 @@
  * - 資料の中の名前は、その資料での呼び方を、人物の名前・別名より優先します。ほかの資料での呼び方は使いません。
  * - 名前・別名が複数の人物に一致した場合（同姓同名など）は、一致した人物をすべて返し、どの人物かは呼び出し側（ユーザー）が決めます。
  */
-import type { Case, Id } from './types';
+import { entityById } from './entity-index';
+import type { Case, Id, Interview } from './types';
 
 /** 名前の照らし合わせで一致した人物です。 */
 export type PersonNameMatch = { id: Id; name: string };
@@ -31,10 +32,10 @@ export function normalizeName(name: string): string {
  */
 export function findPersonsByName(target: Case, interviewId: Id, name: string): PersonNameMatch[] {
   const normalized = normalizeName(name);
-  const interview = target.interviews.find((item) => item.id === interviewId);
+  const interview = entityById(target.interviews).get(interviewId);
   const sourceName = interview?.personNames?.find((personName) => normalizeName(personName.name) === normalized);
   if (sourceName !== undefined) {
-    const person = target.persons.find((item) => item.id === sourceName.personId);
+    const person = entityById(target.persons).get(sourceName.personId);
     if (person === undefined) throw new Error(`資料での呼び方が存在しない人物を指しています: ${sourceName.personId}`);
     return [{ id: person.id, name: person.name }];
   }
@@ -48,11 +49,31 @@ export function findPersonsByName(target: Case, interviewId: Id, name: string): 
  * 証言を探すとき（本文に呼び方が出てくるか）や、本文の表記が資料での表記かどうかを判定するときに使います。
  */
 export function sourceNamesOf(target: Case, personId: Id): string[] {
-  const person = target.persons.find((item) => item.id === personId);
-  const interviewNames = target.interviews.flatMap((interview) =>
-    (interview.personNames ?? []).filter((personName) => personName.personId === personId).map((personName) => personName.name)
-  );
-  return [...(person?.aliases ?? []), ...interviewNames];
+  const person = entityById(target.persons).get(personId);
+  return [...(person?.aliases ?? []), ...(interviewNamesByPersonId(target.interviews).get(personId) ?? [])];
+}
+
+/** 資料の一覧ごとの、人物ごとの資料での呼び方です。資料の一覧が使われなくなれば、一緒に破棄されます。 */
+const interviewNameIndexes = new WeakMap<readonly Interview[], ReadonlyMap<Id, string[]>>();
+
+/**
+ * すべての資料での呼び方を、指す人物ごとに、資料の一覧の順に並べて返します。同じ資料の一覧に対しては、作り直さずに同じものを返します。
+ * 本文のメンション1つごとに全資料をたどると、時間が「メンションの数 × 資料の件数」で増えるためです。
+ * 注意: 資料の一覧をその場で書き換えると古い結果を返すため、書き換えないでください（src/domain/entity-index.ts と同じ前提です）。
+ */
+function interviewNamesByPersonId(interviews: readonly Interview[]): ReadonlyMap<Id, string[]> {
+  const cached = interviewNameIndexes.get(interviews);
+  if (cached !== undefined) return cached;
+  const namesByPersonId = new Map<Id, string[]>();
+  for (const interview of interviews) {
+    for (const personName of interview.personNames ?? []) {
+      const names = namesByPersonId.get(personName.personId);
+      if (names === undefined) namesByPersonId.set(personName.personId, [personName.name]);
+      else names.push(personName.name);
+    }
+  }
+  interviewNameIndexes.set(interviews, namesByPersonId);
+  return namesByPersonId;
 }
 
 /**
@@ -62,7 +83,7 @@ export function sourceNamesOf(target: Case, personId: Id): string[] {
  * どこにも登録されていない表記（改名する前の名前など）も false です。古い表示名を、資料での表記と取り違えないためです。
  */
 export function isSourceNameOf(target: Case, personId: Id, label: string): boolean {
-  const person = target.persons.find((item) => item.id === personId);
+  const person = entityById(target.persons).get(personId);
   if (person === undefined) return false;
   const normalized = normalizeName(label);
   if (normalizeName(person.name) === normalized) return false;

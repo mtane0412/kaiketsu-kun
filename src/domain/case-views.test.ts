@@ -199,6 +199,24 @@ describe('groupClaimsBySpeaker', () => {
     ]);
   });
 
+  it('IDが重複した証言（JSONの読み込みでは拒否されない）も、それぞれの発言者のグループに1件ずつ入れる', () => {
+    // 前提: 隣家の住人の証言と同じIDで、管理人の証言をもう1件登録している
+    const neighborClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-neighbor')!;
+    const caretakerClaim = sampleFictionalCase.claims.find((claim) => claim.id === 'claim-caretaker')!;
+    const caseData: Case = {
+      ...sampleFictionalCase,
+      claims: [neighborClaim, { ...caretakerClaim, id: 'claim-neighbor', content: '同じIDで登録された管理人の証言' }],
+      timelineOrder: [],
+    };
+
+    const groups = groupClaimsBySpeaker(caseData);
+
+    expect(groups.map((group) => [group.label, group.claims.map((view) => view.claim.content)])).toEqual([
+      ['隣家の住人', [neighborClaim.content]],
+      ['管理人', ['同じIDで登録された管理人の証言']],
+    ]);
+  });
+
   it('同じ発言者の証言を、時系列ボードの並び順で並べる', () => {
     // 前提: 管理人の2件目の証言を、ケースの並び順では管理人の1件目より前に置いている
     const caseData: Case = {
