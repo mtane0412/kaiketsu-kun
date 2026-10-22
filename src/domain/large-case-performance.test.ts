@@ -72,6 +72,14 @@ describe('大きなケース（証言2万件・人物4千人・資料2千件）'
     expect(buildTimeline(largeCase)).toBe(first);
   });
 
+  it('使い回す時系列ビューの並びは、書き換えようとするとエラーになる', () => {
+    // 前提: 使い回すビューを呼び出し側が書き換えると、同じケースを表示する他の画面まで崩れるため、書き換えを拒む
+    const timeline = buildTimeline(largeCase);
+
+    expect(() => timeline.items.reverse()).toThrow(TypeError);
+    expect(buildTimeline(largeCase).items[0]?.view.claim.id).toBe('claim-0');
+  });
+
   it('ケースが変わった（別のオブジェクトになった）場合は、時系列ビューを組み立て直す', () => {
     const first = buildTimeline(largeCase);
     const renamed: Case = { ...largeCase, persons: largeCase.persons.map((person) => ({ ...person, name: `${person.name}（改名）` })) };

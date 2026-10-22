@@ -202,6 +202,8 @@ export function buildTimeline(target: Case): Timeline {
   const cached = timelines.get(target);
   if (cached !== undefined) return cached;
   const timeline = composeTimeline(target);
+  // 使い回すビューを呼び出し側が書き換えると、同じケースを表示する他の画面まで崩れるため、並びの書き換えを拒む
+  Object.freeze(timeline.items);
   timelines.set(target, timeline);
   return timeline;
 }
