@@ -23,8 +23,11 @@
 import { useWindowVirtualizer, type Range, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 
-/** 画面の外に、上下それぞれ余分に描画しておく項目の数です。速くスクロールしたときに空白が見えにくくします。 */
-const OVERSCAN = 6;
+/**
+ * 画面の外に、上下それぞれ余分に描画しておく項目の数です。速くスクロールしたときに空白が見えにくくします。
+ * 人物の動きの表（PersonLaneView）の行の仮想化でも、同じ値を使います。
+ */
+export const OVERSCAN = 6;
 
 type WindowListVirtualizerOptions = {
   /** 項目の数です。 */

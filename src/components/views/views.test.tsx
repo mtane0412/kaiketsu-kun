@@ -552,6 +552,18 @@ describe('PersonLaneView', () => {
     expect(rowHeaders[0]).toHaveTextContent('1998年8月1日 00:00');
   });
 
+  it('証言が多いケースでも、読み上げに、表の全体の行数と各行の位置を伝える', () => {
+    // 前提: 証言が1,000件あり、画面に見える行だけを描画している。描画した行だけでは、表の大きさと今いる位置が分からない
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<PersonLaneView target={largeCase} />);
+
+    const table = screen.getByRole('table', { name: '人物の動き' });
+    // 検証: 行数は、見出しの行1行と証言の行1,000行。先頭の証言の行は、見出しの次の2行目
+    expect(table).toHaveAttribute('aria-rowcount', '1001');
+    const firstRow = within(table).getByRole('rowheader', { name: '1998年8月1日 00:00' }).closest('tr');
+    expect(firstRow).toHaveAttribute('aria-rowindex', '2');
+  });
+
   it('証言が多いケースで表の枠を末尾までスクロールすると、末尾の証言の行を描画する', () => {
     // 前提: 証言が1,000件あり、最後の証言は先頭から999時間後（1998年9月11日 15時）
     const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });

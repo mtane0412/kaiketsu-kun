@@ -41,7 +41,7 @@ import { horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordin
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildPersonLanes, type PersonLane, type PersonLaneRow } from '@/domain/case-views';
 import { PERSON_KIND_LABELS } from '@/domain/labels';
 import { PERSON_KINDS } from '@/domain/person-kind';
@@ -54,7 +54,7 @@ import { ROLE_LABELS, ROLE_STYLES } from './lane-role-style';
 import { PersonTimeAxisView } from './PersonTimeAxisView';
 import { PersonKindFilter } from './PersonKindFilter';
 import { BoardEmptyState } from './BoardEmptyState';
-import { measureRenderedElement } from './useWindowListVirtualizer';
+import { measureRenderedElement, OVERSCAN } from './useWindowListVirtualizer';
 
 const DRAG_INSTRUCTIONS =
   '列を動かすには、スペースキーで持ち上げ、左右の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -75,9 +75,6 @@ const LANE_LAYOUT_LABELS: Record<LaneLayout, string> = { order: '証言の順', 
  * 証言9,374件の実データで測った行の高さ（カード1枚と役割の印）の、おおよその平均です。
  */
 const ROW_SIZE_ESTIMATE = 230;
-
-/** 枠の外に、上下それぞれ余分に描画しておく行の数です。速くスクロールしたときに空白が見えにくくします。 */
-const ROW_OVERSCAN = 6;
 
 /** 行の高さの見積もりを返します。行の中身によらず同じ値です。 */
 const estimateRowSize = () => ROW_SIZE_ESTIMATE;
@@ -193,21 +190,34 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLTableSectionElement>(null);
+  // 枠のスクロールの位置は、列の見出し（thead）の高さを含む。行の位置を見出しの下から数えるよう、見出しの高さを scrollMargin として渡す。
+  // 見出しの高さは人物の種別の表示などで変わりうるため、依存を指定せず描画のたびに測り直し、値が変わったときだけ状態を更新する。
+  // 隠れている間（高さ0）は測り直さない
+  const [headHeight, setHeadHeight] = useState(0);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (head === null || head.getClientRects().length === 0) return;
+    const height = Math.round(head.getBoundingClientRect().height);
+    if (height !== headHeight) setHeadHeight(height);
+  });
   const getRowKey = useCallback((index: number) => rows[index]!.key, [rows]);
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: estimateRowSize,
     getItemKey: getRowKey,
-    overscan: ROW_OVERSCAN,
+    overscan: OVERSCAN,
+    scrollMargin: headHeight,
     // 詳細を開いている間、ボードは hidden で隠れる（src/components/CaseBoard.tsx）。隠れた行の高さ0を覚えないようにする
     measureElement: measureRenderedElement,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
-  // 描画しない行の高さの合計です。表の上下の空の行の高さにして、スクロールの長さと描画する行の位置を保つ
+  // 描画しない行の高さの合計です。表の上下の空の行の高さにして、スクロールの長さと描画する行の位置を保つ。
+  // 行の位置（start・end）は scrollMargin を含み、行全体の高さ（getTotalSize）は含まないため、行の位置から差し引く
   const totalSize = rowVirtualizer.getTotalSize();
-  const paddingTop = virtualRows[0]?.start ?? 0;
-  const paddingBottom = totalSize - (virtualRows.at(-1)?.end ?? 0);
+  const paddingTop = (virtualRows[0]?.start ?? headHeight) - headHeight;
+  const paddingBottom = totalSize - ((virtualRows.at(-1)?.end ?? headHeight) - headHeight);
 
   const announcements: Announcements = {
     onDragStart: ({ active }) => `「${labelOfId(active.id)}」の列を持ち上げました。`,
@@ -231,10 +241,11 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
     >
       {/* ヘッダー（h-14）・種別の絞り込み・余白のぶんを除いた高さに収め、見出しを枠の上端・左端に貼り付ける */}
       <div ref={scrollRef} className="max-h-[calc(100svh-8rem)] overflow-auto rounded-lg border">
-        <table aria-label="人物の動き" className="border-separate border-spacing-0 text-left">
-          <thead>
+        {/* 画面の外の行は描画しないため、読み上げに、見出しの行を含めた全体の行数と、各行の位置（aria-rowindex）を伝える */}
+        <table aria-label="人物の動き" aria-rowcount={rows.length + 1} className="border-separate border-spacing-0 text-left">
+          <thead ref={headRef}>
             <SortableContext items={lanes.map((lane) => lane.personId)} strategy={horizontalListSortingStrategy}>
-              <tr>
+              <tr aria-rowindex={1}>
                 <th scope="col" className="sticky left-0 top-0 z-30 border-b border-r bg-muted p-2 text-xs font-medium">
                   日時
                 </th>
@@ -249,7 +260,12 @@ function PersonLaneTable({ lanes, rows }: PersonLaneTableProps) {
             {virtualRows.map((virtualRow) => {
               const row = rows[virtualRow.index]!;
               return (
-                <tr key={row.key} data-index={virtualRow.index} ref={rowVirtualizer.measureElement}>
+                <tr
+                  key={row.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  aria-rowindex={virtualRow.index + 2}
+                >
                   <th
                     scope="row"
                     className="sticky left-0 z-10 w-28 min-w-28 border-b border-r bg-background p-2 align-top text-xs font-medium text-muted-foreground"
