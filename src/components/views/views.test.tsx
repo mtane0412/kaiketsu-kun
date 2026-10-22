@@ -522,7 +522,54 @@ describe('SpeakerView', () => {
   });
 });
 
+/** テストで与える、人物の動きの表の枠の高さ（px）です。 */
+const LANE_TABLE_VIEWPORT_HEIGHT = 800;
+
+/**
+ * 人物の動きの表の枠に、高さを与えます。テストが終わると元に戻します。
+ * jsdom はレイアウトを計算せず、要素の高さはすべて 0 になります。表は枠に見える分の行だけを描画するため、高さが無いと行を描画しません。
+ */
+function giveLaneTableViewportHeight() {
+  const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(LANE_TABLE_VIEWPORT_HEIGHT);
+  onTestFinished(() => clientHeight.mockRestore());
+}
+
 describe('PersonLaneView', () => {
+  beforeEach(() => {
+    giveLaneTableViewportHeight();
+  });
+
+  it('証言が多いケースでは、表の枠に見える分の行だけを描画する', () => {
+    // 前提: 証言が1,000件ある。すべての行を描くと、人物の列の数を掛けた数のセルができ、タブを開くたびに画面が固まる
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<PersonLaneView target={largeCase} />);
+
+    const table = screen.getByRole('table', { name: '人物の動き' });
+    const rowHeaders = within(table).getAllByRole('rowheader');
+    // 検証: 先頭の証言（1998年8月1日 0時）の行は描画し、枠の外の行は描画しない
+    expect(rowHeaders.length).toBeGreaterThan(0);
+    expect(rowHeaders.length).toBeLessThan(100);
+    expect(rowHeaders[0]).toHaveTextContent('1998年8月1日 00:00');
+  });
+
+  it('証言が多いケースで表の枠を末尾までスクロールすると、末尾の証言の行を描画する', () => {
+    // 前提: 証言が1,000件あり、最後の証言は先頭から999時間後（1998年9月11日 15時）
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<PersonLaneView target={largeCase} />);
+    const table = screen.getByRole('table', { name: '人物の動き' });
+    const viewport = table.parentElement!;
+
+    act(() => {
+      viewport.scrollTop = 10_000_000;
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+
+    // 検証: 末尾の証言の行を描画し、先頭の証言の行は描画しない
+    const rowHeaders = within(table).getAllByRole('rowheader');
+    expect(rowHeaders.at(-1)).toHaveTextContent('1998年9月11日 15:00');
+    expect(within(table).queryByRole('rowheader', { name: '1998年8月1日 00:00' })).not.toBeInTheDocument();
+  });
+
   it('登場する人物を列の見出しにし、証言を時系列ボードの並び順で行に並べ、行の見出しに日時を示す', () => {
     render(<PersonLaneView target={sampleFictionalCase} />);
 
@@ -872,6 +919,7 @@ describe('証言のカードの資料の表示', () => {
     );
     unmount();
 
+    giveLaneTableViewportHeight();
     render(<PersonLaneView target={caseWithInterviews} />);
     // 人物の動きでは、同じ証言が発言者と言及された人物の両方の列に置かれるため、最初のカードで確かめる
     const laneCard = screen.getAllByText(/車が別荘の方向へ走る/)[0]!.closest('li');

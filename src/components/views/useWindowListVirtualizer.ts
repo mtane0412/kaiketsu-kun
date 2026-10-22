@@ -47,11 +47,12 @@ function isRendered(element: Element): boolean {
 /**
  * 項目の高さを測ります。描画されていない項目は測らず、前に測った高さ（無ければ見積もり）を返します。
  * 前に測った高さは、仮想化のキャッシュ（itemSizeCache）から引きます。
+ * 枠の中でスクロールする表（PersonLaneView の人物の動きの表）の仮想化でも、同じ理由で使います。
  */
-function measureRenderedElement(
+export function measureRenderedElement<TScrollElement extends Element | Window>(
   element: Element,
   entry: ResizeObserverEntry | undefined,
-  instance: Virtualizer<Window, Element>
+  instance: Virtualizer<TScrollElement, Element>
 ): number {
   if (isRendered(element)) {
     const box = entry?.borderBoxSize?.[0];
