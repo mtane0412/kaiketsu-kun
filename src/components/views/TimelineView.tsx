@@ -20,6 +20,12 @@
  * 読み手が記録した照合（CrossCheck）がある証言は、カードに照合の件数を小さく示します。
  * 証言の編集・削除・日時の入力は、証言のカードから開く詳細ページ（ClaimDetail）で行います。ボード上では編集しません。
  * 本文のメンションは、その人物・場所の詳細ページ（EntityDetail）への導線です。
+ *
+ * 証言が1万件近いケースでも固まらないよう、項目は画面に見える分だけを描画します（useWindowListVirtualizer、#125）。
+ * ドラッグ中の項目と、入力欄を開いている差し込み口は、画面の外にあっても描画し続けます。
+ * 並べ替えの候補になるのは描画している項目だけですが、キーボードで動かすと画面が追従してスクロールし、先の項目が描画されるため、
+ * 画面の外まで続けて動かせます。
+ * 注意: 画面に見えていない証言は描画しないため、ブラウザのページ内検索では見つかりません。証言はサイドバーの検索で探します。
  */
 'use client';
 
@@ -36,8 +42,9 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { defaultRangeExtractor, type Range } from '@tanstack/react-virtual';
 import { GripVertical, Plus } from 'lucide-react';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { buildTimeline, claimLabelOf, type TimelineItem } from '@/domain/case-views';
 import { countCrossChecksByClaim } from '@/domain/cross-checks';
 import { formatTimeRef } from '@/domain/time-ref';
@@ -46,6 +53,7 @@ import type { Case, Id } from '@/domain/types';
 import { useCaseStore } from '@/stores/useCaseStore';
 import { BoardComposer } from './BoardComposer';
 import { ClaimCard } from './ClaimCard';
+import { useWindowListVirtualizer } from './useWindowListVirtualizer';
 
 const DRAG_INSTRUCTIONS =
   '項目を動かすには、スペースキーで持ち上げ、上下の矢印キーで位置を選び、もう一度スペースキーで置きます。やめるにはエスケープキーを押します。';
@@ -55,6 +63,28 @@ const DRAG_INSTRUCTIONS =
  * 読み上げには DRAG_INSTRUCTIONS が届きますが、マウスの利用者には届かないため、つまみの title で同じことを短く示します。
  */
 const DRAG_HINT = 'ドラッグ、またはスペースキーを押してから矢印キーで動かします';
+
+/** 時系列の項目（差し込み口・カード）の間の余白（px）です。Tailwind の space-y-2 と同じ 0.5rem です。 */
+const ITEM_GAP = 8;
+
+/** 差し込み口の高さの見積もり（px）です。描画した後は、実際の高さで位置を計算し直します。 */
+const SLOT_SIZE_ESTIMATE = 24;
+
+/** 証言のカード（日時の行を含む）の高さの見積もり（px）です。描画した後は、実際の高さで位置を計算し直します。 */
+const CARD_SIZE_ESTIMATE = 140;
+
+/*
+ * 仮想化したリストでは、表示する項目1件につき、差し込み口とカードの2つの位置を順に持ちます（差し込み口が偶数、カードが奇数）。
+ * 差し込み口とカードを別々の <li> にしている構造を保ったまま、それぞれの高さを測るためです。
+ */
+/** 表示する項目の entryIndex 番目の、差し込み口の仮想化したリストでの位置です。 */
+const slotIndexOf = (entryIndex: number) => entryIndex * 2;
+/** 表示する項目の entryIndex 番目の、カードの仮想化したリストでの位置です。 */
+const cardIndexOf = (entryIndex: number) => entryIndex * 2 + 1;
+/** 仮想化したリストでの位置から、表示する項目の何番目かを返します。 */
+const entryIndexOf = (virtualIndex: number) => Math.floor(virtualIndex / 2);
+/** 仮想化したリストでの位置が、差し込み口かどうかを返します。 */
+const isSlotIndex = (virtualIndex: number) => virtualIndex % 2 === 0;
 
 /** 開いている入力欄の位置です。入力欄は同時に1つだけ開きます。 */
 type ComposerTarget =
@@ -88,20 +118,38 @@ function SortableItem({
   label,
   dimmed,
   above,
+  virtualIndex,
+  positionStyle,
+  measureRef,
   children,
 }: {
   id: TimelineKey;
   label: string;
   dimmed: boolean;
   above?: ReactNode;
+  /** 仮想化したリストでの位置です（data-index）。 */
+  virtualIndex: number;
+  /** 仮想化したリストの中での位置のスタイルです。 */
+  positionStyle: CSSProperties;
+  /** 高さを測るための ref です。 */
+  measureRef: (node: Element | null) => void;
   children: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  // dnd-kit と仮想化の両方が、同じ要素を参照する
+  const setRefs = useCallback(
+    (node: HTMLLIElement | null) => {
+      setNodeRef(node);
+      measureRef(node);
+    },
+    [setNodeRef, measureRef]
+  );
 
   return (
     <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
+      ref={setRefs}
+      data-index={virtualIndex}
+      style={{ ...positionStyle, transform: CSS.Translate.toString(transform), transition }}
       className={`group ${isDragging ? 'relative z-10 rounded-lg bg-card shadow-lg' : ''} ${dimmed ? 'opacity-40' : ''}`}
     >
       {above}
@@ -163,7 +211,8 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
       ),
     [timeline, shownClaimIds]
   );
-  const crossCheckCounts = useMemo(() => countCrossChecksByClaim(target), [target]);
+  // 照合の件数は照合の一覧だけから数える。証言を保存しても照合が変わらなければ同じ件数のオブジェクトを渡し、カードを描き直さない
+  const crossCheckCounts = useMemo(() => countCrossChecksByClaim(target), [target.crossChecks]);
   const moveTimelineItem = useCaseStore((state) => state.moveTimelineItem);
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
   const closeComposer = () => setComposer(null);
@@ -180,13 +229,43 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
 
   /** 絞り込む前の並びのキーです。動かした先の位置を、絞り込む前の並びで数えるために使います。 */
   const keys = timeline.items.map((item) => item.key);
-  const shownKeys = shownEntries.map(({ item }) => item.key);
+  const shownKeys = useMemo(() => shownEntries.map(({ item }) => item.key), [shownEntries]);
   /** ドラッグ中の項目を置ける位置の範囲です。範囲の外の項目は薄く表示します。 */
   const allowedRange = useMemo(
     () => (draggingKey === null ? null : allowedIndexRange(target, draggingKey)),
     [target, draggingKey]
   );
   const isAllowedIndex = (index: number) => allowedRange === null || (index >= allowedRange.min && index <= allowedRange.max);
+
+  /**
+   * 画面の外にあっても描画し続ける、仮想化したリストでの位置です。
+   * - ドラッグ中の項目のカード: ドラッグ中にスクロールして画面の外へ出ても、要素を外すとドラッグが途切れるためです。
+   * - 入力欄を開いている差し込み口: 要素を外すと、入力中の内容が失われるためです。
+   *   詳細を開いてボードを隠している間も、詳細のスクロールで描画する範囲が変わるため、同じく描画し続けます。
+   */
+  const pinnedIndexes = useMemo(() => {
+    const draggingEntryIndex = draggingKey === null ? -1 : shownKeys.indexOf(draggingKey);
+    const composerEntryIndex = composer?.type === 'before' ? shownKeys.indexOf(composer.key) : -1;
+    return [
+      ...(draggingEntryIndex < 0 ? [] : [cardIndexOf(draggingEntryIndex)]),
+      ...(composerEntryIndex < 0 ? [] : [slotIndexOf(composerEntryIndex)]),
+    ];
+  }, [draggingKey, composer, shownKeys]);
+  /** 描画する項目の位置を決めます。画面に見える分（と前後の余分）に、描画し続ける位置を加えます。 */
+  const rangeExtractor = useCallback(
+    (range: Range) => [...new Set([...defaultRangeExtractor(range), ...pinnedIndexes])].sort((a, b) => a - b),
+    [pinnedIndexes]
+  );
+  const { listRef, virtualizer, virtualItemStyle } = useWindowListVirtualizer<HTMLOListElement>({
+    count: shownEntries.length * 2,
+    estimateSize: (index) => (isSlotIndex(index) ? SLOT_SIZE_ESTIMATE : CARD_SIZE_ESTIMATE),
+    getItemKey: (index) => {
+      const key = shownKeys[entryIndexOf(index)]!;
+      return isSlotIndex(index) ? `slot:${key}` : key;
+    },
+    gap: ITEM_GAP,
+    rangeExtractor,
+  });
   const labelOfKey = (key: UniqueIdentifier) => {
     const item = timeline.items.find((candidate) => candidate.key === key);
     return item ? labelOf(item) : '';
@@ -232,8 +311,14 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
    * 時系列の index 番目の項目の前の差し込み口を表示します。
    * ドラッグ中は、項目の位置がずれないよう、場所を保ったまま見えなくします。
    */
-  const renderSlot = (item: TimelineItem, index: number) => (
-    <li key={`slot:${item.key}`} className={draggingKey === null ? undefined : 'invisible'}>
+  const renderSlot = (item: TimelineItem, index: number, virtualIndex: number, positionStyle: CSSProperties) => (
+    <li
+      key={`slot:${item.key}`}
+      ref={virtualizer.measureElement}
+      data-index={virtualIndex}
+      style={positionStyle}
+      className={draggingKey === null ? undefined : 'invisible'}
+    >
       {composer?.type === 'before' && composer.key === item.key ? (
         <BoardComposer defaults={{ insertIndex: index }} onClose={closeComposer} />
       ) : (
@@ -267,20 +352,33 @@ export function TimelineView({ target, shownClaimIds }: TimelineViewProps) {
           onDragCancel={() => setDraggingKey(null)}
         >
           <SortableContext items={shownKeys} strategy={verticalListSortingStrategy}>
-            <ol aria-label="時系列" className="space-y-2 border-l-2 pl-2">
-              {shownEntries.flatMap(({ item, index }) => [
-                renderSlot(item, index),
-                <SortableItem
-                  key={item.key}
-                  id={item.key}
-                  label={labelOf(item)}
-                  dimmed={item.key !== draggingKey && !isAllowedIndex(index)}
-                  above={renderWhen(item)}
-                >
-                  {renderItem(item)}
-                </SortableItem>,
-              ])}
-            </ol>
+            {/* 項目は画面に見える分だけを描画し、リストの高さと各項目の位置（top）で全体の長さを保つ（useWindowListVirtualizer）。
+                項目は左の縦線（border-l-2）と余白（pl-2）の内側に置くため、ここで余白の分だけ右に寄せる */}
+            <div className="border-l-2 pl-2">
+              <ol ref={listRef} aria-label="時系列" className="relative" style={{ height: virtualizer.getTotalSize() }}>
+                {virtualizer.getVirtualItems().map((virtualItem) => {
+                  const { item, index } = shownEntries[entryIndexOf(virtualItem.index)]!;
+                  const positionStyle = virtualItemStyle(virtualItem);
+                  if (isSlotIndex(virtualItem.index)) {
+                    return renderSlot(item, index, virtualItem.index, positionStyle);
+                  }
+                  return (
+                    <SortableItem
+                      key={item.key}
+                      id={item.key}
+                      label={labelOf(item)}
+                      dimmed={item.key !== draggingKey && !isAllowedIndex(index)}
+                      above={renderWhen(item)}
+                      virtualIndex={virtualItem.index}
+                      positionStyle={positionStyle}
+                      measureRef={virtualizer.measureElement}
+                    >
+                      {renderItem(item)}
+                    </SortableItem>
+                  );
+                })}
+              </ol>
+            </div>
           </SortableContext>
         </DndContext>
       )}

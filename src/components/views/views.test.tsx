@@ -3,12 +3,14 @@
  */
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { buildTimeline, claimLabelOf } from '@/domain/case-views';
 import { sampleFictionalCase } from '@/domain/sample-fictional-case';
 import type { Case, Claim } from '@/domain/types';
 import { useCurrentCase } from '@/stores/useCaseStore';
 import { resetMockNavigation } from '@/test/mock-navigation';
 import { openedCase, openTestCase } from '@/test/open-case';
+import { buildLargeCase } from '@/test/large-case';
 import { placeVertically } from '@/test/layout';
 import { PersonLaneView } from './PersonLaneView';
 import { SpeakerView } from './SpeakerView';
@@ -280,6 +282,42 @@ describe('TimelineView', () => {
 
     expect(screen.getByText('まだ何も書かれていません。「ボードに書き足す」から書き始めてください。')).toBeInTheDocument();
   });
+
+  it('証言が多いケースでは、画面に見える分のカードだけを描画する', () => {
+    // 前提: 証言が1,000件ある。すべてを描くと DOM が大きくなり、表示の切り替えや保存のたびに画面が固まる
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<TimelineView target={largeCase} />);
+
+    const timeline = screen.getByRole('list', { name: '時系列' });
+    const handles = within(timeline).getAllByRole('button', { name: /を動かす$/ });
+    // 検証: 先頭の証言は描画し、画面の外の証言は描画しない
+    expect(handles.length).toBeGreaterThan(0);
+    expect(handles.length).toBeLessThan(100);
+    expect(handles[0]).toHaveAccessibleName(`「${claimLabelOf(buildTimeline(largeCase).items[0]!.view)}」を動かす`);
+  });
+
+  it('項目の前に開いた入力欄は、スクロールしてその位置が画面の外へ出ても、入力中の内容を保つ', async () => {
+    // 前提: 証言が1,000件あり、画面に見える分だけを描画している
+    const user = userEvent.setup();
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<TimelineView target={largeCase} />);
+    const firstLabel = claimLabelOf(buildTimeline(largeCase).items[0]!.view);
+    await user.click(screen.getByRole('button', { name: `「${firstLabel}」の前に書き足す` }));
+    await user.type(screen.getByLabelText('内容'), '別荘の前に見慣れない車が停まっていた。');
+
+    // ボードの末尾のほうまでスクロールする（先頭の項目は描画する範囲から外れる）。後のテストに影響しないよう、終わったら先頭に戻す
+    onTestFinished(() => {
+      window.scrollY = 0;
+    });
+    act(() => {
+      window.scrollY = 100000;
+      window.dispatchEvent(new Event('scroll'));
+    });
+
+    // 検証: 先頭の項目のつまみは描画しなくなっても、入力欄と入力中の内容は残る
+    expect(screen.queryByRole('button', { name: `「${firstLabel}」を動かす` })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('内容')).toHaveValue('別荘の前に見慣れない車が停まっていた。');
+  });
 });
 
 /** ストアのケースを時系列ボードに表示します。ボードへの書き足しがストアを通じて画面に反映されることを検証するために使います。 */
@@ -439,23 +477,41 @@ describe('TimelineView への書き足し', () => {
 });
 
 describe('SpeakerView', () => {
-  it('発言者ごとに証言をまとめ、ユーザーの推測を区別して表示する', () => {
+  it('発言者ごとに、見出しの下へ証言を並べ、ユーザーの推測を区別して表示する', () => {
     render(<SpeakerView target={sampleFictionalCase} />);
 
-    const caretaker = screen.getByRole('region', { name: '管理人' });
-    expect(within(caretaker).getByText(/見回りをしたとき/)).toBeInTheDocument();
-    // 発言者名はグループの見出しと重複するため示さないが、経由は証言ごとに示す
-    expect(within(caretaker).getByText('（湖畔の夏 20年目の証言（架空の書籍） による）')).toBeInTheDocument();
+    const list = screen.getByRole('list', { name: '証言者別' });
+    // 検証: 発言者の見出しの直後に、その発言者の証言が並ぶ
+    const caretakerHeading = within(list).getByRole('heading', { name: /^管理人/ });
+    const caretakerCard = within(list).getByText(/見回りをしたとき/).closest('li')!;
+    expect(caretakerHeading.compareDocumentPosition(caretakerCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(caretakerHeading).toHaveTextContent('人物・1件');
+    // 発言者名は見出しと重複するため示さないが、経由は証言ごとに示す
+    expect(within(caretakerCard).getByText('（湖畔の夏 20年目の証言（架空の書籍） による）')).toBeInTheDocument();
 
-    const guess = screen.getByRole('region', { name: 'ユーザーの推測' });
-    expect(within(guess).getByText(/金銭の問題があった可能性/)).toBeInTheDocument();
+    const guessHeading = within(list).getByRole('heading', { name: /^ユーザーの推測/ });
+    const guessCard = within(list).getByText(/金銭の問題があった可能性/).closest('li')!;
+    expect(guessHeading.compareDocumentPosition(guessCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('証言のカードは、証言者別のタブを戻り先に引き継いだ、詳細ページへのリンクになる', () => {
     render(<SpeakerView target={sampleFictionalCase} />);
 
-    const caretaker = screen.getByRole('region', { name: '管理人' });
-    expect(within(caretaker).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker?tab=speaker');
+    const caretakerCard = screen.getByText(/見回りをしたとき/).closest('li')!;
+    expect(within(caretakerCard).getByRole('link', { name: /を開く$/ })).toHaveAttribute('href', '/cases/case-lakeside/claims/claim-caretaker?tab=speaker');
+  });
+
+  it('証言が多いケースでは、画面に見える分のカードだけを描画する', () => {
+    // 前提: 証言が1,000件ある。すべてを描くと DOM が大きくなり、表示の切り替えのたびに画面が固まる
+    const largeCase = buildLargeCase({ persons: 20, places: 10, interviews: 10, claims: 1000 });
+    render(<SpeakerView target={largeCase} />);
+
+    const list = screen.getByRole('list', { name: '証言者別' });
+    const openLinks = within(list).getAllByRole('link', { name: /を開く$/ });
+    // 検証: 先頭の発言者の見出しと証言は描画し、画面の外の証言は描画しない
+    expect(within(list).getByRole('heading', { name: /^人物0/ })).toBeInTheDocument();
+    expect(openLinks.length).toBeGreaterThan(0);
+    expect(openLinks.length).toBeLessThan(100);
   });
 
   it('証言が1件も無い場合は、案内を表示する', () => {
@@ -862,7 +918,7 @@ describe('エンティティの画像の表示', () => {
   it('証言者別ビューの見出しに、発言者の画像を表示する', () => {
     render(<SpeakerView target={caseWithImages} />);
 
-    const heading = within(screen.getByRole('region', { name: '隣家の住人' })).getByRole('heading', { name: /隣家の住人/ });
+    const heading = screen.getByRole('heading', { name: /^隣家の住人/ });
 
     expect(imageSources(heading)).toEqual([residentImage]);
   });
@@ -941,7 +997,7 @@ describe('人物のアイコンの表示', () => {
   it('証言者別ビューの見出しに、画像の無い発言者の文字のアイコンを表示する', () => {
     render(<SpeakerView target={sampleFictionalCase} />);
 
-    const heading = within(screen.getByRole('region', { name: '隣家の住人' })).getByRole('heading', { name: /隣家の住人/ });
+    const heading = screen.getByRole('heading', { name: /^隣家の住人/ });
 
     expect(iconTexts(heading)).toEqual(['隣']);
   });

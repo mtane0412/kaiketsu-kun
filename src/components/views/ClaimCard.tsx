@@ -37,7 +37,7 @@
 
 import { AtSign, BookMarked, ChevronRight, FileText, GitCompareArrows, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { useId, useState, type ReactNode } from 'react';
+import { memo, useId, useState, type ReactNode } from 'react';
 import { claimLabelOf, formatViaLabel, isLongClaimContent, type ClaimView } from '@/domain/case-views';
 import { CROSS_CHECK_KINDS, type CrossCheckCounts } from '@/domain/cross-checks';
 import { CROSS_CHECK_KIND_SHORT_LABELS } from '@/domain/labels';
@@ -86,7 +86,12 @@ type ClaimCardProps = {
   crossCheckCounts?: CrossCheckCounts;
 };
 
-export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, crossCheckCounts }: ClaimCardProps) {
+/**
+ * 証言1件のカードです。
+ * 同じ props で描き直さないよう memo します。証言を1件保存しても、変わっていない証言の表示（ClaimView）は同じオブジェクトのまま
+ * 渡される（src/domain/case-views.ts の toClaimView）ため、描き直すのは変わった証言のカードだけになります。
+ */
+export const ClaimCard = memo(function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, crossCheckCounts }: ClaimCardProps) {
   const { claim } = view;
   const caseId = useCaseId();
   const contentId = useId();
@@ -215,4 +220,4 @@ export function ClaimCard({ view, showSpeaker, tab, emphasizePlace = false, cros
       </dl>
     </li>
   );
-}
+});

@@ -11,11 +11,15 @@
  * - 資料の一覧と詳細: ケースのすべての聴取を日時の順に並べた一覧（サイドバー）と、1件の聴取の表示（資料の詳細）を作ります。
  * - 聴取の名前: 証言のフォームの選択肢で、聴取を見分けるための短い名前を組み立てます。
  *
+ * 人物・場所は ID の索引（src/domain/entity-index.ts）で引き、資料ごとの証言は証言を1回たどって振り分けます。
+ * 資料ごとに全証言を探すと、時間が「資料の件数 × 証言の件数」で増えるためです。
+ *
  * 注意: 参照先の人物・場所が見つからない場合は、データ破損として例外を投げます（case-views.ts と同じ扱いです）。
  * 参照の整合性は、ストアの操作と読み込み時の検証（case-schema.ts）で担保する前提です。
  */
 import { buildTimeline, type ClaimView } from './case-views';
 import { interviewIdsOf } from './claim-sources';
+import { entityById } from './entity-index';
 import { UNTITLED_INTERVIEW_LABEL } from './interview-source-label';
 import { compareTimeRef, formatTimeRef } from './time-ref';
 import type { Case, Id, Interview, InterviewPersonName, Person, Place } from './types';
@@ -41,14 +45,14 @@ export type InterviewView = {
 
 /** IDから人物を引きます。見つからない場合はデータ破損として例外を投げます。 */
 function personOf(target: Case, personId: Id): Person {
-  const person = target.persons.find((candidate) => candidate.id === personId);
+  const person = entityById(target.persons).get(personId);
   if (!person) throw new Error(`資料が存在しない人物を参照しています: ${personId}`);
   return person;
 }
 
 /** IDから場所を引きます。見つからない場合はデータ破損として例外を投げます。 */
 function placeOf(target: Case, placeId: Id): Place {
-  const place = target.places.find((candidate) => candidate.id === placeId);
+  const place = entityById(target.places).get(placeId);
   if (!place) throw new Error(`資料が存在しない場所を参照しています: ${placeId}`);
   return place;
 }
@@ -59,9 +63,24 @@ function speakerIdsOf(claimViews: ClaimView[]): Id[] {
   return [...new Set(speakerIds)];
 }
 
-/** 聴取1件を表示の形にします。claimViews は時系列ボードの並び順に並んだ証言です。 */
-function toInterviewView(target: Case, interview: Interview, claimViews: ClaimView[]): InterviewView {
-  const claims = claimViews.filter((view) => interviewIdsOf(view.claim).includes(interview.id));
+/**
+ * 証言を、出典の資料ごとに振り分けます。各資料の証言は、時系列ボードの並び順（buildTimeline）に並びます。
+ * 同じ資料を2つの出典に持つ証言も、その資料には1回だけ入れます。
+ */
+function claimsByInterviewId(target: Case): Map<Id, ClaimView[]> {
+  const grouped = new Map<Id, ClaimView[]>();
+  for (const { view } of buildTimeline(target).items) {
+    for (const interviewId of new Set(interviewIdsOf(view.claim))) {
+      const claims = grouped.get(interviewId);
+      if (claims === undefined) grouped.set(interviewId, [view]);
+      else claims.push(view);
+    }
+  }
+  return grouped;
+}
+
+/** 聴取1件を表示の形にします。claims はこの聴取を出典に持つ証言で、時系列ボードの並び順に並んでいます。 */
+function toInterviewView(target: Case, interview: Interview, claims: ClaimView[]): InterviewView {
   return {
     interview,
     speakers: speakerIdsOf(claims).map((personId) => personOf(target, personId)),
@@ -80,11 +99,11 @@ function toInterviewView(target: Case, interview: Interview, claimViews: ClaimVi
  * 各聴取の証言は、時系列ボードの並び順（buildTimeline）に並べます。一覧のどこで証言を見ても同じ順番になるようにするためです。
  */
 function buildSortedInterviews(target: Case, interviews: Interview[]): InterviewView[] {
-  const claimViews = buildTimeline(target).items.map((item) => item.view);
+  const grouped = claimsByInterviewId(target);
   return interviews
     // Array.prototype.sort は安定ソートのため、比較が等しい聴取は登録順を保つ
     .toSorted((a, b) => compareTimeRef(a.at, b.at))
-    .map((interview) => toInterviewView(target, interview, claimViews));
+    .map((interview) => toInterviewView(target, interview, grouped.get(interview.id) ?? []));
 }
 
 /** 人物 personId が発言者の証言を含む聴取を、日時の早い順に並べて返します（供述の変遷）。 */
@@ -110,7 +129,7 @@ export function buildInterviewList(target: Case): InterviewView[] {
 export function buildInterviewView(target: Case, interviewId: Id): InterviewView | undefined {
   const interview = target.interviews.find((candidate) => candidate.id === interviewId);
   if (interview === undefined) return undefined;
-  return toInterviewView(target, interview, buildTimeline(target).items.map((item) => item.view));
+  return toInterviewView(target, interview, claimsByInterviewId(target).get(interview.id) ?? []);
 }
 
 /**
