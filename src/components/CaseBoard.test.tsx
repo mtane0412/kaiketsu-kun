@@ -44,7 +44,7 @@ describe('CaseBoard', () => {
     expect(within(screen.getByRole('list', { name: '時系列' })).getByText(/明かりがついていて/)).toBeInTheDocument();
 
     await switchView(user, '証言者別');
-    expect(screen.getByRole('region', { name: '隣家の住人' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^隣家の住人/ })).toBeInTheDocument();
   });
 
   it('ケースの名前と、いま開いている表示を、ボードの見出しに表示する', async () => {
@@ -489,8 +489,8 @@ describe('CaseBoard の絞り込み', () => {
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenLastCalledWith('/cases/case-lakeside?tab=speaker&person=person-caretaker'));
     // 検証: 管理人の証言とユーザーの推測だけが残り、隣家の住人のグループは無い
-    expect(screen.queryByRole('region', { name: '隣家の住人' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '管理人' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^隣家の住人/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^管理人/ })).toBeInTheDocument();
   });
 
   it('絞り込みに使えないクエリ（関わり方だけなど）しか無いURLは、絞り込んでいないものとして扱う', async () => {

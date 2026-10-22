@@ -3,6 +3,8 @@
  *
  * ビューは一次データ（Case）から計算する派生物であり、保存しません。
  * 時系列ビューだけは、同じケースのオブジェクトに対しては計算した結果を使い回します（buildTimeline）。多くの画面が同じケースの時系列ビューを求めるためです。
+ * 証言の表示（ClaimView）も、証言と人物・場所・資料の一覧が前回と同じオブジェクトであれば使い回します（toClaimView）。
+ * 証言を1件保存したときに、変わっていない証言のカードまで描き直さないためです。
  * 人物・場所・資料は ID の索引（src/domain/entity-index.ts）で引きます。証言1件ごとに一覧を先頭から探すと、時間が件数の2乗で増えるためです。
  * 時系列ボードには証言だけを並べます。ボード上の位置はケースの並び順（Case.timelineOrder、src/domain/timeline-order.ts）で決まります。
  * 証言同士の食い違いは判定しません。並んだ証言を見比べて判断するのは読み手です。
@@ -118,8 +120,42 @@ export function describeClaimAttribution(target: Case, claim: Claim): string {
   return `${speakerLabelOf(target, claim)}${formatViaLabel(viaNameChains)}`;
 }
 
-/** 証言の参照先を解決します。 */
+/** 証言ごとに作った表示と、作ったときに参照した人物・場所・資料の一覧です。 */
+type CachedClaimView = {
+  persons: Case['persons'];
+  places: Case['places'];
+  interviews: Case['interviews'];
+  view: ClaimView;
+};
+
+/** 証言のオブジェクトごとに作った表示です。証言が使われなくなれば、表示も一緒に破棄されます。 */
+const claimViews = new WeakMap<Claim, CachedClaimView>();
+
+/**
+ * 証言の参照先を解決します。
+ *
+ * 同じ証言のオブジェクトで、人物・場所・資料の一覧も前回と同じ配列であれば、前回の表示を返します。
+ * 証言を1件保存するたびに全証言の表示を作り直すと、変わっていない証言のカードまで描き直すことになるためです。
+ * 表示が参照するのは、証言そのものと、人物・場所・資料の一覧だけです（本文のメンションの名前・資料での表記・資料の短い表示を含みます）。
+ * 注意: ケースと同じく、証言と一覧は変更のたびに新しいオブジェクトへ置き換える前提です（src/stores/useCaseStore.ts）。
+ */
 function toClaimView(target: Case, claim: Claim): ClaimView {
+  const cached = claimViews.get(claim);
+  if (
+    cached !== undefined &&
+    cached.persons === target.persons &&
+    cached.places === target.places &&
+    cached.interviews === target.interviews
+  ) {
+    return cached.view;
+  }
+  const view = composeClaimView(target, claim);
+  claimViews.set(claim, { persons: target.persons, places: target.places, interviews: target.interviews, view });
+  return view;
+}
+
+/** 証言の参照先を、使い回さずに解決します。 */
+function composeClaimView(target: Case, claim: Claim): ClaimView {
   const place = claim.placeId === undefined ? undefined : findOrThrow(target.places, claim.placeId, '場所');
 
   return {

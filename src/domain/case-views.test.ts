@@ -59,6 +59,45 @@ describe('buildTimeline', () => {
 
     expect(() => buildTimeline(brokenCase)).toThrow('場所が見つかりません: place-missing');
   });
+
+  describe('変わっていない証言のビューの使い回し', () => {
+    /** 証言のIDから、時系列ビューの証言の表示を引きます。 */
+    const viewOf = (target: Case, claimId: string) => buildTimeline(target).items.find((item) => item.view.claim.id === claimId)?.view;
+
+    it('1件の証言だけを書き換えたケースでは、書き換えていない証言は前と同じビューのオブジェクトを返す', () => {
+      // 前提: ストアは変更のたびに新しいケースを作るが、書き換えていない証言のオブジェクトはそのまま引き継ぐ
+      const editedCase: Case = {
+        ...sampleFictionalCase,
+        claims: sampleFictionalCase.claims.map((claim) =>
+          claim.id === 'claim-neighbor' ? { ...claim, content: `${claim.content}（追記）` } : claim
+        ),
+      };
+
+      expect(viewOf(editedCase, 'claim-caretaker')).toBe(viewOf(sampleFictionalCase, 'claim-caretaker'));
+      expect(viewOf(editedCase, 'claim-neighbor')).not.toBe(viewOf(sampleFictionalCase, 'claim-neighbor'));
+      expect(viewOf(editedCase, 'claim-neighbor')?.claim.content).toContain('（追記）');
+    });
+
+    it('人物の一覧が変わったケースでは、人物の名前を表示し直すため、証言のビューを作り直す', () => {
+      const renamedCase: Case = {
+        ...sampleFictionalCase,
+        persons: sampleFictionalCase.persons.map((person) =>
+          person.name === '別荘の持ち主' ? { ...person, name: '別荘の所有者' } : person
+        ),
+      };
+
+      expect(viewOf(renamedCase, 'claim-neighbor')).not.toBe(viewOf(sampleFictionalCase, 'claim-neighbor'));
+      expect(viewOf(renamedCase, 'claim-neighbor')?.mentionedPersons.map((person) => person.name)).toEqual(['別荘の所有者']);
+    });
+
+    it('場所・資料の一覧が変わったケースでは、証言のビューを作り直す', () => {
+      const placesChangedCase: Case = { ...sampleFictionalCase, places: [...sampleFictionalCase.places] };
+      const interviewsChangedCase: Case = { ...sampleFictionalCase, interviews: [...sampleFictionalCase.interviews] };
+
+      expect(viewOf(placesChangedCase, 'claim-neighbor')).not.toBe(viewOf(sampleFictionalCase, 'claim-neighbor'));
+      expect(viewOf(interviewsChangedCase, 'claim-neighbor')).not.toBe(viewOf(sampleFictionalCase, 'claim-neighbor'));
+    });
+  });
 });
 
 describe('isLongClaimContent', () => {

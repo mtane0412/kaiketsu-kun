@@ -4,7 +4,7 @@
  * 証言が2万件、人物が4千人、資料が2千件のケースで、各処理が時間の上限に収まることを確かめます。
  * 件数の2乗で時間が増える処理（配列の先頭から ID を探す処理の繰り返しなど）が入り込むと、この規模では数秒かかり、上限を超えます。
  * 注意: 上限は、件数に比例する処理なら、ほかのテストと並んで動く低速な環境でも十分に収まる値にしています。数ミリ秒の差を測るテストではありません。
- * 各テストは、ケースを別のオブジェクトにしてから測ります。前のテストで組み立てた時系列ビューの使い回しで、速く見えることを避けるためです。
+ * 各テストは、ケースと人物の一覧を別のオブジェクトにしてから測ります。前のテストで組み立てた時系列ビュー・証言の表示の使い回しで、速く見えることを避けるためです。
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildLargeCase } from '@/test/large-case';
@@ -18,6 +18,7 @@ import {
   groupClaimsBySpeaker,
 } from './case-views';
 import { parseCase } from './case-schema';
+import { buildInterviewList } from './interviews';
 import { searchCase } from './search';
 import { findSimilarClaims } from './similar-claims';
 import { settleTimelineItems, timelineKeyOf } from './timeline-order';
@@ -42,8 +43,9 @@ describe('大きなケース（証言2万件・人物4千人・資料2千件）'
   });
 
   beforeEach(() => {
-    // 中身は同じで、オブジェクトだけが異なるケースにする（時系列ビューは、ケースのオブジェクトごとに使い回されるため）
-    largeCase = { ...baseCase };
+    // 中身は同じで、オブジェクトだけが異なるケースにする（時系列ビューはケースのオブジェクトごとに、
+    // 証言の表示は証言と人物・場所・資料の一覧のオブジェクトごとに使い回されるため）
+    largeCase = { ...baseCase, persons: [...baseCase.persons] };
   });
 
   it('テスト用のケースは、ケースの検証を通る', () => {
@@ -60,6 +62,7 @@ describe('大きなケース（証言2万件・人物4千人・資料2千件）'
     ['似ている証言', (target: Case) => findSimilarClaims(target, 'claim-5000')],
     ['証言の詳細', (target: Case) => buildClaimDetail(target, 'claim-5000')],
     ['人物の詳細', (target: Case) => buildPersonDetail(target, 'person-1000')],
+    ['資料の一覧', (target: Case) => buildInterviewList(target)],
     ['証言を保存した後の並び順の整理', (target: Case) => settleTimelineItems(target, [timelineKeyOf('claim-5000')])],
   ])('%sを、時間の上限内に組み立てる', (_label, run) => {
     expect(elapsedMs(() => run(largeCase))).toBeLessThan(TIME_BUDGET_MS);
