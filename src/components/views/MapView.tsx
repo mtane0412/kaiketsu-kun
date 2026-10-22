@@ -24,7 +24,7 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { buildMapTrail, buildPersonLanes, groupStopsByPlace, type ClaimView, type MapPin } from '@/domain/case-views';
 import { buildPersonTravel, TRAVELING_PERSON_KINDS, type TravelExcludedReason } from '@/domain/travel-check';
@@ -70,7 +70,12 @@ export function MapView({ target, filterPanel }: MapViewProps) {
   const personFieldId = useId();
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
+  /**
+   * 地図に重ねるパネルの要素です。隠している間は null です。
+   * ref ではなく状態に持つのは、パネルの中の一覧（PanelClaimList）に、パネルが表示されたことを描画し直して伝えるためです。
+   * 親の要素の ref は子の layout effect より後に付くため、ref のままでは、一覧がパネルを表示し直したときにスクロールする要素を受け取れません。
+   */
+  const [panel, setPanel] = useState<HTMLElement | null>(null);
   /** パネルが地図を覆う幅です。測り終えるまでは undefined です。 */
   const [obscured, setObscured] = useState<ObscuredInset>();
 
@@ -79,7 +84,6 @@ export function MapView({ target, filterPanel }: MapViewProps) {
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const panel = panelRef.current;
     const measure = () => {
       const next = obscuredInset(container.getBoundingClientRect(), panel?.getBoundingClientRect());
       // 同じ幅なら状態を変えず、地図の位置合わせをやり直さないようにする
@@ -90,7 +94,7 @@ export function MapView({ target, filterPanel }: MapViewProps) {
     observer.observe(container);
     if (panel) observer.observe(panel);
     return () => observer.disconnect();
-  }, [isPanelOpen]);
+  }, [panel]);
   const [personId, setPersonId] = useState<Id>(NO_PERSON);
   // 選べる人物は、いずれかの証言に発言者か言及された人物として登場する、個人と物です（TRAVELING_PERSON_KINDS）
   const persons = useMemo(() => buildPersonLanes(target, TRAVELING_PERSON_KINDS).lanes, [target]);
@@ -160,7 +164,7 @@ export function MapView({ target, filterPanel }: MapViewProps) {
         {isPanelOpen && (
           // 画面の狭い端末では、パネルが地図を覆い尽くさないよう、高さを地図の半分までにする
           <section
-            ref={panelRef}
+            ref={setPanel}
             aria-label="地図の操作"
             className="pointer-events-auto flex max-h-[50%] min-h-0 w-full max-w-md md:max-h-full flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
           >
@@ -235,7 +239,7 @@ export function MapView({ target, filterPanel }: MapViewProps) {
                 {unmappedGroups.map(({ reason, label, views }) => (
                   <div key={reason} className="mt-2">
                     <h4 className="mb-1 text-xs font-medium text-muted-foreground">{label}</h4>
-                    <PanelClaimList label={label} views={views} scrollRef={panelRef} />
+                    <PanelClaimList label={label} views={views} scrollElement={panel} />
                   </div>
                 ))}
               </section>
@@ -252,7 +256,7 @@ type PanelClaimListProps = {
   label: string;
   views: ClaimView[];
   /** 一覧を含み、スクロールする要素（地図に重ねるパネル）です。 */
-  scrollRef: RefObject<HTMLElement | null>;
+  scrollElement: HTMLElement | null;
 };
 
 /**
@@ -263,12 +267,11 @@ type PanelClaimListProps = {
  * 依存を指定せず描画のたびに測り直し、値が変わったときだけ状態を更新します。
  * 詳細を開いている間、ボードは hidden で隠れます（src/components/CaseBoard.tsx）。隠れている間は距離を測り直さず、カードの高さ0も覚えません。
  */
-function PanelClaimList({ label, views, scrollRef }: PanelClaimListProps) {
+function PanelClaimList({ label, views, scrollElement }: PanelClaimListProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   useLayoutEffect(() => {
     const list = listRef.current;
-    const scrollElement = scrollRef.current;
     if (list === null || scrollElement === null || list.getClientRects().length === 0) return;
     const top = Math.round(list.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop);
     if (top !== scrollMargin) setScrollMargin(top);
@@ -276,7 +279,7 @@ function PanelClaimList({ label, views, scrollRef }: PanelClaimListProps) {
   const getItemKey = useCallback((index: number) => views[index]!.claim.id, [views]);
   const virtualizer = useVirtualizer({
     count: views.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollElement,
     estimateSize: () => CARD_SIZE_ESTIMATE,
     getItemKey,
     gap: CARD_GAP,

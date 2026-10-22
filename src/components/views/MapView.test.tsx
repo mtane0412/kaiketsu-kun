@@ -322,5 +322,23 @@ describe('MapView', () => {
       expect(within(list).getByText(/（証言999）/)).toBeInTheDocument();
       expect(within(list).queryByText(/（証言0）/)).not.toBeInTheDocument();
     });
+
+    it('パネルを隠してから表示し直しても、パネルを末尾までスクロールすると、一覧の末尾の証言を描画する', async () => {
+      // 前提: 地図に表示できない証言が1,000件あり、一度パネルを隠してから表示し直した
+      const user = userEvent.setup();
+      render(<MapView target={buildUnmappedLargeCase()} />);
+      await user.click(screen.getByRole('button', { name: 'パネルを隠す' }));
+      await user.click(screen.getByRole('button', { name: 'パネルを表示' }));
+      const panel = screen.getByRole('region', { name: '地図の操作' });
+
+      act(() => {
+        panel.scrollTop = 10_000_000;
+        panel.dispatchEvent(new Event('scroll'));
+      });
+
+      // 検証: 表示し直したパネルのスクロールにも追従し、末尾の証言を描画する
+      const list = screen.getByRole('list', { name: '場所に座標が登録されていない証言' });
+      expect(within(list).getByText(/（証言999）/)).toBeInTheDocument();
+    });
   });
 });
