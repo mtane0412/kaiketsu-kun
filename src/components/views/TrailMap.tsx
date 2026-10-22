@@ -3,7 +3,7 @@
  *
  * Leaflet は window を前提にしているため、この部品は next/dynamic の ssr: false で読み込みます（MapView.tsx）。
  * 地図の画像（OpenStreetMap）は MapTileLayer.tsx が表示します。
- * ピンは場所ごとに1つで、その場所を述べる証言の順番（例「1・3」）を表示します。選択中の証言のピンは赤で示します。
+ * ピンは場所ごとに1つで、その場所を述べる証言の順番（例「1・3」）を表示します。順番が多い場合のまとめ方は map-pin-label.ts にあります。選択中の証言のピンは赤で示します。
  * 拡大・縮小のボタンは、地図の左上に重ねる操作のパネル（MapView.tsx）と重ならないよう、右上に置きます。
  * ピンがそのパネルの裏に隠れないよう、すべてのピンを収める表示と、選択中のピンへ移る処理では、パネルが覆う幅（obscured）を除いた領域を使います。
  * 注意: Leaflet の既定のピン画像はバンドラー経由では読み込めないため、画像を使わない divIcon でピンを描きます。
@@ -12,11 +12,12 @@
 
 import 'leaflet/dist/leaflet.css';
 import { divIcon, latLngBounds, type LatLngTuple } from 'leaflet';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MapContainer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet';
 import type { MapPin } from '@/domain/case-views';
 import type { Coordinates } from '@/domain/types';
 import type { ObscuredInset } from '@/lib/map-obscured-inset';
+import { pinLabel } from '@/lib/map-pin-label';
 import { MAX_ZOOM, MIN_ZOOM } from '@/lib/map-tiles';
 import { MapTileLayer } from '../MapTileLayer';
 
@@ -62,16 +63,6 @@ function paddingOptions(obscured: ObscuredInset) {
   };
 }
 
-/** ピンの見た目を作ります。ラベルの幅が番号の数で変わるため、大きさ0の基準点の中央にラベルを重ねます。 */
-function pinIcon(pin: MapPin, isActive: boolean) {
-  return divIcon({
-    className: '',
-    iconSize: [0, 0],
-    // 注意: html に入れるのは順番の数値だけです（ユーザーが入力した文字列は入れません）
-    html: `<span class="${PIN_LABEL_CLASS} ${isActive ? 'bg-primary' : 'bg-muted-foreground'}">${pin.orders.join('・')}</span>`,
-  });
-}
-
 export default function TrailMap({ pins, path, activeOrder, onSelectPin, obscured }: TrailMapProps) {
   const activePin = pins.find((pin) => pin.orders.includes(activeOrder));
 
@@ -89,18 +80,53 @@ export default function TrailMap({ pins, path, activeOrder, onSelectPin, obscure
       <MapTileLayer />
       <Polyline positions={path.map(toLatLng)} pathOptions={PATH_STYLE} />
       {pins.map((pin) => (
-        <Marker
+        <PinMarker
           key={pin.place.id}
-          position={toLatLng(pin.coordinates)}
-          icon={pinIcon(pin, pin === activePin)}
-          title={pin.place.name}
-          alt={`${pin.place.name}（${pin.orders.join('・')}番目）`}
-          zIndexOffset={pin === activePin ? ACTIVE_PIN_Z_INDEX_OFFSET : 0}
-          eventHandlers={{ click: () => onSelectPin(pin) }}
+          pin={pin}
+          label={pinLabel(pin.orders, activeOrder)}
+          isActive={pin === activePin}
+          onSelectPin={onSelectPin}
         />
       ))}
       {activePin && <FocusOnActive coordinates={activePin.coordinates} obscured={obscured} />}
     </MapContainer>
+  );
+}
+
+type PinMarkerProps = {
+  pin: MapPin;
+  /** ピンに表示するラベルです（pinLabel で作ります）。 */
+  label: string;
+  isActive: boolean;
+  onSelectPin: (pin: MapPin) => void;
+};
+
+/**
+ * 1つの場所のピンです。
+ * ラベルの幅が番号の数で変わるため、大きさ0の基準点の中央にラベルを重ねます。
+ * 注意: Marker はアイコンの参照が変わるたびにピンの DOM を作り直すため、ラベルか色が変わったときだけアイコンを作り直します。
+ * 大きなケースでは、証言を選ぶたびにすべてのピンを作り直すと重くなるためです。
+ */
+function PinMarker({ pin, label, isActive, onSelectPin }: PinMarkerProps) {
+  const icon = useMemo(
+    () =>
+      divIcon({
+        className: '',
+        iconSize: [0, 0],
+        // 注意: html に入れるのは順番の数値と固定の文言だけです（ユーザーが入力した文字列は入れません）
+        html: `<span class="${PIN_LABEL_CLASS} ${isActive ? 'bg-primary' : 'bg-muted-foreground'}">${label}</span>`,
+      }),
+    [label, isActive],
+  );
+  return (
+    <Marker
+      position={toLatLng(pin.coordinates)}
+      icon={icon}
+      title={pin.place.name}
+      alt={`${pin.place.name}（${label}）`}
+      zIndexOffset={isActive ? ACTIVE_PIN_Z_INDEX_OFFSET : 0}
+      eventHandlers={{ click: () => onSelectPin(pin) }}
+    />
   );
 }
 
